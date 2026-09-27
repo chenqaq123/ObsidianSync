@@ -1,7 +1,7 @@
 import type { App } from "obsidian";
 import { TFile } from "obsidian";
 import type { LocalImageUpload, RemoteImageRef, ResolvedImage, RuleContext, RulesFile } from "../convert/rules";
-import { applyRules, collectRemoteImages, ruleEnabled } from "../convert/rules";
+import { applyRules, collectRemoteImages, ruleEnabled, sameAfterCosmeticRules } from "../convert/rules";
 import { buildMarkdownContent, createDocumentFromMarkdown, fetchDocumentMarkdown, updateDocumentFromMarkdown } from "../feishu/docs";
 import type { DocImageBlock, DocNewBlock } from "../feishu/docImages";
 import {
@@ -370,6 +370,40 @@ export async function executeDocPlan(
           if (present && (await options.isEditorDirty(entry.relPath))) {
             reports.push({ relPath: entry.relPath, action: "dirty-editor", ok: true, message: "文件正在编辑且未保存，未覆盖" });
             tick(`跳过编辑中的 ${entry.relPath}`);
+            return;
+          }
+
+          // 远端与本地只差排版归一化（公式转义、公式独占段落）时不回写：否则每次拉取都会留下纯格式 diff
+          if (
+            present &&
+            localTextBefore !== pulled &&
+            sameAfterCosmeticRules(
+              localTextBefore,
+              pulled,
+              {
+                relPath: entry.relPath,
+                documentTitle: record?.documentTitle ?? documentTitleFor(entry.relPath, settings),
+                localContent: localTextBefore,
+              },
+              ctx.rules,
+            )
+          ) {
+            const stat = localStat(ctx.app, entry.relPath);
+            state.docRecords[entry.relPath] = {
+              documentId,
+              nodeToken: entry.nodeToken ?? record?.nodeToken,
+              parentNodeToken: record?.parentNodeToken,
+              documentTitle: record?.documentTitle ?? documentTitleFor(entry.relPath, settings),
+              baseLocalHash: await ctx.hashText(localTextBefore),
+              baseRemoteHash: remoteHash,
+              remoteModifiedTime: entry.remoteModifiedTime ?? record?.remoteModifiedTime,
+              localSize: stat.size,
+              localMtime: stat.mtime,
+              lastSyncedAt: Date.now(),
+            };
+            delete state.conflicts[entry.relPath];
+            reports.push({ relPath: entry.relPath, action: "link", ok: true, message: "远端差异只是排版归一化，本地未改动" });
+            tick(`跳过 ${entry.relPath}`);
             return;
           }
 

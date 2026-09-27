@@ -3461,6 +3461,52 @@ async function main(): Promise<void> {
     return "时间戳没变但内容变了：快路径漏判 1 轮（如实复现），开安全阀立刻补上";
   });
 
+  // ---- 场景 55：公式排版差异不回写本地（零内容 diff，文档模式）
+  await scenario("55 公式：远端只差排版归一化时不回写本地", async () => {
+    const formulaRoot = path.join(TMP_ROOT, "vault-formula");
+    const rel = "公式排版场景.md";
+    const original = "公式排版场景（场景 55）\n\n讲解 $$a=b$$ 收尾\n\n行内公式 $URL = path#fragment$\n";
+    writeDocVault(formulaRoot, { [rel]: original });
+
+    const formulaFake = new FakeFeishu({ seedRootNode: false });
+    __setRequestUrlHandler(formulaFake.handler);
+    const fh = createDocHarness(formulaFake, formulaRoot);
+
+    const pushRound = await runDocRound(fh, "场景 55：先上传新笔记");
+    eq(pushRound.result.plan.counts["create-remote"] ?? 0, 1, "create-remote 数量");
+    const sent = String(createDocRequests(formulaFake)[0]?.body?.content ?? "");
+    ok(sent.includes("讲解\n\n$$a=b$$\n\n收尾"), `块级公式应独占段落：${sent}`);
+    ok(sent.includes("$URL = path\\#fragment$"), `行内公式的 # 应被转义：${sent}`);
+
+    const record = fh.settings.state.docRecords[rel];
+    ok(record, "缺少映射记录");
+
+    // 远端恰好等于"我们发上去的归一化形态"：差异只来自排版，本地不该被改写
+    const normalized = applyRules(
+      "toFeishu",
+      original,
+      { relPath: rel, documentTitle: "公式排版场景", localContent: original },
+      defaultRulesFile(),
+    );
+    formulaFake.setDocContent(record.documentId, normalized);
+    const cosmeticRound = await runDocRound(fh, "场景 55：远端只有排版差异");
+    ok(childItems(cosmeticRound.result.plan, "pull").includes(rel), "计划里仍应判为 pull");
+    eq(readVaultFile(rel, formulaRoot), original, "纯排版差异不应回写本地（零内容 diff）");
+
+    const stableRound = await runDocRound(fh, "场景 55：确认基线已跟上");
+    ok(childItems(stableRound.result.plan, "skip").includes(rel), "基线更新后该笔记应判为 skip");
+    ok(!childItems(stableRound.result.plan, "pull").includes(rel), "不应反复判定为 pull");
+
+    const realEdit = `${normalized}远端真实新增一行，用来确认真正的改动仍会拉取。\n`;
+    formulaFake.setDocContent(record.documentId, realEdit);
+    const realRound = await runDocRound(fh, "场景 55：远端真实改动");
+    ok(childItems(realRound.result.plan, "pull").includes(rel), "真实远端改动仍应走 pull");
+    ok(readVaultFile(rel, formulaRoot).includes("远端真实新增一行，用来确认真正的改动仍会拉取"), "真实改动应被拉取到本地");
+
+    __setRequestUrlHandler(fake.handler);
+    return "排版差异不回写、真实改动仍拉取";
+  });
+
   // ---- 汇总
   const failures: string[] = scenarioResults.filter((item) => !item.ok).map((item) => `${item.name}：${item.detail}`);
   if (fake.duplicateTitles.length > 0) failures.push(`同名节点 ${fake.duplicateTitles.length} 个`);

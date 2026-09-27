@@ -1581,6 +1581,20 @@ function applyRules(direction, input, ctx, rules) {
   }
   return output;
 }
+var COSMETIC_PUBLISH_RULE_IDS = ["math-escape-hash", "block-formula-own-paragraph"];
+function sameAfterCosmeticRules(a, b, ctx, rules) {
+  const enabled = new Set(rules.toFeishu.filter((entry) => entry.enabled).map((entry) => entry.id));
+  const normalize = (text) => {
+    let output = text;
+    for (const rule of BUILT_IN_RULES.toFeishu) {
+      if (!COSMETIC_PUBLISH_RULE_IDS.includes(rule.id) || !enabled.has(rule.id))
+        continue;
+      output = rule.apply(output, ctx);
+    }
+    return output;
+  };
+  return normalize(a) === normalize(b);
+}
 function ruleEnabled(rules, direction, id) {
   return rules[direction].some((entry) => entry.id === id && entry.enabled);
 }
@@ -3873,6 +3887,34 @@ async function executeDocPlan(plan, ctx, options) {
           if (present && await options.isEditorDirty(entry.relPath)) {
             reports.push({ relPath: entry.relPath, action: "dirty-editor", ok: true, message: "\u6587\u4EF6\u6B63\u5728\u7F16\u8F91\u4E14\u672A\u4FDD\u5B58\uFF0C\u672A\u8986\u76D6" });
             tick(`\u8DF3\u8FC7\u7F16\u8F91\u4E2D\u7684 ${entry.relPath}`);
+            return;
+          }
+          if (present && localTextBefore !== pulled && sameAfterCosmeticRules(
+            localTextBefore,
+            pulled,
+            {
+              relPath: entry.relPath,
+              documentTitle: record?.documentTitle ?? documentTitleFor(entry.relPath, settings),
+              localContent: localTextBefore
+            },
+            ctx.rules
+          )) {
+            const stat2 = localStat(ctx.app, entry.relPath);
+            state.docRecords[entry.relPath] = {
+              documentId,
+              nodeToken: entry.nodeToken ?? record?.nodeToken,
+              parentNodeToken: record?.parentNodeToken,
+              documentTitle: record?.documentTitle ?? documentTitleFor(entry.relPath, settings),
+              baseLocalHash: await ctx.hashText(localTextBefore),
+              baseRemoteHash: remoteHash,
+              remoteModifiedTime: entry.remoteModifiedTime ?? record?.remoteModifiedTime,
+              localSize: stat2.size,
+              localMtime: stat2.mtime,
+              lastSyncedAt: Date.now()
+            };
+            delete state.conflicts[entry.relPath];
+            reports.push({ relPath: entry.relPath, action: "link", ok: true, message: "\u8FDC\u7AEF\u5DEE\u5F02\u53EA\u662F\u6392\u7248\u5F52\u4E00\u5316\uFF0C\u672C\u5730\u672A\u6539\u52A8" });
+            tick(`\u8DF3\u8FC7 ${entry.relPath}`);
             return;
           }
           if (entry.action === "create-local" && present) {

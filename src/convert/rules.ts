@@ -629,6 +629,26 @@ export function applyRules(direction: RuleDirection, input: string, ctx: RuleCon
   return output;
 }
 
+/**
+ * 只改排版、且没有对应下行还原规则的上行规则。它们的输出形态会被飞书固化，
+ * 取回时天然与本地原文不同——拉取前用 sameAfterCosmeticRules 判定，差异只来自这里就不回写本地。
+ */
+export const COSMETIC_PUBLISH_RULE_IDS = ["math-escape-hash", "block-formula-own-paragraph"];
+
+/** 只跑上面那批排版规则，两侧结果相同即说明差异纯粹是排版归一化。 */
+export function sameAfterCosmeticRules(a: string, b: string, ctx: RuleContext, rules: RulesFile): boolean {
+  const enabled = new Set(rules.toFeishu.filter((entry) => entry.enabled).map((entry) => entry.id));
+  const normalize = (text: string): string => {
+    let output = text;
+    for (const rule of BUILT_IN_RULES.toFeishu) {
+      if (!COSMETIC_PUBLISH_RULE_IDS.includes(rule.id) || !enabled.has(rule.id)) continue;
+      output = rule.apply(output, ctx);
+    }
+    return output;
+  };
+  return normalize(a) === normalize(b);
+}
+
 export function ruleEnabled(rules: RulesFile, direction: RuleDirection, id: string): boolean {
   return rules[direction].some((entry) => entry.id === id && entry.enabled);
 }
