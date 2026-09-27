@@ -1184,7 +1184,7 @@ function rewriteMathBodies(input, rewrite) {
     }
     if (inBlockMath) {
       const close = findUnescaped(input, "$$", i);
-      out += rewrite(input.slice(i, close === -1 ? input.length : close));
+      out += rewrite(input.slice(i, close === -1 ? input.length : close), true);
       if (close === -1) {
         i = input.length;
         continue;
@@ -1210,7 +1210,7 @@ function rewriteMathBodies(input, rewrite) {
       const lineEnd = input.indexOf("\n", i);
       const close = findUnescaped(input, "$", i + 1);
       if (close > i + 1 && (lineEnd === -1 || close < lineEnd)) {
-        out += `$${rewrite(input.slice(i + 1, close))}$`;
+        out += `$${rewrite(input.slice(i + 1, close), false)}$`;
         i = close + 1;
         continue;
       }
@@ -1225,6 +1225,59 @@ var mathEscapeHash = {
   description: "\u4E0A\u884C\uFF1A\u6570\u5B66\u73AF\u5883\u91CC\u7684\u88F8 # \u5199\u6210 \\#\u3002\u98DE\u4E66\u4E0E MathJax \u90FD\u628A # \u5F53\u5B8F\u53C2\u6570\u7B26\uFF0C\u516C\u5F0F\u91CC\u7559\u672A\u8F6C\u4E49\u7684 #\uFF08\u5982 $URL = path#fragment$\uFF09\u4F1A\u8BA9\u6574\u6761\u516C\u5F0F\u6E32\u67D3\u5931\u8D25\u3002\u56F4\u680F\u4EE3\u7801\u5757\u4E0E\u884C\u5185\u4EE3\u7801\u5185\u4E0D\u52A8\uFF0C\u8DE8\u884C\u7684 $$ \u516C\u5F0F\u540C\u6837\u5904\u7406\u3002",
   defaultEnabled: true,
   apply: (input) => rewriteMathBodies(input, (body) => body.replace(/\\#|#/g, "\\#"))
+};
+var mathTrimInlineSpaces = {
+  id: "math-trim-inline-spaces",
+  description: "\u4E0A\u884C\uFF1A\u884C\u5185\u516C\u5F0F $ \u5185\u4FA7\u7684\u7A7A\u683C\u53BB\u6389\uFF08$ x $ \u2192 $x$\uFF09\u3002\u5B9E\u6D4B\u98DE\u4E66\u4E0D\u628A\u300C$ \u540E\u7D27\u8DDF\u7A7A\u683C\u300D\u7684\u5199\u6CD5\u5F53\u516C\u5F0F\uFF0C\u6574\u6BB5\u4F1A\u539F\u6837\u663E\u793A\u6210\u6587\u672C\uFF08$ \u90FD\u7559\u7740\uFF09\uFF0C\u800C\u6CA1\u7A7A\u683C\u7684 $\\boxed{...}$ \u80FD\u6B63\u5E38\u6E32\u67D3\u3002\u5757\u7EA7 $$...$$ \u5185\u4FA7\u7684\u7A7A\u683C\u98DE\u4E66\u80FD\u63A5\u53D7\uFF0C\u4FDD\u6301\u539F\u6837\u3002",
+  defaultEnabled: true,
+  apply: (input) => rewriteMathBodies(input, (body, block) => block || !body.trim() ? body : body.trim())
+};
+var INLINE_FORMULA_ALONE = /^\$([^$]+)\$[\s。，、；：！？.,;:!?]*$/;
+var inlineFormulaToBlock = {
+  id: "inline-formula-to-block",
+  description: "\u4E0A\u884C\uFF1A\u6574\u884C\u53EA\u6709\u4E00\u6761 $...$ \u884C\u5185\u516C\u5F0F\u65F6\uFF08\u884C\u5C3E\u5141\u8BB8\u6807\u70B9\uFF09\uFF0C\u6539\u5199\u6210 $$ \u5757\u7EA7\u516C\u5F0F\u5E76\u524D\u540E\u7559\u7A7A\u884C\u2014\u2014\u98DE\u4E66\u53EA\u5BF9\u5757\u7EA7\u516C\u5F0F\u5C45\u4E2D\uFF0C\u884C\u5185\u516C\u5F0F\u4F1A\u8DDF\u7740\u6B63\u6587\u6392\u7248\u3002\u53E5\u5B50\u4E2D\u95F4\u5939\u7740\u7684\u516C\u5F0F\u3001\u5217\u8868\u9879/\u8868\u683C/\u5F15\u7528/\u6807\u9898\u91CC\u7684\u516C\u5F0F\u90FD\u4E0D\u52A8\u3002",
+  defaultEnabled: true,
+  apply: (input) => {
+    const lines = input.split("\n");
+    const out = [];
+    let fenced;
+    let blankAfter = false;
+    const pushBlank = () => {
+      if (out.length === 0)
+        return;
+      if ((out[out.length - 1] ?? "").trim() === "")
+        return;
+      out.push("");
+    };
+    for (const line of lines) {
+      if (blankAfter && line.trim() !== "") {
+        pushBlank();
+        blankAfter = false;
+      }
+      const fence = MATH_FENCE.exec(line)?.[1];
+      if (fence) {
+        if (!fenced)
+          fenced = fence;
+        else if (fence[0] === fenced[0] && fence.length >= fenced.length)
+          fenced = void 0;
+        out.push(line);
+        continue;
+      }
+      if (fenced) {
+        out.push(line);
+        continue;
+      }
+      const match = INLINE_FORMULA_ALONE.exec(line);
+      if (!match) {
+        out.push(line);
+        continue;
+      }
+      pushBlank();
+      out.push("$$", match[1].trim(), "$$");
+      blankAfter = true;
+    }
+    return out.join("\n");
+  }
 };
 var blockFormulaOwnParagraph = {
   id: "block-formula-own-paragraph",
@@ -1486,7 +1539,16 @@ var imageDownload = {
   }
 };
 var BUILT_IN_RULES = {
-  toFeishu: [imageRefNormalize, tabIndentToSpaces, mathEscapeHash, blockFormulaOwnParagraph, footnoteDowngrade, imageUpload],
+  toFeishu: [
+    imageRefNormalize,
+    tabIndentToSpaces,
+    mathEscapeHash,
+    mathTrimInlineSpaces,
+    inlineFormulaToBlock,
+    blockFormulaOwnParagraph,
+    footnoteDowngrade,
+    imageUpload
+  ],
   toObsidian: [unescapeImageMarkup, dropTitleHeading, imageDownload, restoreImageRef]
 };
 function entryOf(rule) {
@@ -1581,7 +1643,12 @@ function applyRules(direction, input, ctx, rules) {
   }
   return output;
 }
-var COSMETIC_PUBLISH_RULE_IDS = ["math-escape-hash", "block-formula-own-paragraph"];
+var COSMETIC_PUBLISH_RULE_IDS = [
+  "math-escape-hash",
+  "math-trim-inline-spaces",
+  "inline-formula-to-block",
+  "block-formula-own-paragraph"
+];
 function sameAfterCosmeticRules(a, b, ctx, rules) {
   const enabled = new Set(rules.toFeishu.filter((entry) => entry.enabled).map((entry) => entry.id));
   const normalize = (text) => {
@@ -3475,6 +3542,16 @@ async function buildDocPlan(input) {
     const remoteNote = remote.notes.get(relPath);
     const record = state.docRecords[relPath];
     const remoteFields2 = remoteNote ? { remoteTitle: remoteNote.title, nodeToken: remoteNote.nodeToken, documentId: remoteNote.documentId } : {};
+    if (input.forcePush && localNote && localNote.size > 0) {
+      items.push(
+        item2(relPath, remoteNote ? "push" : "create-remote", "\u5F3A\u5236\u91CD\u63A8\uFF1A\u5FFD\u7565\u57FA\u7EBF", {
+          ...remoteFields2,
+          localSize: localNote.size,
+          localMtime: localNote.mtime
+        })
+      );
+      continue;
+    }
     if (!record) {
       if (localNote && remoteNote) {
         const [pulled2, localText2, localHash2, hash2] = await Promise.all([
@@ -4457,6 +4534,7 @@ var DocSyncEngine = class {
         propagateLocalDelete: settings.propagateLocalDelete,
         propagateRemoteDelete: settings.propagateRemoteDelete,
         cache,
+        forcePush: options.forcePush === true,
         remoteModifiedTimes,
         verifyRemoteByContent: settings.docVerifyRemoteByContent,
         readLocal: (relPath) => readLocalText(this.deps.app, relPath),
@@ -5062,6 +5140,11 @@ var FeishuWikiSyncPlugin = class extends import_obsidian15.Plugin {
     this.addCommand({ id: "sync-both", name: "\u53CC\u5411\u540C\u6B65", callback: () => void this.runSync("both") });
     this.addCommand({ id: "sync-pull", name: "\u4ECE\u98DE\u4E66\u62C9\u53D6\u5230\u672C\u5730", callback: () => void this.runSync("pull") });
     this.addCommand({ id: "sync-push", name: "\u628A\u672C\u5730\u63A8\u9001\u5230\u98DE\u4E66", callback: () => void this.runSync("push") });
+    this.addCommand({
+      id: "force-push",
+      name: "\u5F3A\u5236\u91CD\u63A8\uFF08\u5FFD\u7565\u57FA\u7EBF\uFF0C\u5237\u65B0\u6240\u6709\u672C\u5730\u7B14\u8BB0\uFF09",
+      callback: () => void this.runSync("push", { forcePush: true })
+    });
     this.addCommand({ id: "roundtrip-probe", name: "\u6D4B\u8BD5\uFF1AMarkdown \u5F80\u8FD4\u8F6C\u6362", callback: () => void this.runRoundtrip() });
     this.addRibbonIcon("refresh-cw", "Feishu Wiki Sync\uFF1A\u53CC\u5411\u540C\u6B65", () => void this.runSync("both"));
     this.refreshAutoSync();
@@ -5162,11 +5245,12 @@ var FeishuWikiSyncPlugin = class extends import_obsidian15.Plugin {
     this.syncInFlight = true;
     const label = this.settings.syncMode === "doc" ? "\u98DE\u4E66\u6587\u6863\u540C\u6B65" : "\u98DE\u4E66\u6587\u4EF6\u540C\u6B65";
     const wantPreview = options.preview ?? this.settings.showPlanBeforeSync;
+    const forcePush = options.forcePush === true;
     const notice = new import_obsidian15.Notice(`${label}\uFF1A\u51C6\u5907\u4E2D\u2026`, 0);
     const progress = (message) => setNoticeMessage2(notice, `${label}\uFF1A${message}`);
     try {
       if (wantPreview) {
-        const preview = await this.engine.run({ mode, dryRun: true, onProgress: progress });
+        const preview = await this.engine.run({ mode, dryRun: true, forcePush, onProgress: progress });
         notice.hide();
         const decision = await new Promise((resolve) => new PlanModal(this.app, preview.plan, resolve).open());
         if (decision === "cancel")
@@ -5182,7 +5266,7 @@ var FeishuWikiSyncPlugin = class extends import_obsidian15.Plugin {
         new ReportModal(this.app, result2.plan, result2.report, result2.executed).open();
         return;
       }
-      const result = await this.engine.run({ mode, onProgress: progress, confirm: async () => "all" });
+      const result = await this.engine.run({ mode, forcePush, onProgress: progress, confirm: async () => "all" });
       notice.hide();
       const failures = result.report.filter((entry) => !entry.ok).length;
       const conflicts = result.report.filter((entry) => entry.action === "conflict").length;

@@ -84,6 +84,11 @@ export default class FeishuWikiSyncPlugin extends Plugin implements SettingsHost
     this.addCommand({ id: "sync-both", name: "双向同步", callback: () => void this.runSync("both") });
     this.addCommand({ id: "sync-pull", name: "从飞书拉取到本地", callback: () => void this.runSync("pull") });
     this.addCommand({ id: "sync-push", name: "把本地推送到飞书", callback: () => void this.runSync("push") });
+    this.addCommand({
+      id: "force-push",
+      name: "强制重推（忽略基线，刷新所有本地笔记）",
+      callback: () => void this.runSync("push", { forcePush: true }),
+    });
     this.addCommand({ id: "roundtrip-probe", name: "测试：Markdown 往返转换", callback: () => void this.runRoundtrip() });
 
     this.addRibbonIcon("refresh-cw", "Feishu Wiki Sync：双向同步", () => void this.runSync("both"));
@@ -178,7 +183,10 @@ export default class FeishuWikiSyncPlugin extends Plugin implements SettingsHost
     new Notice("已清除本地保存的飞书授权");
   }
 
-  async runSync(mode: SyncMode, options: { preview?: boolean; quiet?: boolean } = {}): Promise<void> {
+  async runSync(
+    mode: SyncMode,
+    options: { preview?: boolean; quiet?: boolean; forcePush?: boolean } = {},
+  ): Promise<void> {
     if (this.engine.isSyncing() || this.syncInFlight) {
       new Notice("飞书同步：已有任务在执行中");
       return;
@@ -191,12 +199,13 @@ export default class FeishuWikiSyncPlugin extends Plugin implements SettingsHost
     this.syncInFlight = true;
     const label = this.settings.syncMode === "doc" ? "飞书文档同步" : "飞书文件同步";
     const wantPreview = options.preview ?? this.settings.showPlanBeforeSync;
+    const forcePush = options.forcePush === true;
     const notice = new Notice(`${label}：准备中…`, 0);
     const progress = (message: string) => setNoticeMessage(notice, `${label}：${message}`);
 
     try {
       if (wantPreview) {
-        const preview = await this.engine.run({ mode, dryRun: true, onProgress: progress });
+        const preview = await this.engine.run({ mode, dryRun: true, forcePush, onProgress: progress });
         notice.hide();
         const decision = await new Promise<PlanDecision>((resolve) => new PlanModal(this.app, preview.plan, resolve).open());
         if (decision === "cancel") return;
@@ -213,7 +222,7 @@ export default class FeishuWikiSyncPlugin extends Plugin implements SettingsHost
         return;
       }
 
-      const result = await this.engine.run({ mode, onProgress: progress, confirm: async () => "all" });
+      const result = await this.engine.run({ mode, forcePush, onProgress: progress, confirm: async () => "all" });
       notice.hide();
       const failures = result.report.filter((entry) => !entry.ok).length;
       const conflicts = result.report.filter((entry) => entry.action === "conflict").length;

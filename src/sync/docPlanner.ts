@@ -189,6 +189,8 @@ export interface DocPlannerInput {
   remoteModifiedTimes: Map<string, string>;
   /** 安全阀：忽略时间戳，每轮都取回全文校验 */
   verifyRemoteByContent: boolean;
+  /** 强制重推：忽略基线，把本地有内容的笔记都判成 push */
+  forcePush: boolean;
 }
 
 function item(relPath: string, action: PlanItem["action"], reason?: string, extra: Partial<PlanItem> = {}): PlanItem {
@@ -316,6 +318,18 @@ export async function buildDocPlan(input: DocPlannerInput): Promise<SyncPlan> {
     const remoteFields: Partial<PlanItem> = remoteNote
       ? { remoteTitle: remoteNote.title, nodeToken: remoteNote.nodeToken, documentId: remoteNote.documentId }
       : {};
+
+    // 强制重推：只看本地有没有内容，忽略两边基线（改了上行规则后用来刷新历史文档）
+    if (input.forcePush && localNote && localNote.size > 0) {
+      items.push(
+        item(relPath, remoteNote ? "push" : "create-remote", "强制重推：忽略基线", {
+          ...remoteFields,
+          localSize: localNote.size,
+          localMtime: localNote.mtime,
+        }),
+      );
+      continue;
+    }
 
     if (!record) {
       if (localNote && remoteNote) {

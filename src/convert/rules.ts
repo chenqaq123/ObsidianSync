@@ -171,9 +171,9 @@ function blockDelimPositions(line: string): number[] {
 
 /**
  * 逐字符扫描，只在数学环境内部调用 rewrite。跳过围栏代码块与行内代码；
- * $$ 公式允许跨行，$ 行内公式不跨行。
+ * $$ 公式允许跨行，$ 行内公式不跨行。rewrite 的第二个参数标明是不是块级公式。
  */
-function rewriteMathBodies(input: string, rewrite: (body: string) => string): string {
+function rewriteMathBodies(input: string, rewrite: (body: string, block: boolean) => string): string {
   let out = "";
   let i = 0;
   let fenced: string | undefined;
@@ -195,7 +195,7 @@ function rewriteMathBodies(input: string, rewrite: (body: string) => string): st
     }
     if (inBlockMath) {
       const close = findUnescaped(input, "$$", i);
-      out += rewrite(input.slice(i, close === -1 ? input.length : close));
+      out += rewrite(input.slice(i, close === -1 ? input.length : close), true);
       if (close === -1) {
         i = input.length;
         continue;
@@ -221,7 +221,7 @@ function rewriteMathBodies(input: string, rewrite: (body: string) => string): st
       const lineEnd = input.indexOf("\n", i);
       const close = findUnescaped(input, "$", i + 1);
       if (close > i + 1 && (lineEnd === -1 || close < lineEnd)) {
-        out += `$${rewrite(input.slice(i + 1, close))}$`;
+        out += `$${rewrite(input.slice(i + 1, close), false)}$`;
         i = close + 1;
         continue;
       }
@@ -238,6 +238,61 @@ const mathEscapeHash: BuiltInRule = {
     "上行：数学环境里的裸 # 写成 \\#。飞书与 MathJax 都把 # 当宏参数符，公式里留未转义的 #（如 $URL = path#fragment$）会让整条公式渲染失败。围栏代码块与行内代码内不动，跨行的 $$ 公式同样处理。",
   defaultEnabled: true,
   apply: (input) => rewriteMathBodies(input, (body) => body.replace(/\\#|#/g, "\\#")),
+};
+
+const mathTrimInlineSpaces: BuiltInRule = {
+  id: "math-trim-inline-spaces",
+  description:
+    "上行：行内公式 $ 内侧的空格去掉（$ x $ → $x$）。实测飞书不把「$ 后紧跟空格」的写法当公式，整段会原样显示成文本（$ 都留着），而没空格的 $\\boxed{...}$ 能正常渲染。块级 $$...$$ 内侧的空格飞书能接受，保持原样。",
+  defaultEnabled: true,
+  apply: (input) => rewriteMathBodies(input, (body, block) => (block || !body.trim() ? body : body.trim())),
+};
+
+/** 整行只有一条行内公式（行尾允许标点与空白）——这种写法在本子里是当独立公式用的。 */
+const INLINE_FORMULA_ALONE = /^\$([^$]+)\$[\s。，、；：！？.,;:!?]*$/;
+
+const inlineFormulaToBlock: BuiltInRule = {
+  id: "inline-formula-to-block",
+  description:
+    "上行：整行只有一条 $...$ 行内公式时（行尾允许标点），改写成 $$ 块级公式并前后留空行——飞书只对块级公式居中，行内公式会跟着正文排版。句子中间夹着的公式、列表项/表格/引用/标题里的公式都不动。",
+  defaultEnabled: true,
+  apply: (input) => {
+    const lines = input.split("\n");
+    const out: string[] = [];
+    let fenced: string | undefined;
+    let blankAfter = false;
+    const pushBlank = (): void => {
+      if (out.length === 0) return;
+      if ((out[out.length - 1] ?? "").trim() === "") return;
+      out.push("");
+    };
+    for (const line of lines) {
+      if (blankAfter && line.trim() !== "") {
+        pushBlank();
+        blankAfter = false;
+      }
+      const fence = MATH_FENCE.exec(line)?.[1];
+      if (fence) {
+        if (!fenced) fenced = fence;
+        else if (fence[0] === fenced[0] && fence.length >= fenced.length) fenced = undefined;
+        out.push(line);
+        continue;
+      }
+      if (fenced) {
+        out.push(line);
+        continue;
+      }
+      const match = INLINE_FORMULA_ALONE.exec(line);
+      if (!match) {
+        out.push(line);
+        continue;
+      }
+      pushBlank();
+      out.push("$$", match[1].trim(), "$$");
+      blankAfter = true;
+    }
+    return out.join("\n");
+  },
 };
 
 const blockFormulaOwnParagraph: BuiltInRule = {
@@ -531,7 +586,16 @@ const imageDownload: BuiltInRule = {
 };
 
 export const BUILT_IN_RULES: Record<RuleDirection, BuiltInRule[]> = {
-  toFeishu: [imageRefNormalize, tabIndentToSpaces, mathEscapeHash, blockFormulaOwnParagraph, footnoteDowngrade, imageUpload],
+  toFeishu: [
+    imageRefNormalize,
+    tabIndentToSpaces,
+    mathEscapeHash,
+    mathTrimInlineSpaces,
+    inlineFormulaToBlock,
+    blockFormulaOwnParagraph,
+    footnoteDowngrade,
+    imageUpload,
+  ],
   toObsidian: [unescapeImageMarkup, dropTitleHeading, imageDownload, restoreImageRef],
 };
 
@@ -633,7 +697,12 @@ export function applyRules(direction: RuleDirection, input: string, ctx: RuleCon
  * 只改排版、且没有对应下行还原规则的上行规则。它们的输出形态会被飞书固化，
  * 取回时天然与本地原文不同——拉取前用 sameAfterCosmeticRules 判定，差异只来自这里就不回写本地。
  */
-export const COSMETIC_PUBLISH_RULE_IDS = ["math-escape-hash", "block-formula-own-paragraph"];
+export const COSMETIC_PUBLISH_RULE_IDS = [
+  "math-escape-hash",
+  "math-trim-inline-spaces",
+  "inline-formula-to-block",
+  "block-formula-own-paragraph",
+];
 
 /** 只跑上面那批排版规则，两侧结果相同即说明差异纯粹是排版归一化。 */
 export function sameAfterCosmeticRules(a: string, b: string, ctx: RuleContext, rules: RulesFile): boolean {

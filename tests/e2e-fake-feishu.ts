@@ -1656,9 +1656,9 @@ async function main(): Promise<void> {
     eq(toFeishu("前文\n$$a=b$$\n后文"), "前文\n\n$$a=b$$\n\n后文", "块级公式前后应各补一个空行");
     eq(toFeishu("讲解 $$a=b$$ 收尾"), "讲解\n\n$$a=b$$\n\n收尾", "公式与正文同行时应拆成独立段落");
     eq(toFeishu("前文\n\n$$\na=b\n$$\n\n后文"), "前文\n\n$$\na=b\n$$\n\n后文", "已经独立成段的公式不应被改写");
-    eq(toFeishu("$URL = path#fragment$"), "$URL = path\\#fragment$", "行内公式里的裸 # 应转义");
+    eq(toFeishu("当 $URL = path#fragment$ 时"), "当 $URL = path\\#fragment$ 时", "行内公式里的裸 # 应转义");
     eq(toFeishu("$$URL = path#fragment$$"), "$$URL = path\\#fragment$$", "块级公式里的裸 # 应转义");
-    eq(toFeishu("$a=\\#b$"), "$a=\\#b$", "已转义的 # 不应二次转义");
+    eq(toFeishu("当 $a=\\#b$ 时"), "当 $a=\\#b$ 时", "已转义的 # 不应二次转义");
     eq(toFeishu("```\n$$a#b$$\n```"), "```\n$$a#b$$\n```", "围栏代码块内不应改动");
     eq(toFeishu("行内代码 `$$a#b$$` 保留"), "行内代码 `$$a#b$$` 保留", "行内代码内不应改动");
     eq(toFeishu("- 列表项 $$a=b$$"), "- 列表项 $$a=b$$", "列表项里的公式不拆（保住列表结构）");
@@ -1670,7 +1670,17 @@ async function main(): Promise<void> {
       "规则应幂等：重复应用不再变化",
     );
 
-    return "公式规则 12 条断言";
+    // 行内公式内侧空格会让飞书整段当纯文本，$ 都留着不渲染
+    eq(toFeishu("当 $ g_a=1 $ 时"), "当 $g_a=1$ 时", "行内公式内侧空格应去掉");
+    eq(toFeishu("当 $x>0$ 时"), "当 $x>0$ 时", "句子中间的行内公式不提块");
+    eq(toFeishu("$E = mc^2$。"), "$$\nE = mc^2\n$$", "独占一行的行内公式应提成块级");
+    eq(toFeishu("前文\n$E = mc^2$"), "前文\n\n$$\nE = mc^2\n$$", "提块后前面应补空行");
+    eq(toFeishu("$URL = path#fragment$"), "$$\nURL = path\\#fragment\n$$", "独占一行的行内公式：提块 + 转义");
+    eq(toFeishu("- 列表项 $x$"), "- 列表项 $x$", "列表项里的行内公式不提块");
+    const promoted = toFeishu("前文\n$ g_a=1 $");
+    eq(toFeishu(promoted), promoted, "去空格与提块同样幂等");
+
+    return "公式规则 20 条断言";
   });
 
   // ---- 场景 1：远端为空
@@ -2622,7 +2632,7 @@ async function main(): Promise<void> {
     };
     eq(
       rules.toFeishu.map((rule) => rule.id).join("|"),
-      "image-ref-normalize|tab-indent-to-spaces|math-escape-hash|block-formula-own-paragraph|footnote-downgrade|image-upload",
+      "image-ref-normalize|tab-indent-to-spaces|math-escape-hash|math-trim-inline-spaces|inline-formula-to-block|block-formula-own-paragraph|footnote-downgrade|image-upload",
       "默认上行规则",
     );
     eq(rules.toObsidian.map((rule) => rule.id).join("|"), "unescape-image-markup|drop-title-heading|image-download|restore-image-ref", "默认下行规则");
@@ -3503,8 +3513,16 @@ async function main(): Promise<void> {
     ok(childItems(realRound.result.plan, "pull").includes(rel), "真实远端改动仍应走 pull");
     ok(readVaultFile(rel, formulaRoot).includes("远端真实新增一行，用来确认真正的改动仍会拉取"), "真实改动应被拉取到本地");
 
+    // 强制重推：已同步的笔记也要再发一遍（改了上行规则后刷新历史文档用）
+    const idleRound = await runDocRound(fh, "场景 55：常规同步应为 skip");
+    ok(childItems(idleRound.result.plan, "skip").includes(rel), "常规同步应判为 skip");
+    const updatesBefore = formulaFake.counters.docsUpdate;
+    const forced = await fh.engine.run({ mode: "push", forcePush: true, confirm: async () => "all" });
+    ok(childItems(forced.plan, "push").includes(rel), `强制重推应包含本笔记：${childItems(forced.plan, "push").join("|")}`);
+    eq(formulaFake.counters.docsUpdate - updatesBefore, 1, "强制重推应真的写一次飞书");
+
     __setRequestUrlHandler(fake.handler);
-    return "排版差异不回写、真实改动仍拉取";
+    return "排版差异不回写、真实改动仍拉取、强制重推可用";
   });
 
   // ---- 汇总

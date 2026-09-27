@@ -161,6 +161,7 @@ export class DocSyncEngine {
         propagateLocalDelete: settings.propagateLocalDelete,
         propagateRemoteDelete: settings.propagateRemoteDelete,
         cache,
+        forcePush: options.forcePush === true,
         remoteModifiedTimes,
         verifyRemoteByContent: settings.docVerifyRemoteByContent,
         readLocal: (relPath) => readLocalText(this.deps.app, relPath),

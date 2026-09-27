@@ -29,6 +29,8 @@ export interface RunOptions {
   mode: SyncMode;
   dryRun?: boolean;
   preApprovedPlan?: SyncPlan;
+  /** 强制重推：忽略本地/远端基线，把本地有内容的笔记再发一遍（改了上行规则后刷新历史文档用） */
+  forcePush?: boolean;
   onProgress?: (message: string) => void;
   confirm?: (plan: SyncPlan) => Promise<PlanDecision>;
 }
