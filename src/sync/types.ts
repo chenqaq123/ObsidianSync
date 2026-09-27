@@ -34,6 +34,8 @@ export interface PlanItem {
   duplicateConflict?: boolean;
   /** 文档模式：远端 docx 文档 id */
   documentId?: string;
+  /** Rule-only refresh: recheck the remote content before overwriting a previewed plan. */
+  rulesRefresh?: boolean;
 }
 
 export interface SyncPlan {
@@ -41,6 +43,9 @@ export interface SyncPlan {
   counts: Record<string, number>;
   localNoteCount: number;
   remoteNoteCount: number;
+  publishRulesFingerprint?: string;
+  pullRulesFingerprint?: string;
+  warnings?: { relPath: string; message: string }[];
 }
 
 export const ACTION_LABELS: Record<SyncAction, string> = {
@@ -108,6 +113,7 @@ export interface DocRecord {
   baseLocalHash: string;
   /** 取回形态（fetch 回来的 Markdown）的哈希，飞书会做格式规范化，不能用本地形态当远端基线 */
   baseRemoteHash: string;
+  publishRulesFingerprint?: string;
   /** 飞书返回的最后修改时间（Unix 秒字符串），用来跳过每轮的全文取回 */
   remoteModifiedTime?: string;
   localSize: number;

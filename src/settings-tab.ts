@@ -123,7 +123,7 @@ export class FeishuWikiSyncSettingTab extends PluginSettingTab {
       cls: "setting-item-description",
       text:
         `规则文件：${RULES_PATH}，每条规则都有 enabled 开关与 description 说明。上行规则在发给飞书之前作用于本地 Markdown，` +
-        "下行规则在写回本地之前作用于取回的 Markdown。文件不存在时会自动写入一份完整默认规则；加载时与内置默认按 id 合并，改过的以文件为准。",
+        "下行规则在写回本地之前作用于取回的 Markdown。文件不存在时会自动写入一份完整默认规则；加载时与内置默认按 id 合并，改过的以文件为准。上行规则更新后，旧文档会进入刷新计划；飞书有新改动时优先处理改动。原稿格式问题会显示在预览和报告中。",
     });
 
     new Setting(containerEl)

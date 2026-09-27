@@ -1,5 +1,5 @@
 import type { RulesFile } from "../convert/rules";
-import { applyRules } from "../convert/rules";
+import { applyRules, publishRulesFingerprint, pullRulesFingerprint, ruleEnabled, sourceFormatWarnings } from "../convert/rules";
 import type { WikiTreeEntry } from "../feishu/wiki";
 import type { LocalNote, PlanItem, SyncPlan, SyncState } from "./types";
 import { basenameOf, dirnameOf, joinPath, summarize } from "./types";
@@ -248,9 +248,10 @@ async function remoteChangedState(
   input: DocPlannerInput,
   record: { baseRemoteHash: string; remoteModifiedTime?: string },
   documentId: string,
+  verifyContent = false,
 ): Promise<{ changed: boolean; hash?: string; metaTime?: string }> {
   const metaTime = input.remoteModifiedTimes.get(documentId);
-  if (!input.verifyRemoteByContent && record.remoteModifiedTime) {
+  if (!verifyContent && !input.verifyRemoteByContent && record.remoteModifiedTime) {
     if (metaTime !== undefined && metaTime === record.remoteModifiedTime) return { changed: false, metaTime };
   }
   const hash = await fetchedHash(input, documentId);
@@ -307,6 +308,8 @@ async function isLocalChanged(
 export async function buildDocPlan(input: DocPlannerInput): Promise<SyncPlan> {
   const { state, local, remote } = input;
   const items: PlanItem[] = [];
+  const fingerprint = publishRulesFingerprint(input.rules);
+  const warnings: { relPath: string; message: string }[] = [];
   const relPaths = new Set<string>([...local.keys(), ...remote.notes.keys(), ...Object.keys(state.docRecords)]);
 
   for (const relPath of Array.from(relPaths).sort()) {
@@ -315,6 +318,9 @@ export async function buildDocPlan(input: DocPlannerInput): Promise<SyncPlan> {
     const localNote = local.get(relPath);
     const remoteNote = remote.notes.get(relPath);
     const record = state.docRecords[relPath];
+    if (localNote && ruleEnabled(input.rules, "toFeishu", "source-format-diagnostics")) {
+      for (const message of sourceFormatWarnings(await readLocalCached(input, relPath))) warnings.push({ relPath, message });
+    }
     const remoteFields: Partial<PlanItem> = remoteNote
       ? { remoteTitle: remoteNote.title, nodeToken: remoteNote.nodeToken, documentId: remoteNote.documentId }
       : {};
@@ -418,7 +424,9 @@ export async function buildDocPlan(input: DocPlannerInput): Promise<SyncPlan> {
     }
 
     const localChanged = await isLocalChanged(input, record, localNote);
-    const remoteState = await remoteChangedState(input, record, remoteNote.documentId);
+    const rulesChanged = record.publishRulesFingerprint !== fingerprint;
+    // Rules upgrades must not trust second-resolution timestamps before overwriting old documents.
+    const remoteState = await remoteChangedState(input, record, remoteNote.documentId, rulesChanged);
     const remoteChanged = remoteState.changed;
     const hash = remoteState.hash;
     const localHash = await hashLocalCached(input, relPath);
@@ -432,7 +440,9 @@ export async function buildDocPlan(input: DocPlannerInput): Promise<SyncPlan> {
     };
 
     if (!localChanged && !remoteChanged) {
-      items.push(item(relPath, "skip", undefined, extra));
+      items.push(rulesChanged
+        ? item(relPath, "push", "转换规则已更新：刷新飞书排版，本地正文不变", { ...extra, rulesRefresh: true })
+        : item(relPath, "skip", undefined, extra));
       continue;
     }
     if (localChanged && !remoteChanged) {
@@ -459,5 +469,8 @@ export async function buildDocPlan(input: DocPlannerInput): Promise<SyncPlan> {
     counts: summarize(items),
     localNoteCount: local.size,
     remoteNoteCount: remote.notes.size,
+    publishRulesFingerprint: fingerprint,
+    pullRulesFingerprint: pullRulesFingerprint(input.rules),
+    warnings,
   };
 }

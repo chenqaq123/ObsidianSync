@@ -1,7 +1,7 @@
 import type { App } from "obsidian";
 import { TFile } from "obsidian";
 import type { LocalImageUpload, RemoteImageRef, ResolvedImage, RuleContext, RulesFile } from "../convert/rules";
-import { applyRules, collectRemoteImages, ruleEnabled, sameAfterCosmeticRules } from "../convert/rules";
+import { applyRules, collectRemoteImages, normalizeObsidianMath, publishRulesFingerprint, ruleEnabled, sameAfterCosmeticRules } from "../convert/rules";
 import { buildMarkdownContent, createDocumentFromMarkdown, fetchDocumentMarkdown, updateDocumentFromMarkdown } from "../feishu/docs";
 import type { DocImageBlock, DocNewBlock } from "../feishu/docImages";
 import {
@@ -196,6 +196,12 @@ export async function executeDocPlan(
           const statBefore = localStat(ctx.app, entry.relPath);
           const localText = await readLocalText(ctx.app, entry.relPath);
           const record = state.docRecords[entry.relPath];
+          if (entry.rulesRefresh && record) {
+            if (await options.isEditorDirty(entry.relPath)) throw new Error("笔记正在编辑，请保存后重新预览规则刷新计划");
+            if (await ctx.hashText(localText) !== entry.localHash) throw new Error("预览后本地正文已改变，请重新预览规则刷新计划");
+            const remoteNow = await fetchFresh(record.documentId);
+            if (await ctx.hashFetched(remoteNow) !== entry.remoteHash) throw new Error("预览后飞书正文已改变，已停止覆盖，请重新同步处理远端改动");
+          }
           const decided = record?.documentTitle
             ? { title: record.documentTitle, renamed: false }
             : uniqueDocumentTitle(documentTitleFor(entry.relPath, settings), ctx.containerTitles);
@@ -242,7 +248,7 @@ export async function executeDocPlan(
             revisionId,
             uploads: ruleContext.imageUploads ?? [],
           });
-          for (const warning of ruleContext.warnings ?? []) ctx.logger.warn(`图片：${entry.relPath} ${warning}`);
+          for (const warning of ruleContext.warnings ?? []) ctx.logger.warn(`转换：${entry.relPath} ${warning}`);
 
           // 远端基线必须记"取回形态"：飞书会规范化格式，记发送形态下次一定判定远端变了
           const fetched = await fetchFresh(documentId);
@@ -261,6 +267,7 @@ export async function executeDocPlan(
             documentTitle: decided.title,
             baseLocalHash: await ctx.hashText(localText),
             baseRemoteHash: remoteHash,
+            publishRulesFingerprint: publishRulesFingerprint(ctx.rules),
             remoteModifiedTime: entry.remoteModifiedTime,
             localSize: stable ? statAfter.size : -1,
             localMtime: stable ? statAfter.mtime : -1,
@@ -361,6 +368,7 @@ export async function executeDocPlan(
                 documentTitle: record?.documentTitle ?? documentTitleFor(entry.relPath, settings),
                 baseLocalHash: await ctx.hashText(currentText),
                 baseRemoteHash: remoteHash,
+                publishRulesFingerprint: publishRulesFingerprint(ctx.rules),
                 remoteModifiedTime: entry.remoteModifiedTime ?? record?.remoteModifiedTime,
                 localSize: before.size,
                 localMtime: before.mtime,
@@ -379,7 +387,7 @@ export async function executeDocPlan(
             return;
           }
 
-          // 远端与本地只差排版归一化（公式转义、公式独占段落）时不回写：否则每次拉取都会留下纯格式 diff
+          // 纯排版差异保留本地布局，仅修复 Obsidian 必需的公式空白与转义。
           if (
             present &&
             localTextBefore !== pulled &&
@@ -394,22 +402,28 @@ export async function executeDocPlan(
               ctx.rules,
             )
           ) {
+            // Keep the author's layout, but do not keep math that Obsidian cannot render.
+            const localText = normalizeObsidianMath(localTextBefore, ctx.rules);
+            const repaired = localText !== localTextBefore;
+            if (repaired) await writeLocalBytes(ctx.app, entry.relPath, encodeText(localText));
             const stat = localStat(ctx.app, entry.relPath);
             state.docRecords[entry.relPath] = {
               documentId,
               nodeToken: entry.nodeToken ?? record?.nodeToken,
               parentNodeToken: record?.parentNodeToken,
               documentTitle: record?.documentTitle ?? documentTitleFor(entry.relPath, settings),
-              baseLocalHash: await ctx.hashText(localTextBefore),
+              baseLocalHash: await ctx.hashText(localText),
               baseRemoteHash: remoteHash,
+              publishRulesFingerprint: publishRulesFingerprint(ctx.rules),
               remoteModifiedTime: entry.remoteModifiedTime ?? record?.remoteModifiedTime,
               localSize: stat.size,
               localMtime: stat.mtime,
               lastSyncedAt: Date.now(),
             };
             delete state.conflicts[entry.relPath];
-            reports.push({ relPath: entry.relPath, action: "link", ok: true, message: "远端差异只是排版归一化，本地未改动" });
-            tick(`跳过 ${entry.relPath}`);
+            reports.push({ relPath: entry.relPath, action: repaired ? "pull" : "link", ok: true,
+              message: repaired ? "已修复 Obsidian 公式定界符内侧空白或转义，保留本地段落排版" : "远端差异只是排版归一化，本地未改动" });
+            tick(`${repaired ? "修复公式" : "跳过"} ${entry.relPath}`);
             return;
           }
 
@@ -443,6 +457,7 @@ export async function executeDocPlan(
             documentTitle: record?.documentTitle ?? documentTitleFor(entry.relPath, settings),
             baseLocalHash: await ctx.hashText(pulled),
             baseRemoteHash: remoteHash,
+            publishRulesFingerprint: publishRulesFingerprint(ctx.rules),
             remoteModifiedTime: entry.remoteModifiedTime ?? record?.remoteModifiedTime,
             localSize: stat.size,
             localMtime: stat.mtime,
@@ -481,6 +496,7 @@ export async function executeDocPlan(
           documentTitle: existing?.documentTitle ?? documentTitleFor(entry.relPath, settings),
           baseLocalHash: entry.localHash ?? (await ctx.hashText(localText)),
           baseRemoteHash: entry.remoteHash ?? existing?.baseRemoteHash ?? "",
+          publishRulesFingerprint: publishRulesFingerprint(ctx.rules),
           remoteModifiedTime: entry.remoteModifiedTime ?? existing?.remoteModifiedTime,
           localSize: stable ? statAfter.size : -1,
           localMtime: stable ? statAfter.mtime : -1,
@@ -621,6 +637,12 @@ export async function executeDocPlan(
   }
 
   state.lastSyncAt = Date.now();
+  for (const entry of plan.items) {
+    const record = state.docRecords[entry.relPath];
+    if (entry.action === "skip" && record && entry.remoteModifiedTime && entry.remoteHash === record.baseRemoteHash) {
+      record.remoteModifiedTime = entry.remoteModifiedTime;
+    }
+  }
   return reports;
 }
 

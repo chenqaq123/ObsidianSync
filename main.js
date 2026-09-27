@@ -1117,9 +1117,220 @@ async function downloadDocMedia(client, fileToken) {
   return { bytes: response.data, contentType: response.contentType };
 }
 
+// src/convert/markdown.ts
+function escapedAt(text, pos) {
+  let count = 0;
+  for (let i = pos - 1; i >= 0 && text[i] === "\\"; i -= 1)
+    count += 1;
+  return count % 2 === 1;
+}
+function codeLineMask(lines, includeIndentedCode = true) {
+  let fence;
+  let frontmatter = lines[0]?.replace(/\r$/, "") === "---";
+  return lines.map((line, index) => {
+    if (frontmatter) {
+      if (index > 0 && /^(---|\.\.\.)\r?$/.test(line))
+        frontmatter = false;
+      return true;
+    }
+    const unquoted = line.replace(/^(?:[\t ]*>[\t ]?)+/, "");
+    const match = /^[\t ]*(`{3,}|~{3,})(.*)$/.exec(unquoted.replace(/\r$/, ""));
+    if (fence) {
+      if (match && match[1][0] === fence[0] && match[1].length >= fence.length && !match[2].trim())
+        fence = void 0;
+      return true;
+    }
+    if (match) {
+      fence = match[1];
+      return true;
+    }
+    return includeIndentedCode && /^(?: {4}|\t)/.test(unquoted);
+  });
+}
+function mathSpans(text) {
+  const lines = text.split("\n");
+  const code = codeLineMask(lines);
+  const spans = [];
+  let offset = 0;
+  let blockStart;
+  let xmlUntil = 0;
+  for (let row = 0; row < lines.length; row += 1) {
+    const line = lines[row];
+    if (code[row] && blockStart === void 0) {
+      offset += line.length + 1;
+      continue;
+    }
+    if (blockStart !== void 0 && /^[\t ]*(`{3,}|~{3,})/.test(line)) {
+      blockStart = void 0;
+      offset += line.length + 1;
+      continue;
+    }
+    for (let i = 0; i < line.length; ) {
+      if (offset + i < xmlUntil) {
+        i = Math.min(line.length, xmlUntil - offset);
+        continue;
+      }
+      if (blockStart === void 0 && line.startsWith("<latex>", i) && !escapedAt(line, i)) {
+        const close2 = text.indexOf("</latex>", offset + i + 7);
+        if (close2 !== -1) {
+          xmlUntil = close2 + 8;
+          continue;
+        }
+      }
+      if (blockStart === void 0 && line[i] === "`" && !escapedAt(line, i)) {
+        const ticks = /^`+/.exec(line.slice(i))[0];
+        let close2 = text.indexOf(ticks, offset + i + ticks.length);
+        while (close2 !== -1 && (text[close2 - 1] === "`" || text[close2 + ticks.length] === "`"))
+          close2 = text.indexOf(ticks, close2 + ticks.length);
+        if (close2 !== -1)
+          xmlUntil = close2 + ticks.length;
+        i += ticks.length;
+        continue;
+      }
+      if (blockStart === void 0 && line.startsWith("](", i)) {
+        let depth = 1;
+        let end = i + 2;
+        for (; end < line.length && depth > 0; end += 1) {
+          if (escapedAt(line, end))
+            continue;
+          if (line[end] === "(")
+            depth += 1;
+          if (line[end] === ")")
+            depth -= 1;
+        }
+        if (depth === 0) {
+          i = end;
+          continue;
+        }
+      }
+      if (blockStart === void 0 && line.startsWith("[[", i)) {
+        const end = line.indexOf("]]", i + 2);
+        if (end !== -1) {
+          i = end + 2;
+          continue;
+        }
+      }
+      if (line[i] !== "$" || escapedAt(line, i)) {
+        i += 1;
+        continue;
+      }
+      const dollarRun = /^\$+/.exec(line.slice(i))[0].length;
+      if (dollarRun > 2) {
+        i += dollarRun;
+        continue;
+      }
+      if (line.startsWith("$$", i)) {
+        if (blockStart === void 0)
+          blockStart = offset + i;
+        else {
+          spans.push({ start: blockStart, end: offset + i + 2, body: text.slice(blockStart + 2, offset + i), block: true });
+          blockStart = void 0;
+        }
+        i += 2;
+        continue;
+      }
+      if (blockStart !== void 0) {
+        i += 1;
+        continue;
+      }
+      let close = i + 1;
+      while (close < line.length && (line[close] !== "$" || escapedAt(line, close)))
+        close += 1;
+      const body = line.slice(i + 1, close);
+      const amount = /^-?\d[\d,.]*(.*)$/.exec(body);
+      if (amount && /[\p{L};；]/u.test(amount[1]) && !/[\\^_=<>+*/{}()-]/.test(amount[1])) {
+        i += 1;
+        continue;
+      }
+      if (close < line.length && close > i + 1 && line[close + 1] !== "$" && !/\d/.test(line[close + 1] ?? "")) {
+        spans.push({ start: offset + i, end: offset + close + 1, body, block: false });
+        i = close + 1;
+      } else
+        i += 1;
+    }
+    offset += line.length + 1;
+  }
+  return spans;
+}
+function trimInlineMathBody(body) {
+  let end = body.length;
+  while (end > 0 && /\s/.test(body[end - 1])) {
+    if (body[end - 1] === " " && escapedAt(body, end - 1)) {
+      return body.slice(0, end - 2).trimStart() + "\\space{}";
+    }
+    end -= 1;
+  }
+  return body.slice(0, end).trimStart();
+}
+function mapMath(text, rewrite) {
+  const out = [];
+  let from = 0;
+  for (const span of mathSpans(text)) {
+    out.push(text.slice(from, span.start), rewrite(span));
+    from = span.end;
+  }
+  out.push(text.slice(from));
+  return out.join("");
+}
+function mapNativeMath(text, rewrite) {
+  const lines = text.split("\n");
+  const code = codeLineMask(lines);
+  const protectedRanges = [];
+  let offset = 0;
+  for (let row = 0; row < lines.length; row += 1) {
+    if (code[row])
+      protectedRanges.push({ start: offset, end: offset + lines[row].length });
+    offset += lines[row].length + 1;
+  }
+  const ticks = /`+/g;
+  let tick;
+  while (tick = ticks.exec(text)) {
+    if (escapedAt(text, tick.index) || protectedRanges.some((r) => tick.index >= r.start && tick.index < r.end))
+      continue;
+    let close = text.indexOf(tick[0], ticks.lastIndex);
+    while (close !== -1 && (text[close - 1] === "`" || text[close + tick[0].length] === "`"))
+      close = text.indexOf(tick[0], close + tick[0].length);
+    if (close !== -1) {
+      protectedRanges.push({ start: tick.index, end: close + tick[0].length });
+      ticks.lastIndex = close + tick[0].length;
+    }
+  }
+  return text.replace(
+    /<p align="center">\s*<latex>([\s\S]*?)<\/latex>\s*<\/p>|<latex>([\s\S]*?)<\/latex>/g,
+    (raw, blockBody, inlineBody, start) => {
+      if (escapedAt(text, start) || protectedRanges.some((r) => start < r.end && start + raw.length > r.start))
+        return raw;
+      return rewrite(blockBody ?? inlineBody ?? "", blockBody !== void 0);
+    }
+  );
+}
+function decodeXmlText(text) {
+  return text.replace(/&(?:amp|lt|gt|quot|apos|#\d+|#x[\da-f]+);/gi, (entity) => {
+    const named = { "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&apos;": "'" };
+    if (entity[1] !== "#")
+      return named[entity.toLowerCase()] ?? entity;
+    const value = entity[2].toLowerCase() === "x" ? parseInt(entity.slice(3, -1), 16) : parseInt(entity.slice(2, -1), 10);
+    return value > 0 && value <= 1114111 && !(value >= 55296 && value <= 57343) ? String.fromCodePoint(value) : entity;
+  });
+}
+function encodeFeishuMath(markdown) {
+  const compensate = (body) => body.replace(/\\(?=[#$*_~\[\]&:<>+=`-])/g, "\\\\");
+  const native = mapNativeMath(markdown, (body, block) => {
+    const value = compensate(decodeXmlText(body));
+    const escaped = block ? value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") : value;
+    const latex = `<latex>${escaped}</latex>`;
+    return block ? `<p align="center">${latex}</p>` : latex;
+  });
+  return mapMath(native, (span) => {
+    const delimiter = span.block ? "$$" : "$";
+    return `${delimiter}${compensate(span.body)}${delimiter}`;
+  });
+}
+
 // src/convert/rules.ts
 var RULES_PATH = ".obsidian/feishu-sync/rules.json";
-var RULES_VERSION = 1;
+var RULES_VERSION = 3;
+var PUBLISH_RULES_REVISION = 3;
 var IMAGE_LINK = /!\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
 var FENCE = /^\s*(```|~~~)/;
 var WIKI_IMAGE = /!\[\[([^\]|]+?)(?:\|([^\]]*))?\]\]/g;
@@ -1127,14 +1338,9 @@ var MARKDOWN_IMAGE = /!\[([^\]]*)\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)/g;
 var XML_IMAGE = /<img\b[^>]*\/?>/gi;
 var HAS_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
 function mapOutsideFences(text, transform) {
-  let fenced = false;
-  return text.split("\n").map((line) => {
-    if (FENCE.test(line)) {
-      fenced = !fenced;
-      return line;
-    }
-    return fenced ? line : transform(line);
-  }).join("\n");
+  const lines = text.split("\n");
+  const code = codeLineMask(lines, false);
+  return lines.map((line, index) => code[index] ? line : transform(line)).join("\n");
 }
 var imageRefNormalize = {
   id: "image-ref-normalize",
@@ -1156,254 +1362,166 @@ var tabIndentToSpaces = {
     return match[0].replace(/\t/g, "  ") + line.slice(match[0].length);
   })
 };
-var MATH_FENCE = /^\s*(```+|~~~+)/;
 var MATH_LIST_ITEM = /^\s*(?:[-*+]|\d+[.)])\s/;
 var MATH_TABLE_ROW = /^\s*\|/;
 var MATH_STRUCTURED_LINE = /^(?:[\t ]|>|#{1,6}\s)/;
-function isEscapedAt(text, pos) {
-  let backslashes = 0;
-  for (let i = pos - 1; i >= 0 && text[i] === "\\"; i -= 1)
-    backslashes += 1;
-  return backslashes % 2 === 1;
-}
-function findUnescaped(text, token, from) {
-  let index = text.indexOf(token, from);
-  while (index !== -1 && isEscapedAt(text, index))
-    index = text.indexOf(token, index + 1);
-  return index;
-}
-function inlineCodeEnd(line, from) {
-  const ticks = /^`+/.exec(line.slice(from))?.[0] ?? "`";
-  const close = line.indexOf(ticks, from + ticks.length);
-  return close === -1 ? line.length : close + ticks.length;
-}
-function blockDelimPositions(line) {
-  const positions = [];
-  let i = 0;
-  while (i < line.length) {
-    if (line[i] === "`") {
-      i = inlineCodeEnd(line, i);
-      continue;
-    }
-    if (line.startsWith("$$", i) && !isEscapedAt(line, i)) {
-      positions.push(i);
-      i += 2;
-      continue;
-    }
-    i += 1;
-  }
-  return positions;
-}
 function rewriteMathBodies(input, rewrite) {
-  let out = "";
-  let i = 0;
-  let fenced;
-  let inBlockMath = false;
-  while (i < input.length) {
-    if (!inBlockMath && (i === 0 || input[i - 1] === "\n")) {
-      const lineEnd = input.indexOf("\n", i);
-      const end = lineEnd === -1 ? input.length : lineEnd;
-      const fence = MATH_FENCE.exec(input.slice(i, end))?.[1];
-      if (fence) {
-        if (!fenced)
-          fenced = fence;
-        else if (fence[0] === fenced[0] && fence.length >= fenced.length)
-          fenced = void 0;
-      }
-      if (fence || fenced) {
-        out += input.slice(i, end);
-        i = end;
-        continue;
-      }
-    }
-    if (inBlockMath) {
-      const close = findUnescaped(input, "$$", i);
-      out += rewrite(input.slice(i, close === -1 ? input.length : close), true);
-      if (close === -1) {
-        i = input.length;
-        continue;
-      }
-      out += "$$";
-      i = close + 2;
-      inBlockMath = false;
-      continue;
-    }
-    if (input[i] === "`") {
-      const end = inlineCodeEnd(input, i);
-      out += input.slice(i, end);
-      i = end;
-      continue;
-    }
-    if (input.startsWith("$$", i) && !isEscapedAt(input, i)) {
-      inBlockMath = true;
-      out += "$$";
-      i += 2;
-      continue;
-    }
-    if (input[i] === "$" && !isEscapedAt(input, i)) {
-      const lineEnd = input.indexOf("\n", i);
-      const close = findUnescaped(input, "$", i + 1);
-      if (close > i + 1 && (lineEnd === -1 || close < lineEnd)) {
-        out += `$${rewrite(input.slice(i + 1, close), false)}$`;
-        i = close + 1;
-        continue;
-      }
-    }
-    out += input[i];
-    i += 1;
-  }
-  return out;
+  return mapMath(input, (span) => {
+    const delimiter = span.block ? "$$" : "$";
+    return `${delimiter}${rewrite(span.body, span.block)}${delimiter}`;
+  });
 }
 var mathEscapeHash = {
   id: "math-escape-hash",
-  description: "\u4E0A\u884C\uFF1A\u6570\u5B66\u73AF\u5883\u91CC\u7684\u88F8 # \u5199\u6210 \\#\u3002\u98DE\u4E66\u4E0E MathJax \u90FD\u628A # \u5F53\u5B8F\u53C2\u6570\u7B26\uFF0C\u516C\u5F0F\u91CC\u7559\u672A\u8F6C\u4E49\u7684 #\uFF08\u5982 $URL = path#fragment$\uFF09\u4F1A\u8BA9\u6574\u6761\u516C\u5F0F\u6E32\u67D3\u5931\u8D25\u3002\u56F4\u680F\u4EE3\u7801\u5757\u4E0E\u884C\u5185\u4EE3\u7801\u5185\u4E0D\u52A8\uFF0C\u8DE8\u884C\u7684 $$ \u516C\u5F0F\u540C\u6837\u5904\u7406\u3002",
+  description: "\u53CC\u5411\uFF1A\u6570\u5B66\u73AF\u5883\u91CC\u7684\u88F8 # \u5199\u6210 \\#\uFF0C\u907F\u514D\u516C\u5F0F\u6E32\u67D3\u5931\u8D25\uFF1B\u5DF2\u8F6C\u4E49\u7684 # \u4E0D\u91CD\u590D\u8F6C\u4E49\uFF0C\u4EE3\u7801\u793A\u4F8B\u4E0D\u52A8\uFF0C\u8DE8\u884C\u7684 $$ \u516C\u5F0F\u540C\u6837\u5904\u7406\u3002",
   defaultEnabled: true,
-  apply: (input) => rewriteMathBodies(input, (body) => body.replace(/\\#|#/g, "\\#"))
+  apply: (input) => rewriteMathBodies(input, (body) => body.replace(/#/g, (_char, index) => escapedAt(body, index) ? "#" : "\\#"))
 };
 var mathTrimInlineSpaces = {
   id: "math-trim-inline-spaces",
-  description: "\u4E0A\u884C\uFF1A\u884C\u5185\u516C\u5F0F $ \u5185\u4FA7\u7684\u7A7A\u683C\u53BB\u6389\uFF08$ x $ \u2192 $x$\uFF09\u3002\u5B9E\u6D4B\u98DE\u4E66\u4E0D\u628A\u300C$ \u540E\u7D27\u8DDF\u7A7A\u683C\u300D\u7684\u5199\u6CD5\u5F53\u516C\u5F0F\uFF0C\u6574\u6BB5\u4F1A\u539F\u6837\u663E\u793A\u6210\u6587\u672C\uFF08$ \u90FD\u7559\u7740\uFF09\uFF0C\u800C\u6CA1\u7A7A\u683C\u7684 $\\boxed{...}$ \u80FD\u6B63\u5E38\u6E32\u67D3\u3002\u5757\u7EA7 $$...$$ \u5185\u4FA7\u7684\u7A7A\u683C\u98DE\u4E66\u80FD\u63A5\u53D7\uFF0C\u4FDD\u6301\u539F\u6837\u3002",
+  description: "\u53CC\u5411\uFF1A\u53EA\u6E05\u7406\u884C\u5185\u516C\u5F0F\u5B9A\u754C\u7B26\u5185\u4FA7\u7684\u7A7A\u767D\uFF08$ x $ \u2192 $x$\uFF09\uFF0C\u786E\u4FDD Obsidian \u53EF\u8BC6\u522B\u3002\u4FDD\u7559\u516C\u5F0F\u6B63\u6587\u3001\\text{Agent Memory} \u5185\u7684\u7A7A\u683C\uFF0C\u4EE5\u53CA\u5757\u7EA7 $$...$$ \u7684\u7A7A\u683C\u548C\u6362\u884C\uFF1B\u4EE3\u7801\u3001\u4EF7\u683C\u4E0E\u8F6C\u4E49\u7F8E\u5143\u7B26\u53F7\u4E0D\u52A8\u3002",
   defaultEnabled: true,
-  apply: (input) => rewriteMathBodies(input, (body, block) => block || !body.trim() ? body : body.trim())
+  apply: (input) => rewriteMathBodies(input, (body, block) => block || !body.trim() ? body : trimInlineMathBody(body))
 };
 var FORMULA_TAIL_CONNECTOR = /^(?:和|与|及|以及|或者|或|还是|暨|and|or)[\s。，、；：！？.,;:!?]*$/i;
-var LEADING_INLINE_FORMULA = /^\$([^$]+)\$(.*)$/;
 var inlineFormulaToBlock = {
   id: "inline-formula-to-block",
-  description: "\u4E0A\u884C\uFF1A\u6574\u884C\u53EA\u6709\u4E00\u6761 $...$ \u884C\u5185\u516C\u5F0F\u65F6\uFF0C\u6539\u5199\u6210 $$ \u5757\u7EA7\u516C\u5F0F\u5E76\u524D\u540E\u7559\u7A7A\u884C\u2014\u2014\u98DE\u4E66\u53EA\u5BF9\u5757\u7EA7\u516C\u5F0F\u5C45\u4E2D\uFF0C\u884C\u5185\u516C\u5F0F\u4F1A\u8DDF\u7740\u6B63\u6587\u6392\u7248\u3002\u884C\u5C3E\u662F\u8FDE\u63A5\u8BCD\uFF08\u548C/\u4E0E/\u4EE5\u53CA/\u6216\u8005\u2026\uFF09\u65F6\uFF0C\u8FDE\u63A5\u8BCD\u53E6\u8D77\u4E00\u884C\uFF1B\u884C\u5C3E\u662F\u6807\u70B9\u6216\u5176\u4ED6\u6B63\u6587\uFF08\u5982\u300C$g_u$\u62C9\u5411\uFF1A\u300D\uFF09\u65F6\u6574\u884C\u4E0D\u52A8\uFF0C\u907F\u514D\u4E22\u6807\u70B9\u6216\u62C6\u6563\u53E5\u5B50\u3002\u5217\u8868\u9879/\u8868\u683C/\u5F15\u7528/\u6807\u9898\u91CC\u7684\u516C\u5F0F\u540C\u6837\u4E0D\u52A8\u3002",
+  description: "\u4E0A\u884C\uFF1A\u666E\u901A\u6BB5\u843D\u4E2D\u72EC\u5360\u4E00\u884C\u7684\u884C\u5185\u516C\u5F0F\u6539\u6210\u5757\u7EA7\u516C\u5F0F\uFF1B\u5C3E\u968F\u8FDE\u63A5\u8BCD\u53E6\u8D77\u4E00\u6BB5\u3002\u4FDD\u7559\u6B63\u6587\u3001\u6807\u70B9\u548C\u5217\u8868/\u5F15\u7528/\u4EE3\u7801\u7ED3\u6784\u3002",
   defaultEnabled: true,
-  apply: (input) => {
-    const lines = input.split("\n");
-    const out = [];
-    let fenced;
-    let blankAfter = false;
-    const pushBlank = () => {
-      if (out.length === 0)
-        return;
-      if ((out[out.length - 1] ?? "").trim() === "")
-        return;
-      out.push("");
-    };
-    for (const line of lines) {
-      if (blankAfter && line.trim() !== "") {
-        pushBlank();
-        blankAfter = false;
-      }
-      const fence = MATH_FENCE.exec(line)?.[1];
-      if (fence) {
-        if (!fenced)
-          fenced = fence;
-        else if (fence[0] === fenced[0] && fence.length >= fenced.length)
-          fenced = void 0;
-        out.push(line);
-        continue;
-      }
-      if (fenced) {
-        out.push(line);
-        continue;
-      }
-      const match = LEADING_INLINE_FORMULA.exec(line);
-      if (!match) {
-        out.push(line);
-        continue;
-      }
-      const tail = (match[2] ?? "").trim();
-      const connector = tail !== "" && FORMULA_TAIL_CONNECTOR.test(tail);
-      if (tail !== "" && !connector) {
-        out.push(line);
-        continue;
-      }
-      pushBlank();
-      out.push("$$", match[1].trim(), "$$");
-      if (connector)
-        out.push("", tail);
-      blankAfter = true;
-    }
-    return out.join("\n");
-  }
+  apply: (input) => mapMath(input, (span) => {
+    if (span.block)
+      return input.slice(span.start, span.end);
+    const lineStart = input.lastIndexOf("\n", span.start - 1) + 1;
+    const newline = input.indexOf("\n", span.end);
+    const lineEnd = newline === -1 ? input.length : newline;
+    const prefix = input.slice(lineStart, span.start);
+    const tail = input.slice(span.end, lineEnd).trim();
+    if (prefix !== "" || tail && !FORMULA_TAIL_CONNECTOR.test(tail))
+      return input.slice(span.start, span.end);
+    return `$$
+${span.body.trim()}
+$$${tail ? "\n\n" : ""}`;
+  })
 };
 var blockFormulaOwnParagraph = {
   id: "block-formula-own-paragraph",
-  description: "\u4E0A\u884C\uFF1A\u8BA9\u5757\u7EA7\u516C\u5F0F $$...$$ \u72EC\u5360\u4E00\u4E2A\u6BB5\u843D\uFF0C\u524D\u540E\u5404\u7559\u4E00\u4E2A\u7A7A\u884C\uFF0C\u4E0E\u6B63\u6587\u540C\u5904\u4E00\u884C\u65F6\u6309\u6BB5\u843D\u62C6\u5F00\u2014\u2014\u98DE\u4E66\u53EA\u6709\u62FF\u5230\u72EC\u7ACB\u6BB5\u843D\u624D\u4F1A\u6E32\u67D3\u6210\u5C45\u4E2D\u7684\u5757\u7EA7\u516C\u5F0F\uFF0C\u6DF7\u5728\u6587\u5B57\u884C\u91CC\u4F1A\u88AB\u5F53\u6210\u884C\u5185\u5185\u5BB9\u3002\u5217\u8868\u9879\u3001\u8868\u683C\u3001\u7F29\u8FDB\u884C\u91CC\u7684\u516C\u5F0F\u4E0D\u52A8\uFF08\u539F\u56E0\u5199\u8FDB\u62A5\u544A\uFF09\uFF0C\u56F4\u680F\u4EE3\u7801\u5757\u5185\u4E0D\u52A8\u3002",
+  description: "\u4E0A\u884C\uFF1A\u666E\u901A\u6B63\u6587\u91CC\u7684\u5757\u7EA7\u516C\u5F0F\u72EC\u5360\u6BB5\u843D\uFF0C\u524D\u540E\u7559\u7A7A\u884C\uFF1B\u5217\u8868\u3001\u8868\u683C\u3001\u5F15\u7528\u548C\u7F29\u8FDB\u7ED3\u6784\u91CC\u7684\u516C\u5F0F\u4FDD\u7559\u4F4D\u7F6E\u5E76\u63D0\u793A\u3002",
   defaultEnabled: true,
   apply: (input, ctx) => {
-    const lines = input.split("\n");
     const out = [];
-    let fenced;
-    let index = 0;
-    let blankAfter = false;
-    const pushBlank = () => {
-      if (out.length === 0)
-        return;
-      if ((out[out.length - 1] ?? "").trim() === "")
-        return;
-      out.push("");
-    };
-    while (index < lines.length) {
-      const line = lines[index];
-      if (blankAfter && line.trim() !== "") {
-        pushBlank();
-        blankAfter = false;
-      }
-      const fence = MATH_FENCE.exec(line)?.[1];
-      if (fence) {
-        if (!fenced)
-          fenced = fence;
-        else if (fence[0] === fenced[0] && fence.length >= fenced.length)
-          fenced = void 0;
-      }
-      if (fence || fenced) {
-        out.push(line);
-        index += 1;
+    let from = 0;
+    for (const span of mathSpans(input)) {
+      if (!span.block)
+        continue;
+      const lineStart = input.lastIndexOf("\n", span.start - 1) + 1;
+      const prefix = input.slice(lineStart, span.start);
+      if (MATH_STRUCTURED_LINE.test(prefix) || MATH_LIST_ITEM.test(prefix) || MATH_TABLE_ROW.test(prefix)) {
+        ctx.warnings?.push(`\u7B2C ${input.slice(0, span.start).split("\n").length} \u884C\u7684\u5757\u7EA7\u516C\u5F0F\u5728\u7F29\u8FDB/\u5217\u8868\u9879/\u8868\u683C/\u5F15\u7528/\u6807\u9898\u91CC\uFF0C\u672A\u62C6\u6210\u72EC\u7ACB\u6BB5\u843D`);
         continue;
       }
-      const positions = blockDelimPositions(line);
-      if (positions.length === 0) {
-        out.push(line);
-        index += 1;
-        continue;
-      }
-      if (MATH_STRUCTURED_LINE.test(line) || MATH_LIST_ITEM.test(line) || MATH_TABLE_ROW.test(line)) {
-        ctx.warnings?.push(`\u7B2C ${index + 1} \u884C\u7684\u5757\u7EA7\u516C\u5F0F\u5728\u7F29\u8FDB/\u5217\u8868\u9879/\u8868\u683C/\u5F15\u7528/\u6807\u9898\u91CC\uFF0C\u672A\u62C6\u6210\u72EC\u7ACB\u6BB5\u843D`);
-        out.push(line);
-        index += 1;
-        continue;
-      }
-      const open = positions[0];
-      let closeLine = index;
-      let close = positions.length >= 2 ? positions[1] : -1;
-      if (close < 0) {
-        for (let scan = index + 1; scan < lines.length; scan += 1) {
-          const found = blockDelimPositions(lines[scan]);
-          if (found.length > 0) {
-            closeLine = scan;
-            close = found[0];
-            break;
-          }
-        }
-      }
-      if (close < 0) {
-        out.push(line);
-        index += 1;
-        continue;
-      }
-      const before = line.slice(0, open).trimEnd();
-      const formulaLines = closeLine === index ? [line.slice(open, close + 2)] : [line.slice(open), ...lines.slice(index + 1, closeLine), lines[closeLine].slice(0, close + 2)];
-      const after = (closeLine === index ? line.slice(close + 2) : lines[closeLine].slice(close + 2)).trimStart();
-      if (before !== "")
-        out.push(before);
-      pushBlank();
-      for (const formulaLine of formulaLines)
-        out.push(formulaLine);
-      blankAfter = true;
-      if (after !== "") {
-        lines[closeLine] = after;
-        index = closeLine;
-        continue;
-      }
-      index = closeLine + 1;
+      const before = input.slice(from, span.start).replace(/[ \t]+$/, "");
+      out.push(before);
+      const joined = out.join("");
+      if (joined && !joined.endsWith("\n\n"))
+        out.push(joined.endsWith("\n") ? "\n" : "\n\n");
+      out.push(input.slice(span.start, span.end));
+      from = span.end;
+      while (input[from] === " " || input[from] === "	")
+        from += 1;
+      if (from < input.length && !input.slice(from).startsWith("\n\n"))
+        out.push(input[from] === "\n" ? "\n" : "\n\n");
     }
-    return out.join("\n");
+    out.push(input.slice(from));
+    return out.join("");
+  }
+};
+var nativeMath = {
+  id: "native-math",
+  description: "\u4E0A\u884C\uFF1A\u516C\u5F0F\u4F7F\u7528\u98DE\u4E66\u539F\u751F <latex> \u6807\u7B7E\uFF1B\u72EC\u7ACB\u5757\u7EA7\u516C\u5F0F\u653E\u5165\u5C45\u4E2D\u6BB5\u843D\uFF0C\u4FDD\u7559\u516C\u5F0F\u4E0E\u6B63\u6587\u7684\u8FB9\u754C\u3002",
+  defaultEnabled: true,
+  apply: (input) => mapMath(input, (span) => {
+    if (!span.body.trim())
+      return input.slice(span.start, span.end);
+    const body = span.body.trim().replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const latex = `<latex>${body}</latex>`;
+    if (!span.block)
+      return latex;
+    const before = input.slice(input.lastIndexOf("\n", span.start - 1) + 1, span.start);
+    const end = input.indexOf("\n", span.end);
+    const after = input.slice(span.end, end === -1 ? input.length : end);
+    return !before.trim() && !after.trim() ? `<p align="center">${latex}</p>` : latex;
+  })
+};
+var restoreNativeMath = {
+  id: "restore-native-math",
+  description: "\u4E0B\u884C\uFF1A\u628A\u98DE\u4E66\u6B8B\u7559\u7684\u539F\u751F\u516C\u5F0F\u6807\u7B7E\u8FD8\u539F\u4E3A Obsidian \u6570\u5B66\u8BED\u6CD5\uFF1B\u5C45\u4E2D\u516C\u5F0F\u7528 $$...$$\uFF0C\u884C\u5185\u516C\u5F0F\u7528 $...$\uFF0C\u4E0D\u628A XML \u6807\u7B7E\u5199\u5165\u7B14\u8BB0\u3002",
+  defaultEnabled: true,
+  apply: (input) => mapNativeMath(input, (body, block) => {
+    const decoded = decodeXmlText(body);
+    return block ? `$$
+${decoded}
+$$` : `$${trimInlineMathBody(decoded) || "{}"}$`;
+  })
+};
+var listExitAfterHardbreak = {
+  id: "list-exit-after-hardbreak",
+  description: "\u4E0A\u884C\uFF1A\u5217\u8868\u9879\u4EE5\u4E24\u4E2A\u7A7A\u683C\u786C\u6362\u884C\u7ED3\u675F\uFF0C\u4E0B\u4E00\u884C\u53C8\u662F\u65E0\u7F29\u8FDB\u6B63\u6587\u65F6\uFF0C\u8865\u7A7A\u884C\u7ED3\u675F\u5217\u8868\uFF1B\u7F29\u8FDB\u7684\u7EED\u884C\u3001\u5B50\u5217\u8868\u548C\u4EE3\u7801\u4FDD\u6301\u539F\u6837\u3002",
+  defaultEnabled: true,
+  apply: (input) => {
+    const lines = input.split("\n");
+    const code = codeLineMask(lines);
+    return lines.map((line, index) => {
+      if (!index || code[index] || code[index - 1])
+        return line;
+      const previous = lines[index - 1];
+      const list = /^[ \t]*(?:[-*+]|\d+[.)])\s/.test(previous);
+      const hardbreak = / {2,}\r?$/.test(previous);
+      const plain = /^[^\s>#|`~]/.test(line) && !/^(?:[-*+]|\d+[.)])\s/.test(line);
+      return list && hardbreak && plain ? `
+${line}` : line;
+    }).join("\n");
+  }
+};
+function sourceFormatWarnings(input) {
+  const lines = input.split("\n");
+  const code = codeLineMask(lines);
+  const masked = mapMath(input, (span) => input.slice(span.start, span.end).replace(/[^\n]/g, " ")).split("\n");
+  const warnings = [];
+  let previousHeading = 0;
+  for (let row = 0; row < lines.length; row += 1) {
+    if (!code[row]) {
+      const outside = masked[row];
+      const label = `\u539F\u7A3F\u7B2C ${row + 1} \u884C`;
+      if (/^\\\$\\\$/.test(outside.trim()))
+        warnings.push(`${label}\uFF1A\u5757\u7EA7\u516C\u5F0F\u5B9A\u754C\u7B26\u5DF2\u88AB\u8F6C\u4E49\uFF0C\u4F1A\u663E\u793A\u4E3A\u5B57\u9762 $$\uFF1B\u8BF7\u786E\u8BA4\u539F\u7A3F\uFF0C\u672A\u81EA\u52A8\u53CD\u8F6C\u4E49`);
+      if (/^(?:#{1,6}\s+)?(?:[A-Za-z]\\?_\{|\\(?:text|rightarrow|left|frac)\b)/.test(outside.trim()))
+        warnings.push(`${label}\uFF1ALaTeX \u7591\u4F3C\u843D\u5728\u516C\u5F0F\u73AF\u5883\u5916\uFF0C\u5C06\u663E\u793A\u6E90\u7801\uFF1B\u8BF7\u4FEE\u590D\u539F\u7A3F\u4E2D\u7684\u5B9A\u754C\u7B26`);
+      const heading = /^(#{1,6})\s/.exec(outside);
+      if (heading) {
+        const level = heading[1].length;
+        if (!previousHeading && level > 1 || level > previousHeading + 1)
+          warnings.push(`${label}\uFF1A\u6807\u9898\u5C42\u7EA7\u8DF3\u5230 H${level}\uFF1B\u4FDD\u7559\u539F\u7A3F\u5C42\u7EA7\uFF0C\u8BF7\u68C0\u67E5\u6587\u7AE0\u7ED3\u6784`);
+        if (level === 1 && previousHeading > 1)
+          warnings.push(`${label}\uFF1A\u6B63\u6587\u4E2D\u51FA\u73B0 H1 \u5927\u6807\u9898\uFF0C\u8BF7\u786E\u8BA4\u662F\u5426\u8BEF\u52A0\u4E86 #`);
+        previousHeading = level;
+      }
+      if (/(^|[^\\])\$\$/.test(outside))
+        warnings.push(`${label}\uFF1A\u516C\u5F0F\u5B9A\u754C\u7B26\u4E0D\u5B8C\u6574\uFF0C\u5DF2\u4FDD\u7559\u539F\u6587`);
+    }
+    if (warnings.length >= 30) {
+      warnings.push("\u539F\u7A3F\u683C\u5F0F\u63D0\u793A\u8FC7\u591A\uFF0C\u5DF2\u7701\u7565\u540E\u7EED\u63D0\u793A");
+      break;
+    }
+  }
+  return warnings;
+}
+var sourceDiagnostics = {
+  id: "source-format-diagnostics",
+  description: "\u4E0A\u884C\uFF1A\u53EF\u9009\u7684\u539F\u7A3F\u683C\u5F0F\u68C0\u67E5\uFF0C\u9ED8\u8BA4\u5173\u95ED\u3002\u5F00\u542F\u540E\u63D0\u793A\u8F6C\u4E49\u7684\u516C\u5F0F\u5B9A\u754C\u7B26\u3001\u7591\u4F3C\u88F8\u9732 LaTeX\u3001\u6807\u9898\u8DF3\u7EA7\u7B49\u95EE\u9898\uFF1B\u53EA\u63D0\u793A\uFF0C\u4E0D\u731C\u6D4B\u6216\u6539\u5199\u539F\u610F\u3002",
+  defaultEnabled: false,
+  apply: (input, ctx) => {
+    ctx.warnings?.push(...sourceFormatWarnings(input));
+    return input;
   }
 };
 var footnoteDowngrade = {
@@ -1434,6 +1552,9 @@ var dropTitleHeading = {
     if (!title)
       return input;
     const heading = `# ${title}`;
+    const xmlTitle = /^<title>([\s\S]*?)<\/title>(?:\r?\n)?(?:\r?\n)?/.exec(input);
+    if (xmlTitle && decodeXmlText(xmlTitle[1]).trim() === title)
+      return input.slice(xmlTitle[0].length);
     const lines = input.split("\n");
     if ((lines[0] ?? "").trim() !== heading)
       return input;
@@ -1583,16 +1704,19 @@ var imageDownload = {
 };
 var BUILT_IN_RULES = {
   toFeishu: [
+    sourceDiagnostics,
     imageRefNormalize,
     tabIndentToSpaces,
     mathEscapeHash,
     mathTrimInlineSpaces,
     inlineFormulaToBlock,
     blockFormulaOwnParagraph,
+    listExitAfterHardbreak,
+    nativeMath,
     footnoteDowngrade,
     imageUpload
   ],
-  toObsidian: [unescapeImageMarkup, dropTitleHeading, imageDownload, restoreImageRef]
+  toObsidian: [unescapeImageMarkup, dropTitleHeading, restoreNativeMath, mathEscapeHash, mathTrimInlineSpaces, imageDownload, restoreImageRef]
 };
 function entryOf(rule) {
   return { id: rule.id, enabled: rule.defaultEnabled, description: rule.description };
@@ -1690,7 +1814,9 @@ var COSMETIC_PUBLISH_RULE_IDS = [
   "math-escape-hash",
   "math-trim-inline-spaces",
   "inline-formula-to-block",
-  "block-formula-own-paragraph"
+  "block-formula-own-paragraph",
+  "list-exit-after-hardbreak",
+  "native-math"
 ];
 function sameAfterCosmeticRules(a, b, ctx, rules) {
   const enabled = new Set(rules.toFeishu.filter((entry) => entry.enabled).map((entry) => entry.id));
@@ -1707,6 +1833,22 @@ function sameAfterCosmeticRules(a, b, ctx, rules) {
 }
 function ruleEnabled(rules, direction, id) {
   return rules[direction].some((entry) => entry.id === id && entry.enabled);
+}
+function normalizeObsidianMath(input, rules) {
+  let out = input;
+  for (const rule of [restoreNativeMath, mathEscapeHash, mathTrimInlineSpaces]) {
+    if (ruleEnabled(rules, "toObsidian", rule.id))
+      out = rule.apply(out, { relPath: "", documentTitle: "", localContent: input });
+  }
+  return out;
+}
+function publishRulesFingerprint(rules) {
+  const enabled = new Set(rules.toFeishu.filter((entry) => entry.enabled).map((entry) => entry.id));
+  return JSON.stringify([PUBLISH_RULES_REVISION, BUILT_IN_RULES.toFeishu.filter((rule) => rule.id !== "source-format-diagnostics" && enabled.has(rule.id)).map((rule) => rule.id)]);
+}
+function pullRulesFingerprint(rules) {
+  const enabled = new Set(rules.toObsidian.filter((entry) => entry.enabled).map((entry) => entry.id));
+  return JSON.stringify([1, BUILT_IN_RULES.toObsidian.filter((rule) => enabled.has(rule.id)).map((rule) => rule.id)]);
 }
 
 // src/settings-tab.ts
@@ -1776,7 +1918,7 @@ var FeishuWikiSyncSettingTab = class extends import_obsidian5.PluginSettingTab {
     containerEl.createEl("h3", { text: "\u8F6C\u6362\u89C4\u5219\uFF08\u6587\u6863\u6A21\u5F0F\uFF09" });
     containerEl.createEl("p", {
       cls: "setting-item-description",
-      text: `\u89C4\u5219\u6587\u4EF6\uFF1A${RULES_PATH}\uFF0C\u6BCF\u6761\u89C4\u5219\u90FD\u6709 enabled \u5F00\u5173\u4E0E description \u8BF4\u660E\u3002\u4E0A\u884C\u89C4\u5219\u5728\u53D1\u7ED9\u98DE\u4E66\u4E4B\u524D\u4F5C\u7528\u4E8E\u672C\u5730 Markdown\uFF0C\u4E0B\u884C\u89C4\u5219\u5728\u5199\u56DE\u672C\u5730\u4E4B\u524D\u4F5C\u7528\u4E8E\u53D6\u56DE\u7684 Markdown\u3002\u6587\u4EF6\u4E0D\u5B58\u5728\u65F6\u4F1A\u81EA\u52A8\u5199\u5165\u4E00\u4EFD\u5B8C\u6574\u9ED8\u8BA4\u89C4\u5219\uFF1B\u52A0\u8F7D\u65F6\u4E0E\u5185\u7F6E\u9ED8\u8BA4\u6309 id \u5408\u5E76\uFF0C\u6539\u8FC7\u7684\u4EE5\u6587\u4EF6\u4E3A\u51C6\u3002`
+      text: `\u89C4\u5219\u6587\u4EF6\uFF1A${RULES_PATH}\uFF0C\u6BCF\u6761\u89C4\u5219\u90FD\u6709 enabled \u5F00\u5173\u4E0E description \u8BF4\u660E\u3002\u4E0A\u884C\u89C4\u5219\u5728\u53D1\u7ED9\u98DE\u4E66\u4E4B\u524D\u4F5C\u7528\u4E8E\u672C\u5730 Markdown\uFF0C\u4E0B\u884C\u89C4\u5219\u5728\u5199\u56DE\u672C\u5730\u4E4B\u524D\u4F5C\u7528\u4E8E\u53D6\u56DE\u7684 Markdown\u3002\u6587\u4EF6\u4E0D\u5B58\u5728\u65F6\u4F1A\u81EA\u52A8\u5199\u5165\u4E00\u4EFD\u5B8C\u6574\u9ED8\u8BA4\u89C4\u5219\uFF1B\u52A0\u8F7D\u65F6\u4E0E\u5185\u7F6E\u9ED8\u8BA4\u6309 id \u5408\u5E76\uFF0C\u6539\u8FC7\u7684\u4EE5\u6587\u4EF6\u4E3A\u51C6\u3002\u4E0A\u884C\u89C4\u5219\u66F4\u65B0\u540E\uFF0C\u65E7\u6587\u6863\u4F1A\u8FDB\u5165\u5237\u65B0\u8BA1\u5212\uFF1B\u98DE\u4E66\u6709\u65B0\u6539\u52A8\u65F6\u4F18\u5148\u5904\u7406\u6539\u52A8\u3002\u539F\u7A3F\u683C\u5F0F\u95EE\u9898\u4F1A\u663E\u793A\u5728\u9884\u89C8\u548C\u62A5\u544A\u4E2D\u3002`
     });
     new import_obsidian5.Setting(containerEl).setName("\u6253\u5F00\u89C4\u5219\u6587\u4EF6").setDesc("\u7528\u7CFB\u7EDF\u9ED8\u8BA4\u7A0B\u5E8F\u6253\u5F00 rules.json\uFF0C\u6539\u5B8C\u4FDD\u5B58\uFF0C\u4E0B\u6B21\u540C\u6B65\u751F\u6548").addButton(
       (button) => button.setButtonText("\u6253\u5F00").onClick(async () => {
@@ -3243,7 +3385,7 @@ function escapeTitleText(title) {
 function buildMarkdownContent(title, markdown) {
   const tag = `<title>${escapeTitleText(title.trim())}</title>`;
   return markdown === "" ? tag : `${tag}
-${markdown}`;
+${encodeFeishuMath(markdown)}`;
 }
 function warningsText(data) {
   const warnings = data?.warnings;
@@ -3354,7 +3496,7 @@ async function updateDocumentFromMarkdown(client, documentId, options) {
   if (!id)
     throw new Error("\u66F4\u65B0\u6587\u6863\u9700\u8981 document_id");
   const path = `/open-apis/docs_ai/v1/documents/${pathSegment(id)}`;
-  const content = options.includeTitle === false ? options.markdown : buildMarkdownContent(options.title, options.markdown);
+  const content = options.includeTitle === false ? encodeFeishuMath(options.markdown) : buildMarkdownContent(options.title, options.markdown);
   const data = await client.json("PUT", path, {
     body: { format: "markdown", command: "overwrite", revision_id: -1, content }
   });
@@ -3535,9 +3677,9 @@ async function fetchCached(input, documentId) {
   input.cache.fetched.set(documentId, text);
   return text;
 }
-async function remoteChangedState(input, record, documentId) {
+async function remoteChangedState(input, record, documentId, verifyContent = false) {
   const metaTime = input.remoteModifiedTimes.get(documentId);
-  if (!input.verifyRemoteByContent && record.remoteModifiedTime) {
+  if (!verifyContent && !input.verifyRemoteByContent && record.remoteModifiedTime) {
     if (metaTime !== void 0 && metaTime === record.remoteModifiedTime)
       return { changed: false, metaTime };
   }
@@ -3577,6 +3719,8 @@ async function isLocalChanged2(input, record, localNote) {
 async function buildDocPlan(input) {
   const { state, local, remote } = input;
   const items = [];
+  const fingerprint2 = publishRulesFingerprint(input.rules);
+  const warnings = [];
   const relPaths = /* @__PURE__ */ new Set([...local.keys(), ...remote.notes.keys(), ...Object.keys(state.docRecords)]);
   for (const relPath of Array.from(relPaths).sort()) {
     if (input.isExcluded(relPath))
@@ -3584,6 +3728,10 @@ async function buildDocPlan(input) {
     const localNote = local.get(relPath);
     const remoteNote = remote.notes.get(relPath);
     const record = state.docRecords[relPath];
+    if (localNote && ruleEnabled(input.rules, "toFeishu", "source-format-diagnostics")) {
+      for (const message of sourceFormatWarnings(await readLocalCached(input, relPath)))
+        warnings.push({ relPath, message });
+    }
     const remoteFields2 = remoteNote ? { remoteTitle: remoteNote.title, nodeToken: remoteNote.nodeToken, documentId: remoteNote.documentId } : {};
     if (input.forcePush && localNote && localNote.size > 0) {
       items.push(
@@ -3678,7 +3826,8 @@ async function buildDocPlan(input) {
       continue;
     }
     const localChanged = await isLocalChanged2(input, record, localNote);
-    const remoteState = await remoteChangedState(input, record, remoteNote.documentId);
+    const rulesChanged = record.publishRulesFingerprint !== fingerprint2;
+    const remoteState = await remoteChangedState(input, record, remoteNote.documentId, rulesChanged);
     const remoteChanged = remoteState.changed;
     const hash = remoteState.hash;
     const localHash = await hashLocalCached(input, relPath);
@@ -3691,7 +3840,7 @@ async function buildDocPlan(input) {
       remoteModifiedTime: remoteState.metaTime
     };
     if (!localChanged && !remoteChanged) {
-      items.push(item2(relPath, "skip", void 0, extra));
+      items.push(rulesChanged ? item2(relPath, "push", "\u8F6C\u6362\u89C4\u5219\u5DF2\u66F4\u65B0\uFF1A\u5237\u65B0\u98DE\u4E66\u6392\u7248\uFF0C\u672C\u5730\u6B63\u6587\u4E0D\u53D8", { ...extra, rulesRefresh: true }) : item2(relPath, "skip", void 0, extra));
       continue;
     }
     if (localChanged && !remoteChanged) {
@@ -3716,7 +3865,10 @@ async function buildDocPlan(input) {
     items,
     counts: summarize(items),
     localNoteCount: local.size,
-    remoteNoteCount: remote.notes.size
+    remoteNoteCount: remote.notes.size,
+    publishRulesFingerprint: fingerprint2,
+    pullRulesFingerprint: pullRulesFingerprint(input.rules),
+    warnings
   };
 }
 
@@ -3843,6 +3995,15 @@ async function executeDocPlan(plan, ctx, options) {
           const statBefore = localStat(ctx.app, entry.relPath);
           const localText = await readLocalText(ctx.app, entry.relPath);
           const record = state.docRecords[entry.relPath];
+          if (entry.rulesRefresh && record) {
+            if (await options.isEditorDirty(entry.relPath))
+              throw new Error("\u7B14\u8BB0\u6B63\u5728\u7F16\u8F91\uFF0C\u8BF7\u4FDD\u5B58\u540E\u91CD\u65B0\u9884\u89C8\u89C4\u5219\u5237\u65B0\u8BA1\u5212");
+            if (await ctx.hashText(localText) !== entry.localHash)
+              throw new Error("\u9884\u89C8\u540E\u672C\u5730\u6B63\u6587\u5DF2\u6539\u53D8\uFF0C\u8BF7\u91CD\u65B0\u9884\u89C8\u89C4\u5219\u5237\u65B0\u8BA1\u5212");
+            const remoteNow = await fetchFresh(record.documentId);
+            if (await ctx.hashFetched(remoteNow) !== entry.remoteHash)
+              throw new Error("\u9884\u89C8\u540E\u98DE\u4E66\u6B63\u6587\u5DF2\u6539\u53D8\uFF0C\u5DF2\u505C\u6B62\u8986\u76D6\uFF0C\u8BF7\u91CD\u65B0\u540C\u6B65\u5904\u7406\u8FDC\u7AEF\u6539\u52A8");
+          }
           const decided = record?.documentTitle ? { title: record.documentTitle, renamed: false } : uniqueDocumentTitle(documentTitleFor(entry.relPath, settings), ctx.containerTitles);
           const ruleContext = {
             relPath: entry.relPath,
@@ -3885,7 +4046,7 @@ async function executeDocPlan(plan, ctx, options) {
             uploads: ruleContext.imageUploads ?? []
           });
           for (const warning of ruleContext.warnings ?? [])
-            ctx.logger.warn(`\u56FE\u7247\uFF1A${entry.relPath} ${warning}`);
+            ctx.logger.warn(`\u8F6C\u6362\uFF1A${entry.relPath} ${warning}`);
           const fetched = await fetchFresh(documentId);
           const remoteHash = await ctx.hashFetched(fetched);
           ctx.logger.debug(
@@ -3901,6 +4062,7 @@ async function executeDocPlan(plan, ctx, options) {
             documentTitle: decided.title,
             baseLocalHash: await ctx.hashText(localText),
             baseRemoteHash: remoteHash,
+            publishRulesFingerprint: publishRulesFingerprint(ctx.rules),
             remoteModifiedTime: entry.remoteModifiedTime,
             localSize: stable ? statAfter.size : -1,
             localMtime: stable ? statAfter.mtime : -1,
@@ -3998,6 +4160,7 @@ async function executeDocPlan(plan, ctx, options) {
                 documentTitle: record?.documentTitle ?? documentTitleFor(entry.relPath, settings),
                 baseLocalHash: await ctx.hashText(currentText),
                 baseRemoteHash: remoteHash,
+                publishRulesFingerprint: publishRulesFingerprint(ctx.rules),
                 remoteModifiedTime: entry.remoteModifiedTime ?? record?.remoteModifiedTime,
                 localSize: before.size,
                 localMtime: before.mtime,
@@ -4024,22 +4187,32 @@ async function executeDocPlan(plan, ctx, options) {
             },
             ctx.rules
           )) {
+            const localText = normalizeObsidianMath(localTextBefore, ctx.rules);
+            const repaired = localText !== localTextBefore;
+            if (repaired)
+              await writeLocalBytes(ctx.app, entry.relPath, encodeText(localText));
             const stat2 = localStat(ctx.app, entry.relPath);
             state.docRecords[entry.relPath] = {
               documentId,
               nodeToken: entry.nodeToken ?? record?.nodeToken,
               parentNodeToken: record?.parentNodeToken,
               documentTitle: record?.documentTitle ?? documentTitleFor(entry.relPath, settings),
-              baseLocalHash: await ctx.hashText(localTextBefore),
+              baseLocalHash: await ctx.hashText(localText),
               baseRemoteHash: remoteHash,
+              publishRulesFingerprint: publishRulesFingerprint(ctx.rules),
               remoteModifiedTime: entry.remoteModifiedTime ?? record?.remoteModifiedTime,
               localSize: stat2.size,
               localMtime: stat2.mtime,
               lastSyncedAt: Date.now()
             };
             delete state.conflicts[entry.relPath];
-            reports.push({ relPath: entry.relPath, action: "link", ok: true, message: "\u8FDC\u7AEF\u5DEE\u5F02\u53EA\u662F\u6392\u7248\u5F52\u4E00\u5316\uFF0C\u672C\u5730\u672A\u6539\u52A8" });
-            tick(`\u8DF3\u8FC7 ${entry.relPath}`);
+            reports.push({
+              relPath: entry.relPath,
+              action: repaired ? "pull" : "link",
+              ok: true,
+              message: repaired ? "\u5DF2\u4FEE\u590D Obsidian \u516C\u5F0F\u5B9A\u754C\u7B26\u5185\u4FA7\u7A7A\u767D\u6216\u8F6C\u4E49\uFF0C\u4FDD\u7559\u672C\u5730\u6BB5\u843D\u6392\u7248" : "\u8FDC\u7AEF\u5DEE\u5F02\u53EA\u662F\u6392\u7248\u5F52\u4E00\u5316\uFF0C\u672C\u5730\u672A\u6539\u52A8"
+            });
+            tick(`${repaired ? "\u4FEE\u590D\u516C\u5F0F" : "\u8DF3\u8FC7"} ${entry.relPath}`);
             return;
           }
           if (entry.action === "create-local" && present) {
@@ -4071,6 +4244,7 @@ async function executeDocPlan(plan, ctx, options) {
             documentTitle: record?.documentTitle ?? documentTitleFor(entry.relPath, settings),
             baseLocalHash: await ctx.hashText(pulled),
             baseRemoteHash: remoteHash,
+            publishRulesFingerprint: publishRulesFingerprint(ctx.rules),
             remoteModifiedTime: entry.remoteModifiedTime ?? record?.remoteModifiedTime,
             localSize: stat.size,
             localMtime: stat.mtime,
@@ -4108,6 +4282,7 @@ async function executeDocPlan(plan, ctx, options) {
           documentTitle: existing?.documentTitle ?? documentTitleFor(entry.relPath, settings),
           baseLocalHash: entry.localHash ?? await ctx.hashText(localText),
           baseRemoteHash: entry.remoteHash ?? existing?.baseRemoteHash ?? "",
+          publishRulesFingerprint: publishRulesFingerprint(ctx.rules),
           remoteModifiedTime: entry.remoteModifiedTime ?? existing?.remoteModifiedTime,
           localSize: stable ? statAfter.size : -1,
           localMtime: stable ? statAfter.mtime : -1,
@@ -4241,6 +4416,12 @@ async function executeDocPlan(plan, ctx, options) {
     reports.push({ relPath: entry.relPath, action: entry.action, ok: true, message: entry.reason });
   }
   state.lastSyncAt = Date.now();
+  for (const entry of plan.items) {
+    const record = state.docRecords[entry.relPath];
+    if (entry.action === "skip" && record && entry.remoteModifiedTime && entry.remoteHash === record.baseRemoteHash) {
+      record.remoteModifiedTime = entry.remoteModifiedTime;
+    }
+  }
   return reports;
 }
 var REMOTE_IMAGE_MAX_BYTES = 20 * 1024 * 1024;
@@ -4515,6 +4696,9 @@ var DocSyncEngine = class {
     try {
       const rules = await this.rules();
       if (options.preApprovedPlan) {
+        if (options.preApprovedPlan.publishRulesFingerprint !== publishRulesFingerprint(rules) || options.preApprovedPlan.pullRulesFingerprint !== pullRulesFingerprint(rules)) {
+          throw new Error("\u9884\u89C8\u540E\u8F6C\u6362\u89C4\u5219\u53D1\u751F\u53D8\u5316\uFF0C\u8BF7\u91CD\u65B0\u9884\u89C8\u540C\u6B65\u8BA1\u5212");
+        }
         const plan2 = filterPlan2(options.preApprovedPlan, options.mode);
         return await this.execute(plan2, options, { settings, client, spaceId, rootNodeToken, filter, rules });
       }
@@ -4593,14 +4777,6 @@ var DocSyncEngine = class {
       logger.debug(
         `\u6587\u6863\u6A21\u5F0F\uFF1A\u672C\u8F6E fetch \u6587\u6863 ${cache.fetchCount} \u6B21\u3001\u6279\u91CF\u5143\u6570\u636E ${remoteModifiedTimes.size > 0 ? "\u547D\u4E2D" : "\u672A\u547D\u4E2D"}\uFF08${settings.docVerifyRemoteByContent ? "\u5B89\u5168\u9600\u6253\u5F00\uFF1A\u6BCF\u8F6E\u5168\u6587\u6821\u9A8C" : "\u65F6\u95F4\u6233\u5FEB\u8DEF\u5F84"}\uFF09`
       );
-      for (const entry of planned.items) {
-        const record = settings.state.docRecords[entry.relPath];
-        if (!record || !entry.remoteModifiedTime)
-          continue;
-        if (!["skip", "push", "pull", "link", "create-local", "delete-remote", "local-deleted"].includes(entry.action))
-          continue;
-        record.remoteModifiedTime = entry.remoteModifiedTime;
-      }
       const plan = filterPlan2(planned, options.mode);
       if (options.dryRun) {
         return { plan, report: [], executed: false };
@@ -4826,6 +5002,21 @@ function extractCode(input) {
 
 // src/ui/plan-modal.ts
 var import_obsidian12 = require("obsidian");
+
+// src/ui/format-warnings.ts
+function renderFormatWarnings(container, plan) {
+  if (!plan.warnings?.length)
+    return;
+  const section = container.createEl("div", { cls: "feishu-sync-section" });
+  section.createEl("h4", { text: `\u539F\u7A3F\u683C\u5F0F\u63D0\u793A\uFF08${plan.warnings.length}\uFF09` });
+  for (const warning of plan.warnings.slice(0, 100)) {
+    section.createEl("div", { cls: "feishu-sync-reason", text: `${warning.relPath}\uFF1A${warning.message}` });
+  }
+  if (plan.warnings.length > 100)
+    section.createEl("div", { text: "\u4EC5\u663E\u793A\u524D 100 \u6761\u683C\u5F0F\u63D0\u793A" });
+}
+
+// src/ui/plan-modal.ts
 var GROUPS = [
   { key: "push", title: "\u4F1A\u4E0A\u4F20\u5230\u98DE\u4E66", actions: ["push", "create-remote"] },
   { key: "pull", title: "\u4F1A\u62C9\u53D6\u5230\u672C\u5730", actions: ["pull", "create-local"] },
@@ -4855,6 +5046,7 @@ var PlanModal = class extends import_obsidian12.Modal {
     if (skipped > 0) {
       summary.createEl("div", { text: `\u5DF2\u540C\u6B65\u4E14\u65E0\u53D8\u5316\uFF1A${skipped} \u7BC7`, cls: "feishu-sync-reason" });
     }
+    renderFormatWarnings(contentEl, this.plan);
     for (const group of GROUPS) {
       const items = this.plan.items.filter((entry) => group.actions.includes(entry.action));
       if (items.length === 0)
@@ -4940,6 +5132,7 @@ var ReportModal = class extends import_obsidian13.Modal {
     if (planCounts) {
       summary.createEl("div", { cls: "feishu-sync-reason", text: `\u672C\u6B21\u8BA1\u5212\uFF1A${planCounts}` });
     }
+    renderFormatWarnings(contentEl, this.plan);
     renderSection(contentEl, "\u51B2\u7A81\u526F\u672C\uFF08\u672C\u5730\u4E0E\u8FDC\u7AEF\u5747\u672A\u6539\u52A8\uFF0C\u526F\u672C\u5728 .obsidian/feishu-sync/conflicts/\uFF09", conflicts, true);
     renderSection(contentEl, "\u5DF2\u6267\u884C", changed, false);
     renderSection(contentEl, "\u9700\u8981\u6CE8\u610F\uFF08\u672A\u81EA\u52A8\u5904\u7406\uFF09", this.report.filter((entry) => !isChange(entry.action) && entry.action !== "conflict"), false);
@@ -5319,7 +5512,7 @@ var FeishuWikiSyncPlugin = class extends import_obsidian15.Plugin {
       const failures = result.report.filter((entry) => !entry.ok).length;
       const conflicts = result.report.filter((entry) => entry.action === "conflict").length;
       const changes = result.report.filter((entry) => entry.ok && CHANGE_ACTIONS.has(entry.action)).length;
-      if (options.quiet && failures === 0 && conflicts === 0) {
+      if (options.quiet && failures === 0 && conflicts === 0 && !result.plan.warnings?.length) {
         new import_obsidian15.Notice(`${label}\u5B8C\u6210\uFF1A${changes} \u9879\u53D8\u66F4`);
       } else {
         new ReportModal(this.app, result.plan, result.report, result.executed).open();

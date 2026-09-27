@@ -3,6 +3,7 @@ import { Modal, Setting } from "obsidian";
 import type { PlanDecision } from "../sync/engine";
 import type { PlanItem, SyncAction, SyncPlan } from "../sync/types";
 import { ACTION_LABELS } from "../sync/types";
+import { renderFormatWarnings } from "./format-warnings";
 
 const GROUPS: { key: string; title: string; actions: SyncAction[] }[] = [
   { key: "push", title: "会上传到飞书", actions: ["push", "create-remote"] },
@@ -43,6 +44,7 @@ export class PlanModal extends Modal {
       summary.createEl("div", { text: `已同步且无变化：${skipped} 篇`, cls: "feishu-sync-reason" });
     }
 
+    renderFormatWarnings(contentEl, this.plan);
     for (const group of GROUPS) {
       const items = this.plan.items.filter((entry) => group.actions.includes(entry.action));
       if (items.length === 0) continue;

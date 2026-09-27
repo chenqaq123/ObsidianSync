@@ -8,7 +8,7 @@ import type { WikiSpace } from "../feishu/wiki";
 import { listNodes, listSpaces, walkWikiTree } from "../feishu/wiki";
 import type { Logger } from "../log";
 import type { ResolvedImage, RulesFile } from "../convert/rules";
-import { loadRules, normalizeRemoteImageUrls } from "../convert/rules";
+import { loadRules, normalizeRemoteImageUrls, publishRulesFingerprint, pullRulesFingerprint } from "../convert/rules";
 import type { DocPlanCache, DocRemoteIndex } from "./docPlanner";
 import { buildDocPlan, buildDocRemoteIndex, createDocPlanCache } from "./docPlanner";
 import type { DocExecutionContext } from "./docExecutor";
@@ -87,6 +87,10 @@ export class DocSyncEngine {
     try {
       const rules = await this.rules();
       if (options.preApprovedPlan) {
+        if (options.preApprovedPlan.publishRulesFingerprint !== publishRulesFingerprint(rules) ||
+            options.preApprovedPlan.pullRulesFingerprint !== pullRulesFingerprint(rules)) {
+          throw new Error("预览后转换规则发生变化，请重新预览同步计划");
+        }
         const plan = filterPlan(options.preApprovedPlan, options.mode);
         return await this.execute(plan, options, { settings, client, spaceId, rootNodeToken, filter, rules });
       }
@@ -172,13 +176,7 @@ export class DocSyncEngine {
       logger.debug(
         `文档模式：本轮 fetch 文档 ${cache.fetchCount} 次、批量元数据 ${remoteModifiedTimes.size > 0 ? "命中" : "未命中"}（${settings.docVerifyRemoteByContent ? "安全阀打开：每轮全文校验" : "时间戳快路径"}）`,
       );
-      // 取回校验过的文档把时间戳记下来，下一轮才能跳过取回（conflict 不记：留给下一轮重新判定）
-      for (const entry of planned.items) {
-        const record = settings.state.docRecords[entry.relPath];
-        if (!record || !entry.remoteModifiedTime) continue;
-        if (!["skip", "push", "pull", "link", "create-local", "delete-remote", "local-deleted"].includes(entry.action)) continue;
-        record.remoteModifiedTime = entry.remoteModifiedTime;
-      }
+      // Baselines, including timestamps, are updated only after the approved action succeeds.
       // 与 md 模式一致：先按本次模式过滤计划，预览/报告里只出现真的会执行的动作
       const plan = filterPlan(planned, options.mode);
 

@@ -2,6 +2,7 @@ import type { FeishuClient } from "./client";
 import { FeishuError, pathSegment } from "./client";
 import type { DocNewBlock } from "./docImages";
 import { readNewBlocks, readRevisionId } from "./docImages";
+import { encodeFeishuMath } from "../convert/markdown";
 
 /**
  * docs_ai 接口：新版文档（docx）与 Markdown 的互转。请求形状照抄官方 CLI
@@ -100,7 +101,7 @@ function escapeTitleText(title: string): string {
  */
 export function buildMarkdownContent(title: string, markdown: string): string {
   const tag = `<title>${escapeTitleText(title.trim())}</title>`;
-  return markdown === "" ? tag : `${tag}\n${markdown}`;
+  return markdown === "" ? tag : `${tag}\n${encodeFeishuMath(markdown)}`;
 }
 
 function warningsText(data: Record<string, unknown> | undefined): string {
@@ -232,7 +233,7 @@ export async function updateDocumentFromMarkdown(
   const id = documentId.trim();
   if (!id) throw new Error("更新文档需要 document_id");
   const path = `/open-apis/docs_ai/v1/documents/${pathSegment(id)}`;
-  const content = options.includeTitle === false ? options.markdown : buildMarkdownContent(options.title, options.markdown);
+  const content = options.includeTitle === false ? encodeFeishuMath(options.markdown) : buildMarkdownContent(options.title, options.markdown);
   // 按 CLI 的 buildUpdateBodyBase：format + command + revision_id + content，没有 extra_param
   const data = await client.json<Record<string, unknown>>("PUT", path, {
     body: { format: "markdown", command: "overwrite", revision_id: -1, content },

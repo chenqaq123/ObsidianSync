@@ -1,0 +1,155 @@
+{
+  "description": "Observed docs_ai markdown write -> docx equation.content on 2026-09-27. Temporary cloud test documents were deleted.",
+  "cases": [
+    {
+      "input": "a\\#b",
+      "output": "a#b",
+      "align": 2
+    },
+    {
+      "input": "a\\$b",
+      "output": "a$b",
+      "align": 2
+    },
+    {
+      "input": "a\\_b",
+      "output": "a_b",
+      "align": 2
+    },
+    {
+      "input": "a\\*b",
+      "output": "a*b",
+      "align": 2
+    },
+    {
+      "input": "a\\~b",
+      "output": "a~b",
+      "align": 2
+    },
+    {
+      "input": "a\\[b",
+      "output": "a[b",
+      "align": 2
+    },
+    {
+      "input": "a\\]b",
+      "output": "a]b",
+      "align": 2
+    },
+    {
+      "input": "a\\&b",
+      "output": "a&b",
+      "align": 2
+    },
+    {
+      "input": "a\\:b",
+      "output": "a:b",
+      "align": 2
+    },
+    {
+      "input": "a\\<b",
+      "output": "a<b",
+      "align": 2
+    },
+    {
+      "input": "a\\>b",
+      "output": "a>b",
+      "align": 2
+    },
+    {
+      "input": "a\\+b",
+      "output": "a+b",
+      "align": 2
+    },
+    {
+      "input": "a\\-b",
+      "output": "a-b",
+      "align": 2
+    },
+    {
+      "input": "a\\=b",
+      "output": "a=b",
+      "align": 2
+    },
+    {
+      "input": "a\\!b",
+      "output": "a\\!b",
+      "align": 2
+    },
+    {
+      "input": "a\\?b",
+      "output": "a\\?b",
+      "align": 2
+    },
+    {
+      "input": "a\\.b",
+      "output": "a\\.b",
+      "align": 2
+    },
+    {
+      "input": "a\\,b",
+      "output": "a\\,b",
+      "align": 2
+    },
+    {
+      "input": "a\\;b",
+      "output": "a\\;b",
+      "align": 2
+    },
+    {
+      "input": "a\\|b",
+      "output": "a\\|b",
+      "align": 2
+    },
+    {
+      "input": "a\\/b",
+      "output": "a\\/b",
+      "align": 2
+    },
+    {
+      "input": "a\\%b",
+      "output": "a\\%b",
+      "align": 2
+    },
+    {
+      "input": "a\\{b",
+      "output": "a\\{b",
+      "align": 2
+    },
+    {
+      "input": "a\\}b",
+      "output": "a\\}b",
+      "align": 2
+    },
+    {
+      "input": "a\\(b",
+      "output": "a\\(b",
+      "align": 2
+    },
+    {
+      "input": "a\\)b",
+      "output": "a\\)b",
+      "align": 2
+    },
+    {
+      "input": "a\\\\b",
+      "output": "a\\\\b",
+      "align": 2
+    },
+    {
+      "input": "a\\`b",
+      "output": "a`b",
+      "align": 2
+    },
+    {
+      "input": "a\\\"b",
+      "output": "a\\\"b",
+      "align": 2
+    },
+    {
+      "input": "a\\'b",
+      "output": "a\\'b",
+      "align": 2
+    }
+  ]
+}

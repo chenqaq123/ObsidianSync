@@ -8,6 +8,7 @@
     "dev": "node esbuild.config.mjs",
     "build": "tsc --noEmit && node esbuild.config.mjs production",
     "typecheck": "tsc --noEmit",
+    "test:rules": "node --test tests/rules-regression.mjs",
     "test:e2e": "node tests/run-e2e.mjs",
     "install:vault": "node scripts/install-to-vault.mjs"
   },

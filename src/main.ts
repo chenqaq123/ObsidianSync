@@ -227,7 +227,7 @@ export default class FeishuWikiSyncPlugin extends Plugin implements SettingsHost
       const failures = result.report.filter((entry) => !entry.ok).length;
       const conflicts = result.report.filter((entry) => entry.action === "conflict").length;
       const changes = result.report.filter((entry) => entry.ok && CHANGE_ACTIONS.has(entry.action)).length;
-      if (options.quiet && failures === 0 && conflicts === 0) {
+      if (options.quiet && failures === 0 && conflicts === 0 && !result.plan.warnings?.length) {
         new Notice(`${label}完成：${changes} 项变更`);
       } else {
         new ReportModal(this.app, result.plan, result.report, result.executed).open();

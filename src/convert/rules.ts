@@ -3,6 +3,7 @@ import { normalizePath } from "obsidian";
 import { newImageMarker } from "../feishu/docImages";
 import type { Logger } from "../log";
 import { ensureFolder } from "../log";
+import { codeLineMask, decodeXmlText, escapedAt, mapMath, mapNativeMath, mathSpans, trimInlineMathBody } from "./markdown";
 
 /**
  * 文档模式的可编辑转换规则。规则本身是纯函数（字符串进、字符串出），
@@ -12,7 +13,9 @@ import { ensureFolder } from "../log";
 export type RuleDirection = "toFeishu" | "toObsidian";
 
 export const RULES_PATH = ".obsidian/feishu-sync/rules.json";
-export const RULES_VERSION = 1;
+export const RULES_VERSION = 3;
+/** Increment when built-in publishing behavior changes, independently of the editable file version. */
+const PUBLISH_RULES_REVISION = 3;
 
 export interface RuleContext {
   relPath: string;
@@ -86,17 +89,9 @@ const HAS_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
 
 /** 逐行处理，跳过围栏代码块内部（代码里的示例不该被改写）。 */
 function mapOutsideFences(text: string, transform: (line: string) => string): string {
-  let fenced = false;
-  return text
-    .split("\n")
-    .map((line) => {
-      if (FENCE.test(line)) {
-        fenced = !fenced;
-        return line;
-      }
-      return fenced ? line : transform(line);
-    })
-    .join("\n");
+  const lines = text.split("\n");
+  const code = codeLineMask(lines, false);
+  return lines.map((line, index) => code[index] ? line : transform(line)).join("\n");
 }
 
 const imageRefNormalize: BuiltInRule = {
@@ -123,278 +118,160 @@ const tabIndentToSpaces: BuiltInRule = {
     }),
 };
 
-const MATH_FENCE = /^\s*(```+|~~~+)/;
 const MATH_LIST_ITEM = /^\s*(?:[-*+]|\d+[.)])\s/;
 const MATH_TABLE_ROW = /^\s*\|/;
 /** 缩进、引用块、标题这类结构行里的公式不拆——硬拆会把公式挪到结构外，反而毁掉原文。 */
 const MATH_STRUCTURED_LINE = /^(?:[\t ]|>|#{1,6}\s)/;
 
-/** pos 处的字符是否被反斜杠转义（前面连续反斜杠为奇数个）。 */
-function isEscapedAt(text: string, pos: number): boolean {
-  let backslashes = 0;
-  for (let i = pos - 1; i >= 0 && text[i] === "\\"; i -= 1) backslashes += 1;
-  return backslashes % 2 === 1;
-}
-
-/** 从 from 起找下一个未被转义的 token，找不到返回 -1。 */
-function findUnescaped(text: string, token: string, from: number): number {
-  let index = text.indexOf(token, from);
-  while (index !== -1 && isEscapedAt(text, index)) index = text.indexOf(token, index + 1);
-  return index;
-}
-
-/** 跳过一段行内代码（含定界反引号），返回结束位置。 */
-function inlineCodeEnd(line: string, from: number): number {
-  const ticks = /^`+/.exec(line.slice(from))?.[0] ?? "`";
-  const close = line.indexOf(ticks, from + ticks.length);
-  return close === -1 ? line.length : close + ticks.length;
-}
-
-/** 一行里未被行内代码包裹、也未被转义的 $$ 位置。 */
-function blockDelimPositions(line: string): number[] {
-  const positions: number[] = [];
-  let i = 0;
-  while (i < line.length) {
-    if (line[i] === "`") {
-      i = inlineCodeEnd(line, i);
-      continue;
-    }
-    if (line.startsWith("$$", i) && !isEscapedAt(line, i)) {
-      positions.push(i);
-      i += 2;
-      continue;
-    }
-    i += 1;
-  }
-  return positions;
-}
-
-/**
- * 逐字符扫描，只在数学环境内部调用 rewrite。跳过围栏代码块与行内代码；
- * $$ 公式允许跨行，$ 行内公式不跨行。rewrite 的第二个参数标明是不是块级公式。
- */
+/** Shared delimiter scanner keeps inline code, fenced code and unpaired delimiters intact. */
 function rewriteMathBodies(input: string, rewrite: (body: string, block: boolean) => string): string {
-  let out = "";
-  let i = 0;
-  let fenced: string | undefined;
-  let inBlockMath = false;
-  while (i < input.length) {
-    if (!inBlockMath && (i === 0 || input[i - 1] === "\n")) {
-      const lineEnd = input.indexOf("\n", i);
-      const end = lineEnd === -1 ? input.length : lineEnd;
-      const fence = MATH_FENCE.exec(input.slice(i, end))?.[1];
-      if (fence) {
-        if (!fenced) fenced = fence;
-        else if (fence[0] === fenced[0] && fence.length >= fenced.length) fenced = undefined;
-      }
-      if (fence || fenced) {
-        out += input.slice(i, end);
-        i = end;
-        continue;
-      }
-    }
-    if (inBlockMath) {
-      const close = findUnescaped(input, "$$", i);
-      out += rewrite(input.slice(i, close === -1 ? input.length : close), true);
-      if (close === -1) {
-        i = input.length;
-        continue;
-      }
-      out += "$$";
-      i = close + 2;
-      inBlockMath = false;
-      continue;
-    }
-    if (input[i] === "`") {
-      const end = inlineCodeEnd(input, i);
-      out += input.slice(i, end);
-      i = end;
-      continue;
-    }
-    if (input.startsWith("$$", i) && !isEscapedAt(input, i)) {
-      inBlockMath = true;
-      out += "$$";
-      i += 2;
-      continue;
-    }
-    if (input[i] === "$" && !isEscapedAt(input, i)) {
-      const lineEnd = input.indexOf("\n", i);
-      const close = findUnescaped(input, "$", i + 1);
-      if (close > i + 1 && (lineEnd === -1 || close < lineEnd)) {
-        out += `$${rewrite(input.slice(i + 1, close), false)}$`;
-        i = close + 1;
-        continue;
-      }
-    }
-    out += input[i];
-    i += 1;
-  }
-  return out;
+  return mapMath(input, (span) => {
+    const delimiter = span.block ? "$$" : "$";
+    return `${delimiter}${rewrite(span.body, span.block)}${delimiter}`;
+  });
 }
 
 const mathEscapeHash: BuiltInRule = {
   id: "math-escape-hash",
   description:
-    "上行：数学环境里的裸 # 写成 \\#。飞书与 MathJax 都把 # 当宏参数符，公式里留未转义的 #（如 $URL = path#fragment$）会让整条公式渲染失败。围栏代码块与行内代码内不动，跨行的 $$ 公式同样处理。",
+    "双向：数学环境里的裸 # 写成 \\#，避免公式渲染失败；已转义的 # 不重复转义，代码示例不动，跨行的 $$ 公式同样处理。",
   defaultEnabled: true,
-  apply: (input) => rewriteMathBodies(input, (body) => body.replace(/\\#|#/g, "\\#")),
+  apply: (input) => rewriteMathBodies(input, (body) => body.replace(/#/g, (_char, index: number) => escapedAt(body, index) ? "#" : "\\#")),
 };
 
 const mathTrimInlineSpaces: BuiltInRule = {
   id: "math-trim-inline-spaces",
   description:
-    "上行：行内公式 $ 内侧的空格去掉（$ x $ → $x$）。实测飞书不把「$ 后紧跟空格」的写法当公式，整段会原样显示成文本（$ 都留着），而没空格的 $\\boxed{...}$ 能正常渲染。块级 $$...$$ 内侧的空格飞书能接受，保持原样。",
+    "双向：只清理行内公式定界符内侧的空白（$ x $ → $x$），确保 Obsidian 可识别。保留公式正文、\\text{Agent Memory} 内的空格，以及块级 $$...$$ 的空格和换行；代码、价格与转义美元符号不动。",
   defaultEnabled: true,
-  apply: (input) => rewriteMathBodies(input, (body, block) => (block || !body.trim() ? body : body.trim())),
+  apply: (input) => rewriteMathBodies(input, (body, block) => (block || !body.trim() ? body : trimInlineMathBody(body))),
 };
 
 /** 行尾连接词：它跟在公式后面时另起一行，否则飞书会把公式和它排在同一段里。 */
 const FORMULA_TAIL_CONNECTOR = /^(?:和|与|及|以及|或者|或|还是|暨|and|or)[\s。，、；：！？.,;:!?]*$/i;
 /** 整行起始的一条行内公式，后面可能还有残留内容。 */
-const LEADING_INLINE_FORMULA = /^\$([^$]+)\$(.*)$/;
-
 const inlineFormulaToBlock: BuiltInRule = {
   id: "inline-formula-to-block",
-  description:
-    "上行：整行只有一条 $...$ 行内公式时，改写成 $$ 块级公式并前后留空行——飞书只对块级公式居中，行内公式会跟着正文排版。" +
-    "行尾是连接词（和/与/以及/或者…）时，连接词另起一行；行尾是标点或其他正文（如「$g_u$拉向：」）时整行不动，避免丢标点或拆散句子。" +
-    "列表项/表格/引用/标题里的公式同样不动。",
+  description: "上行：普通段落中独占一行的行内公式改成块级公式；尾随连接词另起一段。保留正文、标点和列表/引用/代码结构。",
   defaultEnabled: true,
-  apply: (input) => {
-    const lines = input.split("\n");
-    const out: string[] = [];
-    let fenced: string | undefined;
-    let blankAfter = false;
-    const pushBlank = (): void => {
-      if (out.length === 0) return;
-      if ((out[out.length - 1] ?? "").trim() === "") return;
-      out.push("");
-    };
-    for (const line of lines) {
-      if (blankAfter && line.trim() !== "") {
-        pushBlank();
-        blankAfter = false;
-      }
-      const fence = MATH_FENCE.exec(line)?.[1];
-      if (fence) {
-        if (!fenced) fenced = fence;
-        else if (fence[0] === fenced[0] && fence.length >= fenced.length) fenced = undefined;
-        out.push(line);
-        continue;
-      }
-      if (fenced) {
-        out.push(line);
-        continue;
-      }
-      const match = LEADING_INLINE_FORMULA.exec(line);
-      if (!match) {
-        out.push(line);
-        continue;
-      }
-      const tail = (match[2] ?? "").trim();
-      const connector = tail !== "" && FORMULA_TAIL_CONNECTOR.test(tail);
-      if (tail !== "" && !connector) {
-        out.push(line);
-        continue;
-      }
-      pushBlank();
-      out.push("$$", match[1].trim(), "$$");
-      if (connector) out.push("", tail);
-      blankAfter = true;
-    }
-    return out.join("\n");
-  },
+  apply: (input) => mapMath(input, (span) => {
+    if (span.block) return input.slice(span.start, span.end);
+    const lineStart = input.lastIndexOf("\n", span.start - 1) + 1;
+    const newline = input.indexOf("\n", span.end);
+    const lineEnd = newline === -1 ? input.length : newline;
+    const prefix = input.slice(lineStart, span.start);
+    const tail = input.slice(span.end, lineEnd).trim();
+    if (prefix !== "" || (tail && !FORMULA_TAIL_CONNECTOR.test(tail))) return input.slice(span.start, span.end);
+    return `$$\n${span.body.trim()}\n$$${tail ? "\n\n" : ""}`;
+  }),
 };
 
 const blockFormulaOwnParagraph: BuiltInRule = {
   id: "block-formula-own-paragraph",
-  description:
-    "上行：让块级公式 $$...$$ 独占一个段落，前后各留一个空行，与正文同处一行时按段落拆开——飞书只有拿到独立段落才会渲染成居中的块级公式，" +
-    "混在文字行里会被当成行内内容。列表项、表格、缩进行里的公式不动（原因写进报告），围栏代码块内不动。",
+  description: "上行：普通正文里的块级公式独占段落，前后留空行；列表、表格、引用和缩进结构里的公式保留位置并提示。",
   defaultEnabled: true,
   apply: (input, ctx) => {
-    const lines = input.split("\n");
     const out: string[] = [];
-    let fenced: string | undefined;
-    let index = 0;
-    let blankAfter = false;
-
-    const pushBlank = (): void => {
-      if (out.length === 0) return;
-      if ((out[out.length - 1] ?? "").trim() === "") return;
-      out.push("");
-    };
-
-    while (index < lines.length) {
-      const line = lines[index];
-      if (blankAfter && line.trim() !== "") {
-        pushBlank();
-        blankAfter = false;
-      }
-      const fence = MATH_FENCE.exec(line)?.[1];
-      if (fence) {
-        if (!fenced) fenced = fence;
-        else if (fence[0] === fenced[0] && fence.length >= fenced.length) fenced = undefined;
-      }
-      if (fence || fenced) {
-        out.push(line);
-        index += 1;
+    let from = 0;
+    for (const span of mathSpans(input)) {
+      if (!span.block) continue;
+      const lineStart = input.lastIndexOf("\n", span.start - 1) + 1;
+      const prefix = input.slice(lineStart, span.start);
+      if (MATH_STRUCTURED_LINE.test(prefix) || MATH_LIST_ITEM.test(prefix) || MATH_TABLE_ROW.test(prefix)) {
+        ctx.warnings?.push(`第 ${input.slice(0, span.start).split("\n").length} 行的块级公式在缩进/列表项/表格/引用/标题里，未拆成独立段落`);
         continue;
       }
-
-      const positions = blockDelimPositions(line);
-      if (positions.length === 0) {
-        out.push(line);
-        index += 1;
-        continue;
-      }
-      if (MATH_STRUCTURED_LINE.test(line) || MATH_LIST_ITEM.test(line) || MATH_TABLE_ROW.test(line)) {
-        ctx.warnings?.push(`第 ${index + 1} 行的块级公式在缩进/列表项/表格/引用/标题里，未拆成独立段落`);
-        out.push(line);
-        index += 1;
-        continue;
-      }
-
-      const open = positions[0];
-      let closeLine = index;
-      let close = positions.length >= 2 ? positions[1] : -1;
-      if (close < 0) {
-        for (let scan = index + 1; scan < lines.length; scan += 1) {
-          const found = blockDelimPositions(lines[scan]);
-          if (found.length > 0) {
-            closeLine = scan;
-            close = found[0];
-            break;
-          }
-        }
-      }
-      if (close < 0) {
-        out.push(line);
-        index += 1;
-        continue;
-      }
-
-      const before = line.slice(0, open).trimEnd();
-      const formulaLines =
-        closeLine === index
-          ? [line.slice(open, close + 2)]
-          : [line.slice(open), ...lines.slice(index + 1, closeLine), lines[closeLine].slice(0, close + 2)];
-      const after = (closeLine === index ? line.slice(close + 2) : lines[closeLine].slice(close + 2)).trimStart();
-
-      if (before !== "") out.push(before);
-      pushBlank();
-      for (const formulaLine of formulaLines) out.push(formulaLine);
-      blankAfter = true;
-
-      if (after !== "") {
-        lines[closeLine] = after;
-        index = closeLine;
-        continue;
-      }
-      index = closeLine + 1;
+      const before = input.slice(from, span.start).replace(/[ \t]+$/, "");
+      out.push(before);
+      const joined = out.join("");
+      if (joined && !joined.endsWith("\n\n")) out.push(joined.endsWith("\n") ? "\n" : "\n\n");
+      out.push(input.slice(span.start, span.end));
+      from = span.end;
+      while (input[from] === " " || input[from] === "\t") from += 1;
+      if (from < input.length && !input.slice(from).startsWith("\n\n")) out.push(input[from] === "\n" ? "\n" : "\n\n");
     }
-    return out.join("\n");
+    out.push(input.slice(from));
+    return out.join("");
   },
+};
+
+/** Markdown accepts Feishu XML extensions. Explicit paragraphs fix left-aligned display math. */
+const nativeMath: BuiltInRule = {
+  id: "native-math",
+  description: "上行：公式使用飞书原生 <latex> 标签；独立块级公式放入居中段落，保留公式与正文的边界。",
+  defaultEnabled: true,
+  apply: (input) => mapMath(input, (span) => {
+    if (!span.body.trim()) return input.slice(span.start, span.end);
+    const body = span.body.trim().replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const latex = `<latex>${body}</latex>`;
+    if (!span.block) return latex;
+    const before = input.slice(input.lastIndexOf("\n", span.start - 1) + 1, span.start);
+    const end = input.indexOf("\n", span.end);
+    const after = input.slice(span.end, end === -1 ? input.length : end);
+    return !before.trim() && !after.trim() ? `<p align="center">${latex}</p>` : latex;
+  }),
+};
+
+const restoreNativeMath: BuiltInRule = {
+  id: "restore-native-math",
+  description: "下行：把飞书残留的原生公式标签还原为 Obsidian 数学语法；居中公式用 $$...$$，行内公式用 $...$，不把 XML 标签写入笔记。",
+  defaultEnabled: true,
+  apply: (input) => mapNativeMath(input, (body, block) => {
+    const decoded = decodeXmlText(body);
+    return block ? `$$\n${decoded}\n$$` : `$${trimInlineMathBody(decoded) || "{}"}$`;
+  }),
+};
+
+const listExitAfterHardbreak: BuiltInRule = {
+  id: "list-exit-after-hardbreak",
+  description: "上行：列表项以两个空格硬换行结束，下一行又是无缩进正文时，补空行结束列表；缩进的续行、子列表和代码保持原样。",
+  defaultEnabled: true,
+  apply: (input) => {
+    const lines = input.split("\n");
+    const code = codeLineMask(lines);
+    return lines.map((line, index) => {
+      if (!index || code[index] || code[index - 1]) return line;
+      const previous = lines[index - 1];
+      const list = /^[ \t]*(?:[-*+]|\d+[.)])\s/.test(previous);
+      const hardbreak = / {2,}\r?$/.test(previous);
+      const plain = /^[^\s>#|`~]/.test(line) && !/^(?:[-*+]|\d+[.)])\s/.test(line);
+      return list && hardbreak && plain ? `\n${line}` : line;
+    }).join("\n");
+  },
+};
+
+/** Diagnostics never guess missing equations or strip literal escapes from source material. */
+export function sourceFormatWarnings(input: string): string[] {
+  const lines = input.split("\n");
+  const code = codeLineMask(lines);
+  const masked = mapMath(input, (span) => input.slice(span.start, span.end).replace(/[^\n]/g, " ")).split("\n");
+  const warnings: string[] = [];
+  let previousHeading = 0;
+  for (let row = 0; row < lines.length; row += 1) {
+    if (!code[row]) {
+      const outside = masked[row];
+      const label = `原稿第 ${row + 1} 行`;
+      if (/^\\\$\\\$/.test(outside.trim())) warnings.push(`${label}：块级公式定界符已被转义，会显示为字面 $$；请确认原稿，未自动反转义`);
+      if (/^(?:#{1,6}\s+)?(?:[A-Za-z]\\?_\{|\\(?:text|rightarrow|left|frac)\b)/.test(outside.trim())) warnings.push(`${label}：LaTeX 疑似落在公式环境外，将显示源码；请修复原稿中的定界符`);
+      const heading = /^(#{1,6})\s/.exec(outside);
+      if (heading) {
+        const level = heading[1].length;
+        if ((!previousHeading && level > 1) || level > previousHeading + 1) warnings.push(`${label}：标题层级跳到 H${level}；保留原稿层级，请检查文章结构`);
+        if (level === 1 && previousHeading > 1) warnings.push(`${label}：正文中出现 H1 大标题，请确认是否误加了 #`);
+        previousHeading = level;
+      }
+      if (/(^|[^\\])\$\$/.test(outside)) warnings.push(`${label}：公式定界符不完整，已保留原文`);
+    }
+    if (warnings.length >= 30) { warnings.push("原稿格式提示过多，已省略后续提示"); break; }
+  }
+  return warnings;
+}
+
+const sourceDiagnostics: BuiltInRule = {
+  id: "source-format-diagnostics",
+  description: "上行：可选的原稿格式检查，默认关闭。开启后提示转义的公式定界符、疑似裸露 LaTeX、标题跳级等问题；只提示，不猜测或改写原意。",
+  defaultEnabled: false,
+  apply: (input, ctx) => { ctx.warnings?.push(...sourceFormatWarnings(input)); return input; },
 };
 
 const footnoteDowngrade: BuiltInRule = {
@@ -428,6 +305,8 @@ const dropTitleHeading: BuiltInRule = {
     const title = ctx.documentTitle.trim();
     if (!title) return input;
     const heading = `# ${title}`;
+    const xmlTitle = /^<title>([\s\S]*?)<\/title>(?:\r?\n)?(?:\r?\n)?/.exec(input);
+    if (xmlTitle && decodeXmlText(xmlTitle[1]).trim() === title) return input.slice(xmlTitle[0].length);
     const lines = input.split("\n");
     if ((lines[0] ?? "").trim() !== heading) return input;
     if ((ctx.localContent.split("\n")[0] ?? "").trim() === heading) return input;
@@ -598,16 +477,19 @@ const imageDownload: BuiltInRule = {
 
 export const BUILT_IN_RULES: Record<RuleDirection, BuiltInRule[]> = {
   toFeishu: [
+    sourceDiagnostics,
     imageRefNormalize,
     tabIndentToSpaces,
     mathEscapeHash,
     mathTrimInlineSpaces,
     inlineFormulaToBlock,
     blockFormulaOwnParagraph,
+    listExitAfterHardbreak,
+    nativeMath,
     footnoteDowngrade,
     imageUpload,
   ],
-  toObsidian: [unescapeImageMarkup, dropTitleHeading, imageDownload, restoreImageRef],
+  toObsidian: [unescapeImageMarkup, dropTitleHeading, restoreNativeMath, mathEscapeHash, mathTrimInlineSpaces, imageDownload, restoreImageRef],
 };
 
 function entryOf(rule: BuiltInRule): RuleEntry {
@@ -705,14 +587,16 @@ export function applyRules(direction: RuleDirection, input: string, ctx: RuleCon
 }
 
 /**
- * 只改排版、且没有对应下行还原规则的上行规则。它们的输出形态会被飞书固化，
- * 取回时天然与本地原文不同——拉取前用 sameAfterCosmeticRules 判定，差异只来自这里就不回写本地。
+ * 飞书会固化这些上行排版规则的输出。拉取时用 sameAfterCosmeticRules 识别纯排版差异，
+ * 保留本地段落布局；Obsidian 必需的公式边界修复由 normalizeObsidianMath 单独处理。
  */
 export const COSMETIC_PUBLISH_RULE_IDS = [
   "math-escape-hash",
   "math-trim-inline-spaces",
   "inline-formula-to-block",
   "block-formula-own-paragraph",
+  "list-exit-after-hardbreak",
+  "native-math",
 ];
 
 /** 只跑上面那批排版规则，两侧结果相同即说明差异纯粹是排版归一化。 */
@@ -731,4 +615,25 @@ export function sameAfterCosmeticRules(a: string, b: string, ctx: RuleContext, r
 
 export function ruleEnabled(rules: RulesFile, direction: RuleDirection, id: string): boolean {
   return rules[direction].some((entry) => entry.id === id && entry.enabled);
+}
+
+/** Used separately from publishing cosmetics: invalid local math must not be retained by the no-write fast path. */
+export function normalizeObsidianMath(input: string, rules: RulesFile): string {
+  let out = input;
+  for (const rule of [restoreNativeMath, mathEscapeHash, mathTrimInlineSpaces]) {
+    if (ruleEnabled(rules, "toObsidian", rule.id)) out = rule.apply(out, { relPath: "", documentTitle: "", localContent: input });
+  }
+  return out;
+}
+
+/** Descriptions and rule-file ordering do not affect actual execution order. */
+export function publishRulesFingerprint(rules: RulesFile): string {
+  const enabled = new Set(rules.toFeishu.filter((entry) => entry.enabled).map((entry) => entry.id));
+  return JSON.stringify([PUBLISH_RULES_REVISION, BUILT_IN_RULES.toFeishu.filter((rule) => rule.id !== "source-format-diagnostics" && enabled.has(rule.id)).map((rule) => rule.id)]);
+}
+
+/** Preview must also be invalidated when pull rules change before execution. */
+export function pullRulesFingerprint(rules: RulesFile): string {
+  const enabled = new Set(rules.toObsidian.filter((entry) => entry.enabled).map((entry) => entry.id));
+  return JSON.stringify([1, BUILT_IN_RULES.toObsidian.filter((rule) => enabled.has(rule.id)).map((rule) => rule.id)]);
 }

@@ -14,7 +14,7 @@ import type { RequestUrlParam, RequestUrlResponse } from "obsidian";
 
 import { buildMarkdownContent } from "../src/feishu/docs";
 import { setRequestBudgetForTest } from "../src/feishu/client";
-import { applyRules, defaultRulesFile, normalizeRemoteImageUrls, RULES_PATH } from "../src/convert/rules";
+import { applyRules, defaultRulesFile, normalizeObsidianMath, normalizeRemoteImageUrls, RULES_PATH } from "../src/convert/rules";
 import type { RuleContext } from "../src/convert/rules";
 import { ROUNDTRIP_REPORT_PATH, SYNTAX_CHECKS, SYNTAX_SAMPLE, appendSyntaxSample } from "../src/roundtrip";
 import { DocSyncEngine } from "../src/sync/docEngine";
@@ -880,7 +880,14 @@ class FakeFeishu {
       const withoutTag = normalized.includes("</title>")
         ? normalized.slice(normalized.indexOf("</title>") + "</title>".length).replace(/^\n/, "")
         : normalized;
-      const body = this.resolveImagePlaceholders(document, withoutTag);
+      // Model the actual docs_ai transport: strip only the observed punctuation escapes,
+      // decode XML entities once, and export native equations as Markdown (with edge spaces inline).
+      const unescapeMath = (body: string): string => body.replace(/\\([#$*_~\[\]&:<>+=`-])/g, "$1");
+      const decode = (body: string): string => unescapeMath(body.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&amp;/g, "&"));
+      const equations = withoutTag
+        .replace(/<p align="center"><latex>([\s\S]*?)<\/latex><\/p>/g, (_raw, body: string) => `$$${decode(body)}$$`)
+        .replace(/<latex>([\s\S]*?)<\/latex>/g, (_raw, body: string) => `$ ${unescapeMath(body)} $`);
+      const body = this.resolveImagePlaceholders(document, equations);
       const remote = document.remoteImages
         .filter((block) => block.fileToken)
         .map((block) => `![${block.caption}](${this.imageUrl(block.fileToken as string)})`)
@@ -1652,6 +1659,7 @@ async function main(): Promise<void> {
   await scenario("0 转换规则：块级公式独占段落 + 数学环境 # 转义", async () => {
     const rules = defaultRulesFile();
     const ctx: RuleContext = { relPath: "note.md", documentTitle: "note", localContent: "" };
+    rules.toFeishu.find((entry) => entry.id === "native-math")!.enabled = false;
     const toFeishu = (text: string): string => applyRules("toFeishu", text, ctx, rules);
 
     eq(toFeishu("前文\n$$a=b$$\n后文"), "前文\n\n$$a=b$$\n\n后文", "块级公式前后应各补一个空行");
@@ -1676,7 +1684,7 @@ async function main(): Promise<void> {
     eq(toFeishu("当 $x>0$ 时"), "当 $x>0$ 时", "句子中间的行内公式不提块");
     eq(toFeishu("$E = mc^2$"), "$$\nE = mc^2\n$$", "独占一行的行内公式应提成块级");
     eq(toFeishu("前文\n$E = mc^2$"), "前文\n\n$$\nE = mc^2\n$$", "提块后前面应补空行");
-    eq(toFeishu("$A$和  \n$B$"), "$$\nA\n$$\n\n和\n\n$$\nB\n$$", "尾随连接词应另起一行，两条公式各自成段");
+    eq(toFeishu("$A$和  \n$B$"), "$$\nA\n$$\n\n和  \n\n$$\nB\n$$", "尾随连接词应另起一行，两条公式各自成段");
     eq(toFeishu("$E = mc^2$。"), "$E = mc^2$。", "行尾只有标点时不提块（不丢标点）");
     eq(toFeishu("$g_u$拉向："), "$g_u$拉向：", "公式后紧跟正文时整行不动");
     eq(toFeishu("$URL = path#fragment$"), "$$\nURL = path\\#fragment\n$$", "独占一行的行内公式：提块 + 转义");
@@ -2636,10 +2644,10 @@ async function main(): Promise<void> {
     };
     eq(
       rules.toFeishu.map((rule) => rule.id).join("|"),
-      "image-ref-normalize|tab-indent-to-spaces|math-escape-hash|math-trim-inline-spaces|inline-formula-to-block|block-formula-own-paragraph|footnote-downgrade|image-upload",
+      "source-format-diagnostics|image-ref-normalize|tab-indent-to-spaces|math-escape-hash|math-trim-inline-spaces|inline-formula-to-block|block-formula-own-paragraph|list-exit-after-hardbreak|native-math|footnote-downgrade|image-upload",
       "默认上行规则",
     );
-    eq(rules.toObsidian.map((rule) => rule.id).join("|"), "unescape-image-markup|drop-title-heading|image-download|restore-image-ref", "默认下行规则");
+    eq(rules.toObsidian.map((rule) => rule.id).join("|"), "unescape-image-markup|drop-title-heading|restore-native-math|math-escape-hash|math-trim-inline-spaces|image-download|restore-image-ref", "默认下行规则");
     ok(rules.toFeishu.every((rule) => Boolean(rule.description)), "每条规则都要有 description");
     for (const rule of rules.toFeishu) {
       if (rule.id === "image-ref-normalize") rule.enabled = false;
@@ -3256,9 +3264,9 @@ async function main(): Promise<void> {
     writeVaultFile("图笔记.md", "正文又改了。\n\n![[attachments/pic.png]]\n", imgRoot);
     const { result, delta } = await runDocRound(ih, "图片第 7 轮：关掉 image-upload");
 
-    eq(result.plan.counts.push ?? 0, 1, "push 数量");
+    eq(result.plan.counts.push ?? 0, 2, "规则更新应刷新两篇已有文档");
     eq(delta.mediaUpload, 0, "关掉规则后不该上传素材");
-    const sent = String(updateDocRequests(imgFake).at(-1)?.body.content ?? "");
+    const sent = String(updateDocRequests(imgFake).filter((request) => request.label.includes(ih.settings.state.docRecords["图笔记.md"].documentId)).at(-1)?.body.content ?? "");
     ok(sent.includes("![[attachments/pic.png]]"), `关掉规则后图片引用应原样发送：${sent}`);
     ok(!sent.includes("@lcli_img_"), "不该出现占位标记");
 
@@ -3475,8 +3483,8 @@ async function main(): Promise<void> {
     return "时间戳没变但内容变了：快路径漏判 1 轮（如实复现），开安全阀立刻补上";
   });
 
-  // ---- 场景 55：公式排版差异不回写本地（零内容 diff，文档模式）
-  await scenario("55 公式：远端只差排版归一化时不回写本地", async () => {
+  // ---- 场景 55：公式排版差异保留本地布局，只修复必要转义（文档模式）
+  await scenario("55 公式：远端只差排版时保留本地布局并修复转义", async () => {
     const formulaRoot = path.join(TMP_ROOT, "vault-formula");
     const rel = "公式排版场景.md";
     const original = "公式排版场景（场景 55）\n\n讲解 $$a=b$$ 收尾\n\n行内公式 $URL = path#fragment$\n";
@@ -3489,13 +3497,13 @@ async function main(): Promise<void> {
     const pushRound = await runDocRound(fh, "场景 55：先上传新笔记");
     eq(pushRound.result.plan.counts["create-remote"] ?? 0, 1, "create-remote 数量");
     const sent = String(createDocRequests(formulaFake)[0]?.body?.content ?? "");
-    ok(sent.includes("讲解\n\n$$a=b$$\n\n收尾"), `块级公式应独占段落：${sent}`);
-    ok(sent.includes("$URL = path\\#fragment$"), `行内公式的 # 应被转义：${sent}`);
+    ok(sent.includes('讲解\n\n<p align="center"><latex>a=b</latex></p>\n\n收尾'), `块级公式应独占段落：${sent}`);
+    ok(sent.includes("<latex>URL = path\\\\#fragment</latex>"), `行内公式的 # 应被转义：${sent}`);
 
     const record = fh.settings.state.docRecords[rel];
     ok(record, "缺少映射记录");
 
-    // 远端恰好等于"我们发上去的归一化形态"：差异只来自排版，本地不该被改写
+    // 远端恰好等于我们发布的归一化形态：保留本地段落，仅修复公式转义。
     const normalized = applyRules(
       "toFeishu",
       original,
@@ -3505,7 +3513,7 @@ async function main(): Promise<void> {
     formulaFake.setDocContent(record.documentId, normalized);
     const cosmeticRound = await runDocRound(fh, "场景 55：远端只有排版差异");
     ok(childItems(cosmeticRound.result.plan, "pull").includes(rel), "计划里仍应判为 pull");
-    eq(readVaultFile(rel, formulaRoot), original, "纯排版差异不应回写本地（零内容 diff）");
+    eq(readVaultFile(rel, formulaRoot), normalizeObsidianMath(original, defaultRulesFile()), "保留本地段落排版，只修复无法渲染的裸 #");
 
     const stableRound = await runDocRound(fh, "场景 55：确认基线已跟上");
     ok(childItems(stableRound.result.plan, "skip").includes(rel), "基线更新后该笔记应判为 skip");
@@ -3549,6 +3557,164 @@ async function main(): Promise<void> {
 
     __setRequestUrlHandler(fake.handler);
     return "排版差异不回写、真实改动仍拉取、强制重推可用、挂住会超时报错";
+  });
+
+
+  await scenario("56 规则升级：预览可见、刷新一次、远端修改不被覆盖", async () => {
+    const root = path.join(TMP_ROOT, "vault-rule-upgrade");
+    writeDocVault(root, { "公式.md": "$$ URL = path#fragment $$\n", "正文.md": "原文\n" });
+    const fake = new FakeFeishu({ seedRootNode: false });
+    __setRequestUrlHandler(fake.handler);
+    const h = createDocHarness(fake, root);
+    await runDocRound(h, "规则升级：建立基线");
+    const formula = h.settings.state.docRecords["公式.md"];
+    const prose = h.settings.state.docRecords["正文.md"];
+    delete formula.publishRulesFingerprint;
+    delete prose.publishRulesFingerprint;
+    // Same timestamp must not hide remote changes during a rule upgrade.
+    fake.editDocContentWithoutTimeBump(prose.documentId, "<title>正文</title>\n飞书新改动\n");
+    const writesBefore = fake.counters.docsUpdate;
+    const preview = await h.engine.run({ mode: "both", dryRun: true });
+    eq(preview.plan.counts.push ?? 0, 1, "只刷新远端未改过的公式笔记");
+    eq(preview.plan.counts.pull ?? 0, 1, "优先接收飞书新改动");
+    eq(fake.counters.docsUpdate, writesBefore, "预览不写远端");
+    eq(formula.publishRulesFingerprint, undefined, "预览不提前记规则成功");
+    ok(preview.plan.items.find(entry => entry.relPath === "公式.md")?.rulesRefresh, "计划应标记规则刷新");
+    const result = await h.engine.run({ mode: "both", preApprovedPlan: preview.plan });
+    ok(result.report.every(entry => entry.ok), "规则升级执行成功");
+    eq(readVaultFile("公式.md", root), "$$ URL = path#fragment $$\n", "原稿不改动");
+    eq(readVaultFile("正文.md", root), "飞书新改动\n", "飞书改动保留");
+    const stable = await runDocRound(h, "规则升级：重复运行");
+    eq(stable.delta.docsUpdate, 0, "升级只刷新一次");
+    eq(nonSkipCount(stable.result.plan), 0, "后续运行稳定");
+    __setRequestUrlHandler(fake.handler);
+    return "旧基线刷新一次；预览不写；同秒远端变更仍优先拉取";
+  });
+
+  await scenario("57 规则刷新：预览后远端或规则改变时停止覆盖", async () => {
+    const root = path.join(TMP_ROOT, "vault-rule-preview-race");
+    writeDocVault(root, { "公式.md": "$$x$$\n" });
+    const fake = new FakeFeishu({ seedRootNode: false });
+    __setRequestUrlHandler(fake.handler);
+    const h = createDocHarness(fake, root);
+    await runDocRound(h, "预览竞态：建立基线");
+    const record = h.settings.state.docRecords["公式.md"];
+    delete record.publishRulesFingerprint;
+    const preview = await h.engine.run({ mode: "both", dryRun: true });
+    const writesBefore = fake.counters.docsUpdate;
+    fake.editDocContentWithoutTimeBump(record.documentId, "<title>公式</title>\n预览后飞书新增\n");
+    const executed = await h.engine.run({ mode: "both", preApprovedPlan: preview.plan });
+    eq(fake.counters.docsUpdate, writesBefore, "远端改变时不覆盖");
+    ok(executed.report.some(entry => !entry.ok && entry.message?.includes("飞书正文已改变")), "报告需说明竞态");
+    eq(record.publishRulesFingerprint, undefined, "失败不能记成功指纹");
+    const rulesPath = path.join(root, RULES_PATH);
+    const rules = JSON.parse(fs.readFileSync(rulesPath, "utf8"));
+    rules.toFeishu.find((entry: { id: string }) => entry.id === "native-math").enabled = false;
+    fs.writeFileSync(rulesPath, JSON.stringify(rules));
+    let error = "";
+    try { await h.engine.run({ mode: "both", preApprovedPlan: preview.plan }); }
+    catch (caught) { error = String(caught); }
+    ok(error.includes("规则发生变化"), "规则改变需要重新预览");
+    eq(fake.counters.docsUpdate, writesBefore, "旧计划不能用于新规则");
+    return "执行前复核正文；预览后改规则会拒绝旧计划";
+  });
+
+  await scenario("58 原稿诊断：默认关闭，手动开启可见，关闭后不再提示", async () => {
+    const root = path.join(TMP_ROOT, "vault-source-warning");
+    const content = "### 标题\n\\$\\$\ny\\_{\\text{benign}}\n# \\text{点击帖子}\n";
+    writeDocVault(root, { "损坏公式.md": content });
+    const fake = new FakeFeishu({ seedRootNode: false });
+    __setRequestUrlHandler(fake.handler);
+    const h = createDocHarness(fake, root);
+    const initial = await h.engine.run({ mode: "both", dryRun: true });
+    eq(initial.plan.warnings?.length ?? 0, 0, "默认关闭原稿格式提示");
+    const rulesPath = path.join(root, RULES_PATH);
+    const rules = JSON.parse(fs.readFileSync(rulesPath, "utf8"));
+    rules.toFeishu.find((entry: { id: string }) => entry.id === "source-format-diagnostics").enabled = true;
+    fs.writeFileSync(rulesPath, JSON.stringify(rules));
+    const preview = await h.engine.run({ mode: "both", dryRun: true });
+    ok(preview.plan.warnings?.some(w => w.message.includes("第 2 行") && w.message.includes("转义")), "预览需显示原稿行号");
+    const result = await h.engine.run({ mode: "both", preApprovedPlan: preview.plan });
+    ok(result.report.some(entry => entry.message?.includes("原稿第 2 行")), "上传报告需保留警告");
+    eq(readVaultFile("损坏公式.md", root), content, "诊断不猜测、修改原文");
+    rules.toFeishu.find((entry: { id: string }) => entry.id === "source-format-diagnostics").enabled = false;
+    fs.writeFileSync(rulesPath, JSON.stringify(rules));
+    const next = await h.engine.run({ mode: "both", dryRun: true });
+    eq(next.plan.warnings?.length ?? 0, 0, "关闭诊断后无提示");
+    eq(nonSkipCount(next.plan), 0, "诊断开关不引发重推");
+    return "诊断覆盖预览和上传报告，不改变原稿，也不引发无意义重推";
+  });
+
+
+  await scenario("59 双向公式：拉取清理行内边缘空格，保留块级公式和文字内部空格", async () => {
+    const root = path.join(TMP_ROOT, "vault-math-pull");
+    const rel = "数学.md";
+    writeDocVault(root, { [rel]: "原稿 $x$。\n" });
+    const fake = new FakeFeishu({ seedRootNode: false });
+    __setRequestUrlHandler(fake.handler);
+    const h = createDocHarness(fake, root);
+    await runDocRound(h, "双向公式：建立基线");
+    const record = h.settings.state.docRecords[rel];
+    const block = "$$  \n\\begin{aligned}\n a &= b \\\\\n c &= d\n\\end{aligned}  \n$$";
+    const remote = `新增 $ x + \\text{Agent Memory} $，价格 $5 和 $10。\n\n${block}\n\n示例：\n\n\x60\x60\x60latex\n$ x $\n\x60\x60\x60\n`;
+    fake.setDocContent(record.documentId, `<title>数学</title>\n${remote}`);
+    const pulled = await runDocRound(h, "双向公式：远端新增内容");
+    eq(pulled.result.plan.counts.pull, 1, "必须拉取真实改动");
+    const expected = remote.replace("$ x + \\text{Agent Memory} $", "$x + \\text{Agent Memory}$");
+    eq(readVaultFile(rel, root), expected, "仅清理公式边缘空白，价格、块级及代码不改");
+    const stable = await runDocRound(h, "双向公式：复跑");
+    eq(nonSkipCount(stable.result.plan), 0, "规范化后不可循环拉取或推送");
+    eq(stable.delta.docsUpdate, 0, "不反复重写飞书");
+    // A different machine pulling the document for the first time must receive the same valid math.
+    fs.unlinkSync(path.join(root, rel));
+    delete h.settings.state.docRecords[rel];
+    const firstPull = await runDocRound(h, "双向公式：首次下载");
+    eq(firstPull.result.plan.counts["create-local"], 1, "首次下载");
+    eq(readVaultFile(rel, root), expected, "首次下载也应用下行公式规则");
+    return "普通拉取与首次下载均保证行内公式有效，块级空白/文字/代码不变，后续同步稳定";
+  });
+
+  await scenario("60 排版快路径：修复已有本地行内空格，同时保留作者段落", async () => {
+    const root = path.join(TMP_ROOT, "vault-math-cosmetic");
+    const rel = "空格.md";
+    const original = "正文 $ x + \\text{Agent Memory} $。\n\n讲解 $$ a=b $$ 收尾\n";
+    writeDocVault(root, { [rel]: original });
+    const fake = new FakeFeishu({ seedRootNode: false });
+    __setRequestUrlHandler(fake.handler);
+    const h = createDocHarness(fake, root);
+    await runDocRound(h, "排版快路径：建立基线");
+    const record = h.settings.state.docRecords[rel];
+    fake.setDocContent(record.documentId, "<title>空格</title>\n正文 $   x + \\text{Agent Memory}   $。\n\n讲解\n\n$$a=b$$\n\n收尾\n");
+    const result = await runDocRound(h, "排版快路径：空格也必须修复");
+    eq(readVaultFile(rel, root), original.replace("$ x + \\text{Agent Memory} $", "$x + \\text{Agent Memory}$"), "仅修复定界符空白，不把飞书段落排版覆盖本地");
+    ok(result.result.report.some(entry => entry.action === "pull" && entry.message?.includes("修复")), "结果说明本地修复");
+    const stable = await runDocRound(h, "排版快路径：复跑");
+    eq(nonSkipCount(stable.result.plan), 0, "修复只执行一次");
+    return "不再把无法渲染的空格当成可忽略差异；原有段落保持";
+  });
+
+  await scenario("61 下行公式规则：可独立关闭，预览后改规则必须重新确认计划", async () => {
+    const root = path.join(TMP_ROOT, "vault-math-toggle");
+    writeDocVault(root, { "开关.md": "原稿\n" });
+    const fake = new FakeFeishu({ seedRootNode: false });
+    __setRequestUrlHandler(fake.handler);
+    const h = createDocHarness(fake, root);
+    await runDocRound(h, "下行规则：建立基线");
+    const record = h.settings.state.docRecords["开关.md"];
+    fake.setDocContent(record.documentId, "<title>开关</title>\n远端 $ x $\n");
+    const preview = await h.engine.run({ mode: "both", dryRun: true });
+    const rulesPath = path.join(root, RULES_PATH);
+    const rules = JSON.parse(fs.readFileSync(rulesPath, "utf8"));
+    rules.toObsidian.find((entry: { id: string }) => entry.id === "math-trim-inline-spaces").enabled = false;
+    fs.writeFileSync(rulesPath, JSON.stringify(rules));
+    let error = "";
+    try { await h.engine.run({ mode: "both", preApprovedPlan: preview.plan }); }
+    catch (caught) { error = String(caught); }
+    ok(error.includes("规则发生变化"), "下行设置改变应拒绝旧计划");
+    eq(readVaultFile("开关.md", root), "原稿\n", "旧计划不执行");
+    await runDocRound(h, "下行规则：按新规则重跑");
+    eq(readVaultFile("开关.md", root), "远端 $ x $\n", "用户关闭清理时应原样保留");
+    return "下行开关独立生效，旧预览不会被套用到新规则";
   });
 
   // ---- 汇总

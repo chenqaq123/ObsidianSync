@@ -3,6 +3,7 @@ import { Modal, Setting } from "obsidian";
 import type { ReportEntry } from "../sync/executor";
 import type { SyncAction, SyncPlan } from "../sync/types";
 import { ACTION_LABELS } from "../sync/types";
+import { renderFormatWarnings } from "./format-warnings";
 
 export class ReportModal extends Modal {
   constructor(
@@ -33,6 +34,7 @@ export class ReportModal extends Modal {
       summary.createEl("div", { cls: "feishu-sync-reason", text: `本次计划：${planCounts}` });
     }
 
+    renderFormatWarnings(contentEl, this.plan);
     renderSection(contentEl, "冲突副本（本地与远端均未改动，副本在 .obsidian/feishu-sync/conflicts/）", conflicts, true);
     renderSection(contentEl, "已执行", changed, false);
     renderSection(contentEl, "需要注意（未自动处理）", this.report.filter((entry) => !isChange(entry.action) && entry.action !== "conflict"), false);
