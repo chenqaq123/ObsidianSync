@@ -1,0 +1,9 @@
+{
+  "id": "feishu-wiki-sync",
+  "name": "Feishu Wiki Sync",
+  "version": "0.1.0",
+  "minAppVersion": "1.4.0",
+  "description": "Bidirectional sync between this vault and a Feishu (Lark) Wiki space. Uses native Markdown files, so content round-trips byte-for-byte.",
+  "author": "cgx",
+  "isDesktopOnly": true
+}

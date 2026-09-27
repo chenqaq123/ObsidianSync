@@ -1,0 +1,20 @@
+{
+  "name": "feishu-wiki-sync",
+  "version": "0.1.0",
+  "description": "Obsidian plugin: bidirectional sync between a vault and a Feishu Wiki space",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "node esbuild.config.mjs",
+    "build": "tsc --noEmit && node esbuild.config.mjs production",
+    "typecheck": "tsc --noEmit",
+    "test:e2e": "node tests/run-e2e.mjs",
+    "install:vault": "node scripts/install-to-vault.mjs"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.0",
+    "esbuild": "^0.20.0",
+    "obsidian": "^1.4.11",
+    "typescript": "^5.3.3"
+  }
+}

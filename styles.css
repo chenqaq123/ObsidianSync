@@ -1,0 +1,55 @@
+.feishu-sync-plan-item {
+  display: flex;
+  gap: 8px;
+  align-items: baseline;
+  padding: 2px 0;
+}
+
+.feishu-sync-plan-item .feishu-sync-reason {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+.feishu-sync-badge {
+  display: inline-block;
+  min-width: 4.5em;
+  text-align: center;
+  border-radius: var(--radius-s);
+  padding: 0 6px;
+  font-size: var(--font-ui-smaller);
+  border: 1px solid var(--background-modifier-border);
+}
+
+.feishu-sync-badge.is-push {
+  color: var(--text-success);
+}
+
+.feishu-sync-badge.is-pull {
+  color: var(--text-accent);
+}
+
+.feishu-sync-badge.is-conflict {
+  color: var(--text-error);
+}
+
+.feishu-sync-badge.is-delete {
+  color: var(--text-warning);
+}
+
+.feishu-sync-summary {
+  margin-bottom: 12px;
+}
+
+.feishu-sync-section {
+  margin-bottom: 16px;
+}
+
+.feishu-sync-list {
+  max-height: 40vh;
+  overflow-y: auto;
+}
+
+.feishu-sync-path {
+  font-family: var(--font-monospace);
+  word-break: break-all;
+}
