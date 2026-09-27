@@ -1673,14 +1673,17 @@ async function main(): Promise<void> {
     // 行内公式内侧空格会让飞书整段当纯文本，$ 都留着不渲染
     eq(toFeishu("当 $ g_a=1 $ 时"), "当 $g_a=1$ 时", "行内公式内侧空格应去掉");
     eq(toFeishu("当 $x>0$ 时"), "当 $x>0$ 时", "句子中间的行内公式不提块");
-    eq(toFeishu("$E = mc^2$。"), "$$\nE = mc^2\n$$", "独占一行的行内公式应提成块级");
+    eq(toFeishu("$E = mc^2$"), "$$\nE = mc^2\n$$", "独占一行的行内公式应提成块级");
     eq(toFeishu("前文\n$E = mc^2$"), "前文\n\n$$\nE = mc^2\n$$", "提块后前面应补空行");
+    eq(toFeishu("$A$和  \n$B$"), "$$\nA\n$$\n\n和\n\n$$\nB\n$$", "尾随连接词应另起一行，两条公式各自成段");
+    eq(toFeishu("$E = mc^2$。"), "$E = mc^2$。", "行尾只有标点时不提块（不丢标点）");
+    eq(toFeishu("$g_u$拉向："), "$g_u$拉向：", "公式后紧跟正文时整行不动");
     eq(toFeishu("$URL = path#fragment$"), "$$\nURL = path\\#fragment\n$$", "独占一行的行内公式：提块 + 转义");
     eq(toFeishu("- 列表项 $x$"), "- 列表项 $x$", "列表项里的行内公式不提块");
     const promoted = toFeishu("前文\n$ g_a=1 $");
     eq(toFeishu(promoted), promoted, "去空格与提块同样幂等");
 
-    return "公式规则 20 条断言";
+    return "公式规则 24 条断言";
   });
 
   // ---- 场景 1：远端为空

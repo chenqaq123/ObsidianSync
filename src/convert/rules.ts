@@ -248,13 +248,17 @@ const mathTrimInlineSpaces: BuiltInRule = {
   apply: (input) => rewriteMathBodies(input, (body, block) => (block || !body.trim() ? body : body.trim())),
 };
 
-/** 整行只有一条行内公式（行尾允许标点与空白）——这种写法在本子里是当独立公式用的。 */
-const INLINE_FORMULA_ALONE = /^\$([^$]+)\$[\s。，、；：！？.,;:!?]*$/;
+/** 行尾连接词：它跟在公式后面时另起一行，否则飞书会把公式和它排在同一段里。 */
+const FORMULA_TAIL_CONNECTOR = /^(?:和|与|及|以及|或者|或|还是|暨|and|or)[\s。，、；：！？.,;:!?]*$/i;
+/** 整行起始的一条行内公式，后面可能还有残留内容。 */
+const LEADING_INLINE_FORMULA = /^\$([^$]+)\$(.*)$/;
 
 const inlineFormulaToBlock: BuiltInRule = {
   id: "inline-formula-to-block",
   description:
-    "上行：整行只有一条 $...$ 行内公式时（行尾允许标点），改写成 $$ 块级公式并前后留空行——飞书只对块级公式居中，行内公式会跟着正文排版。句子中间夹着的公式、列表项/表格/引用/标题里的公式都不动。",
+    "上行：整行只有一条 $...$ 行内公式时，改写成 $$ 块级公式并前后留空行——飞书只对块级公式居中，行内公式会跟着正文排版。" +
+    "行尾是连接词（和/与/以及/或者…）时，连接词另起一行；行尾是标点或其他正文（如「$g_u$拉向：」）时整行不动，避免丢标点或拆散句子。" +
+    "列表项/表格/引用/标题里的公式同样不动。",
   defaultEnabled: true,
   apply: (input) => {
     const lines = input.split("\n");
@@ -282,13 +286,20 @@ const inlineFormulaToBlock: BuiltInRule = {
         out.push(line);
         continue;
       }
-      const match = INLINE_FORMULA_ALONE.exec(line);
+      const match = LEADING_INLINE_FORMULA.exec(line);
       if (!match) {
+        out.push(line);
+        continue;
+      }
+      const tail = (match[2] ?? "").trim();
+      const connector = tail !== "" && FORMULA_TAIL_CONNECTOR.test(tail);
+      if (tail !== "" && !connector) {
         out.push(line);
         continue;
       }
       pushBlank();
       out.push("$$", match[1].trim(), "$$");
+      if (connector) out.push("", tail);
       blankAfter = true;
     }
     return out.join("\n");

@@ -1232,10 +1232,11 @@ var mathTrimInlineSpaces = {
   defaultEnabled: true,
   apply: (input) => rewriteMathBodies(input, (body, block) => block || !body.trim() ? body : body.trim())
 };
-var INLINE_FORMULA_ALONE = /^\$([^$]+)\$[\s。，、；：！？.,;:!?]*$/;
+var FORMULA_TAIL_CONNECTOR = /^(?:和|与|及|以及|或者|或|还是|暨|and|or)[\s。，、；：！？.,;:!?]*$/i;
+var LEADING_INLINE_FORMULA = /^\$([^$]+)\$(.*)$/;
 var inlineFormulaToBlock = {
   id: "inline-formula-to-block",
-  description: "\u4E0A\u884C\uFF1A\u6574\u884C\u53EA\u6709\u4E00\u6761 $...$ \u884C\u5185\u516C\u5F0F\u65F6\uFF08\u884C\u5C3E\u5141\u8BB8\u6807\u70B9\uFF09\uFF0C\u6539\u5199\u6210 $$ \u5757\u7EA7\u516C\u5F0F\u5E76\u524D\u540E\u7559\u7A7A\u884C\u2014\u2014\u98DE\u4E66\u53EA\u5BF9\u5757\u7EA7\u516C\u5F0F\u5C45\u4E2D\uFF0C\u884C\u5185\u516C\u5F0F\u4F1A\u8DDF\u7740\u6B63\u6587\u6392\u7248\u3002\u53E5\u5B50\u4E2D\u95F4\u5939\u7740\u7684\u516C\u5F0F\u3001\u5217\u8868\u9879/\u8868\u683C/\u5F15\u7528/\u6807\u9898\u91CC\u7684\u516C\u5F0F\u90FD\u4E0D\u52A8\u3002",
+  description: "\u4E0A\u884C\uFF1A\u6574\u884C\u53EA\u6709\u4E00\u6761 $...$ \u884C\u5185\u516C\u5F0F\u65F6\uFF0C\u6539\u5199\u6210 $$ \u5757\u7EA7\u516C\u5F0F\u5E76\u524D\u540E\u7559\u7A7A\u884C\u2014\u2014\u98DE\u4E66\u53EA\u5BF9\u5757\u7EA7\u516C\u5F0F\u5C45\u4E2D\uFF0C\u884C\u5185\u516C\u5F0F\u4F1A\u8DDF\u7740\u6B63\u6587\u6392\u7248\u3002\u884C\u5C3E\u662F\u8FDE\u63A5\u8BCD\uFF08\u548C/\u4E0E/\u4EE5\u53CA/\u6216\u8005\u2026\uFF09\u65F6\uFF0C\u8FDE\u63A5\u8BCD\u53E6\u8D77\u4E00\u884C\uFF1B\u884C\u5C3E\u662F\u6807\u70B9\u6216\u5176\u4ED6\u6B63\u6587\uFF08\u5982\u300C$g_u$\u62C9\u5411\uFF1A\u300D\uFF09\u65F6\u6574\u884C\u4E0D\u52A8\uFF0C\u907F\u514D\u4E22\u6807\u70B9\u6216\u62C6\u6563\u53E5\u5B50\u3002\u5217\u8868\u9879/\u8868\u683C/\u5F15\u7528/\u6807\u9898\u91CC\u7684\u516C\u5F0F\u540C\u6837\u4E0D\u52A8\u3002",
   defaultEnabled: true,
   apply: (input) => {
     const lines = input.split("\n");
@@ -1267,13 +1268,21 @@ var inlineFormulaToBlock = {
         out.push(line);
         continue;
       }
-      const match = INLINE_FORMULA_ALONE.exec(line);
+      const match = LEADING_INLINE_FORMULA.exec(line);
       if (!match) {
+        out.push(line);
+        continue;
+      }
+      const tail = (match[2] ?? "").trim();
+      const connector = tail !== "" && FORMULA_TAIL_CONNECTOR.test(tail);
+      if (tail !== "" && !connector) {
         out.push(line);
         continue;
       }
       pushBlank();
       out.push("$$", match[1].trim(), "$$");
+      if (connector)
+        out.push("", tail);
       blankAfter = true;
     }
     return out.join("\n");
