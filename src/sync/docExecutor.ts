@@ -186,6 +186,8 @@ export async function executeDocPlan(
     stepIndex += 1;
     options.onProgress?.(message, stepIndex, totalSteps);
   };
+  /** 只刷新提示、不推进步数：给"等待飞书处理文档（第 N 次轮询）"这类过程信息用。 */
+  const reportProgress = (message: string) => options.onProgress?.(message, stepIndex, totalSteps);
 
   if (options.allowPush) {
     for (const entry of pushes) {
@@ -218,7 +220,11 @@ export async function executeDocPlan(
             newBlocks = updated.newBlocks;
             revisionId = updated.revisionId;
           } else {
-            const created = await createDocumentFromMarkdown(ctx.client, { title: decided.title, markdown: sent });
+            const created = await createDocumentFromMarkdown(ctx.client, {
+              title: decided.title,
+              markdown: sent,
+              onProgress: reportProgress,
+            });
             // 先建文档再挂到目录节点下：docs_ai 建出来的是云空间文档，要 move 进知识库
             await moveDocToWiki(ctx.client, ctx.spaceId, parentNode, created.documentId, "docx");
             documentId = created.documentId;

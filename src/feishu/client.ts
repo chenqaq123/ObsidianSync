@@ -9,6 +9,45 @@ export type Query = Record<string, string | number | boolean | undefined>;
 const AUTH_CODES = new Set([99991661, 99991663, 99991664, 99991668, 99991677, 20005]);
 const RETRY_CODES = new Set([99991400, 1061045, 233523001]);
 const MAX_ATTEMPTS = 4;
+/** Obsidian 的 requestUrl 没有超时参数，被服务端挂住就永远不 resolve——给每个请求一个响应预算。 */
+const REQUEST_TIMEOUT_MS = 60_000;
+const SLOW_REQUEST_TIMEOUT_MS = 5 * 60_000;
+const SLOW_PATH_PREFIX = "/open-apis/docs_ai/";
+
+/** 超时是"结果不确定"的错误，multipart 上传不能重试（否则远端会多出重复文件）。 */
+export class RequestTimeoutError extends Error {}
+
+let budgetOverrideForTest: number | undefined;
+
+/** 测试用：把响应预算压到很小，好在测试里复现"请求被服务端挂住"。 */
+export function setRequestBudgetForTest(ms: number | undefined): void {
+  budgetOverrideForTest = ms;
+}
+
+function requestBudget(path: string, multipart: boolean): number {
+  if (budgetOverrideForTest !== undefined) return budgetOverrideForTest;
+  return multipart || path.startsWith(SLOW_PATH_PREFIX) ? SLOW_REQUEST_TIMEOUT_MS : REQUEST_TIMEOUT_MS;
+}
+
+async function requestWithBudget(
+  options: Parameters<typeof requestUrl>[0],
+  budgetMs: number,
+): Promise<Awaited<ReturnType<typeof requestUrl>>> {
+  let timer: ReturnType<typeof setTimeout> | undefined;
+  try {
+    return await Promise.race([
+      requestUrl(options),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(
+          () => reject(new RequestTimeoutError(`超过 ${Math.round(budgetMs / 1000)} 秒没有响应`)),
+          budgetMs,
+        );
+      }),
+    ]);
+  } finally {
+    if (timer !== undefined) clearTimeout(timer);
+  }
+}
 
 export interface FeishuEnvelope<T> {
   code: number;
@@ -230,7 +269,10 @@ export class FeishuClient {
       }
 
       try {
-        const response = await requestUrl({ url, method, headers, body, throw: false });
+        const response = await requestWithBudget(
+          { url, method, headers, body, throw: false },
+          requestBudget(path, options.multipart !== undefined),
+        );
         const raw: RawResponse = {
           status: response.status,
           text: response.text,
@@ -258,6 +300,10 @@ export class FeishuClient {
         return raw;
       } catch (error) {
         lastError = error;
+        // multipart 的写请求结果不确定，超时后不重试，直接把失败抛出去
+        if (options.multipart && error instanceof RequestTimeoutError) {
+          throw new FeishuError(`${path} 请求超时：${String(error)}`, { endpoint: path });
+        }
         if (!options.multipart && attempt < MAX_ATTEMPTS) {
           const delay = Math.min(8000, 400 * 2 ** (attempt - 1)) + Math.floor(Math.random() * 200);
           this.log.debug(`${path} 网络异常，${delay}ms 后重试：${String(error)}`);

@@ -13,6 +13,7 @@ import { __setRequestUrlHandler, TFile } from "obsidian";
 import type { RequestUrlParam, RequestUrlResponse } from "obsidian";
 
 import { buildMarkdownContent } from "../src/feishu/docs";
+import { setRequestBudgetForTest } from "../src/feishu/client";
 import { applyRules, defaultRulesFile, normalizeRemoteImageUrls, RULES_PATH } from "../src/convert/rules";
 import type { RuleContext } from "../src/convert/rules";
 import { ROUNDTRIP_REPORT_PATH, SYNTAX_CHECKS, SYNTAX_SAMPLE, appendSyntaxSample } from "../src/roundtrip";
@@ -3524,8 +3525,30 @@ async function main(): Promise<void> {
     ok(childItems(forced.plan, "push").includes(rel), `强制重推应包含本笔记：${childItems(forced.plan, "push").join("|")}`);
     eq(formulaFake.counters.docsUpdate - updatesBefore, 1, "强制重推应真的写一次飞书");
 
+    // 请求被服务端挂住时不能永远等：超时按网络异常重试，最终报错并继续下一篇
+    const passThrough = formulaFake.handler;
+    __setRequestUrlHandler((options) =>
+      options.method === "PUT" && options.url.includes("/docs_ai/v1/documents/")
+        ? new Promise(() => {})
+        : passThrough(options),
+    );
+    setRequestBudgetForTest(100);
+    const hungStartedAt = Date.now();
+    console.log("\n=== 场景 55：请求被挂住（用强制重推触发 PUT）===");
+    const hung = await fh.engine.run({ mode: "push", forcePush: true, confirm: async () => "all" });
+    const hungMs = Date.now() - hungStartedAt;
+    setRequestBudgetForTest(undefined);
+    const hungFailures = hung.report.filter((entry) => !entry.ok);
+    ok(childItems(hung.plan, "push").includes(rel), "挂住那轮应把本笔记判成 push");
+    ok(hungFailures.length > 0, "挂住的请求应报失败，不能静默跳过");
+    ok(
+      hungFailures.some((entry) => /没有响应|请求超时/.test(entry.message ?? "")),
+      `失败原因应是超时：${hungFailures.map((entry) => entry.message).join(" | ")}`,
+    );
+    ok(hungMs < 30_000, `超时后应及时结束，实际 ${hungMs}ms`);
+
     __setRequestUrlHandler(fake.handler);
-    return "排版差异不回写、真实改动仍拉取、强制重推可用";
+    return "排版差异不回写、真实改动仍拉取、强制重推可用、挂住会超时报错";
   });
 
   // ---- 汇总

@@ -34,6 +34,34 @@ var API_BASE = "https://open.feishu.cn";
 var AUTH_CODES = /* @__PURE__ */ new Set([99991661, 99991663, 99991664, 99991668, 99991677, 20005]);
 var RETRY_CODES = /* @__PURE__ */ new Set([99991400, 1061045, 233523001]);
 var MAX_ATTEMPTS = 4;
+var REQUEST_TIMEOUT_MS = 6e4;
+var SLOW_REQUEST_TIMEOUT_MS = 5 * 6e4;
+var SLOW_PATH_PREFIX = "/open-apis/docs_ai/";
+var RequestTimeoutError = class extends Error {
+};
+var budgetOverrideForTest;
+function requestBudget(path, multipart) {
+  if (budgetOverrideForTest !== void 0)
+    return budgetOverrideForTest;
+  return multipart || path.startsWith(SLOW_PATH_PREFIX) ? SLOW_REQUEST_TIMEOUT_MS : REQUEST_TIMEOUT_MS;
+}
+async function requestWithBudget(options, budgetMs) {
+  let timer;
+  try {
+    return await Promise.race([
+      (0, import_obsidian.requestUrl)(options),
+      new Promise((_, reject) => {
+        timer = setTimeout(
+          () => reject(new RequestTimeoutError(`\u8D85\u8FC7 ${Math.round(budgetMs / 1e3)} \u79D2\u6CA1\u6709\u54CD\u5E94`)),
+          budgetMs
+        );
+      })
+    ]);
+  } finally {
+    if (timer !== void 0)
+      clearTimeout(timer);
+  }
+}
 var FeishuError = class extends Error {
   constructor(message, init) {
     super(message);
@@ -205,7 +233,10 @@ var FeishuClient = class {
         body = JSON.stringify(options.body);
       }
       try {
-        const response = await (0, import_obsidian.requestUrl)({ url, method, headers, body, throw: false });
+        const response = await requestWithBudget(
+          { url, method, headers, body, throw: false },
+          requestBudget(path, options.multipart !== void 0)
+        );
         const raw = {
           status: response.status,
           text: response.text,
@@ -231,6 +262,9 @@ var FeishuClient = class {
         return raw;
       } catch (error) {
         lastError = error;
+        if (options.multipart && error instanceof RequestTimeoutError) {
+          throw new FeishuError(`${path} \u8BF7\u6C42\u8D85\u65F6\uFF1A${String(error)}`, { endpoint: path });
+        }
         if (!options.multipart && attempt < MAX_ATTEMPTS) {
           const delay = Math.min(8e3, 400 * 2 ** (attempt - 1)) + Math.floor(Math.random() * 200);
           this.log.debug(`${path} \u7F51\u7EDC\u5F02\u5E38\uFF0C${delay}ms \u540E\u91CD\u8BD5\uFF1A${String(error)}`);
@@ -3801,6 +3835,7 @@ async function executeDocPlan(plan, ctx, options) {
     stepIndex += 1;
     options.onProgress?.(message, stepIndex, totalSteps);
   };
+  const reportProgress = (message) => options.onProgress?.(message, stepIndex, totalSteps);
   if (options.allowPush) {
     for (const entry of pushes) {
       steps.push(async () => {
@@ -3829,7 +3864,11 @@ async function executeDocPlan(plan, ctx, options) {
             newBlocks = updated.newBlocks;
             revisionId = updated.revisionId;
           } else {
-            const created = await createDocumentFromMarkdown(ctx.client, { title: decided.title, markdown: sent });
+            const created = await createDocumentFromMarkdown(ctx.client, {
+              title: decided.title,
+              markdown: sent,
+              onProgress: reportProgress
+            });
             await moveDocToWiki(ctx.client, ctx.spaceId, parentNode, created.documentId, "docx");
             documentId = created.documentId;
             newBlocks = created.newBlocks;
