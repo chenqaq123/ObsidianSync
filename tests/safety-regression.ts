@@ -8,10 +8,29 @@ import { uploadMarkdownToWiki } from "../src/feishu/files";
 import { PathFilter, assertSafeVaultPath } from "../src/sync/scanner";
 import { assertPlanCurrent, isEditorDirty, planFingerprint, prepareTarget, validateLocalPaths } from "../src/sync/guards";
 import { DEFAULT_SETTINGS, emptyState } from "../src/sync/types";
+import { Logger } from "../src/log";
 
 const logger = { debug() {}, info() {}, warn() {}, error() {} } as never;
 const response = (data: unknown, status = 200) => ({ status, text: JSON.stringify(data), arrayBuffer: new ArrayBuffer(0), headers: {} });
 afterEach(() => { __setRequestUrlHandler(undefined); setRequestBudgetForTest(undefined); });
+
+test("debug disabled does not emit note paths or write logs; errors are not duplicated", async () => {
+  const original = { debug: console.debug, log: console.log, warn: console.warn, error: console.error };
+  const messages: unknown[][] = [];
+  for (const level of ["debug", "log", "warn", "error"] as const) console[level] = (...args) => { messages.push(args); };
+  try {
+    const log = new Logger(() => { throw new Error("must not access vault when debug disabled"); }, () => false);
+    log.info("private-note.md");
+    log.debug("private-endpoint");
+    await log.flush();
+    assert.equal(messages.length, 0);
+    log.warn("warning");
+    log.error("failure");
+    assert.equal(messages.length, 2);
+  } finally {
+    Object.assign(console, original);
+  }
+});
 
 test("glob ** includes root files, ? never crosses a directory", () => {
   const filter = new PathFilter("**/private.md\na?b.md");

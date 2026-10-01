@@ -42,8 +42,10 @@ export class Logger {
 
   private write(level: string, message: string): void {
     const line = `${new Date().toISOString()} ${level} ${message}`;
-    console.log("[feishu-wiki-sync]", line);
-    if (this.verbose()) this.pending.push(line);
+    if (this.verbose()) {
+      if (level !== "WARN" && level !== "ERROR") console.debug("[feishu-wiki-sync]", line);
+      this.pending.push(line);
+    }
   }
 
   async flush(): Promise<void> {

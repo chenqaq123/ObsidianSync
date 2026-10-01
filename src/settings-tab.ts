@@ -1,5 +1,5 @@
 import type { App, Plugin } from "obsidian";
-import { FuzzySuggestModal, Notice, PluginSettingTab, Setting, normalizePath } from "obsidian";
+import { FileSystemAdapter, FuzzySuggestModal, Notice, PluginSettingTab, Setting, normalizePath } from "obsidian";
 import type { AuthManager } from "./feishu/auth";
 import type { WikiSpace } from "./feishu/wiki";
 import type { Logger } from "./log";
@@ -65,7 +65,6 @@ export class FeishuWikiSyncSettingTab extends PluginSettingTab {
     const settings = this.host.settings;
     containerEl.empty();
 
-    containerEl.createEl("h2", { text: "Feishu Wiki Sync" });
     containerEl.createEl("p", {
       cls: "setting-item-description",
       text: "将当前仓库的 Markdown 笔记与飞书知识库双向同步。文档模式便于在飞书阅读与编辑；文件镜像模式保留原始 Markdown。",
@@ -80,7 +79,7 @@ export class FeishuWikiSyncSettingTab extends PluginSettingTab {
   }
 
   private renderSyncMode(containerEl: HTMLElement, settings: PluginSettings): void {
-    containerEl.createEl("h3", { text: "同步模式" });
+    new Setting(containerEl).setName("同步模式").setHeading();
 
     new Setting(containerEl)
       .setName("笔记同步形态")
@@ -115,7 +114,7 @@ export class FeishuWikiSyncSettingTab extends PluginSettingTab {
   }
 
   private renderRules(containerEl: HTMLElement): void {
-    containerEl.createEl("h3", { text: "转换规则（文档模式）" });
+    new Setting(containerEl).setName("转换规则（文档模式）").setHeading();
     containerEl.createEl("p", {
       cls: "setting-item-description",
       text:
@@ -132,9 +131,10 @@ export class FeishuWikiSyncSettingTab extends PluginSettingTab {
           const path = normalizePath(RULES_PATH);
           try {
             if (!(await adapter.exists(path))) await writeRulesFile(adapter, defaultRulesFile());
-            const app = this.host.app as App & { openWithDefaultApp?: (filePath: string) => Promise<void> };
-            if (typeof app.openWithDefaultApp === "function") {
-              await app.openWithDefaultApp(path);
+            if (adapter instanceof FileSystemAdapter) {
+              const { shell } = require("electron") as { shell: { openPath(path: string): Promise<string> } };
+              const error = await shell.openPath(adapter.getFullPath(path));
+              if (error) throw new Error(error);
             } else {
               new Notice(`请在文件系统里打开 ${path}`);
             }
@@ -167,7 +167,7 @@ export class FeishuWikiSyncSettingTab extends PluginSettingTab {
   }
 
   private renderAuth(containerEl: HTMLElement, settings: PluginSettings): void {
-    containerEl.createEl("h3", { text: "飞书应用与授权" });
+    new Setting(containerEl).setName("飞书应用与授权").setHeading();
     containerEl.createEl("p", {
       cls: "setting-item-description",
       text: "需要一个飞书企业自建应用。默认授权范围：drive:drive、wiki:wiki、docx:document、docs:document.media:download、docs:document.media:upload；详见 README 的配置步骤。用「用户授权」时还要在开放平台登记下方重定向地址，并包含 offline_access 以自动续期。",
@@ -287,7 +287,7 @@ export class FeishuWikiSyncSettingTab extends PluginSettingTab {
   }
 
   private renderTarget(containerEl: HTMLElement, settings: PluginSettings): void {
-    containerEl.createEl("h3", { text: "同步目标" });
+    new Setting(containerEl).setName("同步目标").setHeading();
     containerEl.createEl("p", {
       cls: "setting-item-description",
       text: "本地 vault 根目录 ↔ 知识空间。只有 .md 文件参与同步；同步会在知识库里按本地目录层级创建页面。",
@@ -349,7 +349,7 @@ export class FeishuWikiSyncSettingTab extends PluginSettingTab {
   }
 
   private renderBehaviour(containerEl: HTMLElement, settings: PluginSettings): void {
-    containerEl.createEl("h3", { text: "同步行为" });
+    new Setting(containerEl).setName("同步行为").setHeading();
 
     new Setting(containerEl)
       .setName("附件目录")
@@ -437,7 +437,7 @@ export class FeishuWikiSyncSettingTab extends PluginSettingTab {
         }),
       );
 
-    containerEl.createEl("h3", { text: "删除传播（默认关闭）" });
+    new Setting(containerEl).setName("删除传播（默认关闭）").setHeading();
     containerEl.createEl("p", {
       cls: "setting-item-description",
       text:
@@ -507,7 +507,7 @@ export class FeishuWikiSyncSettingTab extends PluginSettingTab {
   }
 
   private renderState(containerEl: HTMLElement, settings: PluginSettings): void {
-    containerEl.createEl("h3", { text: "状态" });
+    new Setting(containerEl).setName("状态").setHeading();
     const records = Object.keys(settings.syncMode === "doc" ? settings.state.docRecords : settings.state.records).length;
     const folders = Object.keys(settings.state.folders).length;
 
@@ -536,7 +536,7 @@ export class FeishuWikiSyncSettingTab extends PluginSettingTab {
         }),
       );
 
-    containerEl.createEl("h3", { text: "已知边界" });
+    new Setting(containerEl).setName("已知边界").setHeading();
     const list = containerEl.createEl("ul", { cls: "setting-item-description" });
     list.createEl("li", { text: "飞书不接受 0 字节 Markdown，空文件在文件镜像模式下会被跳过并提示；文档模式下空笔记也会同步（正文为空，飞书侧只有标题）。" });
     list.createEl("li", { text: "文档模式会上传本地图片（写进文档的图片块）并下载飞书里的图片到附件目录；规则文件里 image-upload / image-download 可关。文件镜像模式不做图片处理，图片只是笔记里的文本。" });

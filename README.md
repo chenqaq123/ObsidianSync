@@ -1,8 +1,19 @@
 # Feishu Wiki Sync
 
-将 Obsidian 仓库中的 Markdown 笔记与飞书知识库双向同步。当前维护版 **0.1.1**，基于已可用的 `v0.1.0` 修复整理；已有标签不变。
+将 Obsidian 仓库中的 Markdown 笔记与飞书知识库双向同步。当前维护版 **0.1.2**；[下载安装包](https://github.com/chenqaq123/ObsidianSync/releases/tag/0.1.2)。
 
-仅支持 **Obsidian 桌面版 1.4.0 及以上**，连接中国版飞书（`open.feishu.cn`）。当前不包含 Notion、飞书多维表格或国际版 Lark 接入，也没有发布到 Obsidian 社区插件市场。
+仅支持 **Obsidian 桌面版 1.13.7 及以上**，连接中国版飞书（`open.feishu.cn`）。当前不包含 Notion、飞书多维表格或国际版 Lark 接入，也没有发布到 Obsidian 社区插件市场。
+
+从 0.1.2 起，以本轮核验的官方稳定版 1.13.7 作为支持基线，不再承诺尚未验证的 1.4.0 兼容性。历史版本及其标签保留。
+
+## 隐私与网络访问
+
+- **账户与费用**：插件本身免费，无广告或付费解锁；需要飞书账号、企业自建应用及目标知识库的访问权限。飞书自身的服务费用、容量和 API 配额由飞书决定。
+- **联网范围**：`accounts.feishu.cn` 用于浏览器登录、授权和刷新令牌；`open.feishu.cn` 用于知识库、文档、文件及图片 API。下载可能由飞书重定向至其素材服务。文档中的外部图片链接会随正文发送给飞书，飞书可能按其规则加载这些链接。
+- **上传内容**：同步范围内笔记的标题、目录与正文会传给所配置的飞书知识库；文档模式还上传笔记引用的本地图片。排除规则可缩小范围；第一次同步前应检查预览。文档会由飞书云服务处理和存储，包括文档模式使用的 `docs_ai` 接口。
+- **本地存储**：App Secret、用户令牌和同步映射通过 Obsidian 插件配置保存，默认位置为 `.obsidian/plugins/feishu-wiki-sync/data.json`，未额外加密。自定义配置目录时，`data.json` 随 Obsidian 的配置目录存放；规则、冲突副本和调试日志仍位于仓库内 `.obsidian/feishu-sync/`。日志可能含笔记路径和接口错误信息，分享前请检查。
+- **回调和文件访问**：自动授权临时监听本机回调端口，完成、取消或超时后关闭。插件运行时读写仓库内的笔记、附件与上述配置文件，不主动扫描仓库外的文件；“打开规则文件”仅将仓库内的规则文件交给系统默认程序。
+- **数据收集**：插件没有开发者后台，不收集或发送遥测、统计及广告数据；不会自行安装或更新插件或依赖。联网同步仅用于用户配置的飞书服务。撤销本地授权不会删除飞书中已同步的文档。
 
 ## 选择同步模式
 
@@ -17,7 +28,7 @@
 
 ### 使用构建好的安装包
 
-1. 解压 `feishu-wiki-sync-0.1.1.zip`，得到 `feishu-wiki-sync` 文件夹。
+1. 从 [0.1.2 Release](https://github.com/chenqaq123/ObsidianSync/releases/tag/0.1.2) 下载并解压 `feishu-wiki-sync-0.1.2.zip`，得到 `feishu-wiki-sync` 文件夹。
 2. 关闭 Obsidian，将该文件夹放入目标仓库的 `.obsidian/plugins/` 下。最终应为：
 
    ```text
@@ -54,11 +65,11 @@ dist/
 │   ├── main.js
 │   ├── manifest.json
 │   └── styles.css
-├── feishu-wiki-sync-0.1.1.zip
+├── feishu-wiki-sync-0.1.2.zip
 └── SHA256SUMS
 ```
 
-安装包只包含三个运行文件，不包含源码、测试数据、账号或笔记。`SHA256SUMS` 提供文件和压缩包校验值。只需编译时运行 `npm run build`，输出安装目录并更新仓库根目录的 `main.js`。
+安装包只包含三个运行文件，不包含 TypeScript 源码、测试数据、账号或笔记。`main.js` 为可审阅的 JavaScript，内含项目及第三方许可声明。`SHA256SUMS` 提供文件和压缩包校验值。只需编译时运行 `npm run build`，输出安装目录并更新仓库根目录的 `main.js`。
 
 也可在关闭 Obsidian 后直接安装到本地仓库：
 
@@ -192,6 +203,13 @@ npm run typecheck    # TypeScript 类型检查
 npm test             # 转换规则、运行安全与同步场景测试
 npm run build        # 生产构建
 npm run package      # 全部检查 + 生产构建 + ZIP + 校验值
+npm run check:release -- 0.1.2  # 检查拟发布标签，不能带 v 前缀
 ```
 
 所有自动测试使用固定合成笔记、临时目录与模拟飞书服务，不依赖个人 Work 仓库，也不访问真实飞书账号。临时数据在测试结束后清理。本次维护的修复与验证说明见 [v1 审查记录](docs/review-v1-2026-10-01.md)。历史线上公式验证记录不能替代新版本的真实账号验收。
+
+社区提交准备及本轮兼容性验证见 [社区上架说明](docs/community-submission.md)。发布时必须让 GitHub Release 标签与 `manifest.json` 的 `version` 完全一致（例如 `0.1.2`），并分别上传 `main.js`、`manifest.json`、`styles.css`；ZIP 供手动安装使用，不能替代这三个附件。以后更新需同步修改 `package.json`、锁文件、`manifest.json` 和 `versions.json`，重新构建后创建新版本。
+
+## 许可证与致谢
+
+本项目采用 [MIT License](LICENSE)，是独立社区插件，与 Obsidian、飞书或 Lark 无官方隶属关系。飞书文档和图片接口实现参考了 [Lark CLI](https://github.com/larksuite/cli) 的请求格式与素材处理流程；上游版权及许可见 [第三方声明](THIRD_PARTY_NOTICES.md)，声明同时保留在发布的 `main.js` 中。构建工具和类型声明不打入插件运行文件。

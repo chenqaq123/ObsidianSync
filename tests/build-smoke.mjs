@@ -15,6 +15,7 @@ for (const file of readdirSync(assets)) assert.deepEqual(readFileSync(path.join(
 const code = readFileSync(path.join(assets, "main.js"), "utf8");
 assert.ok(!code.includes("sourceMappingURL="), "production bundle must not embed a source map");
 assert.ok(!code.includes("roundtrip-probe"), "experimental command must not ship");
+assert.ok(code.includes("Copyright (c) 2026 cgx") && code.includes("Copyright (c) 2026 Lark Technologies Pte. Ltd."), "licenses must survive standalone main.js downloads");
 const notices = [];
 class Base {}
 class Notice { constructor(message) { notices.push(message); } hide() {} setMessage() {} }
@@ -28,6 +29,8 @@ class Plugin {
   addCommand(command) { this.commands.push(command); }
   addSettingTab() {}
   addRibbonIcon() {}
+  registerDomEvent() {}
+  registerInterval(id) { return id; }
 }
 const hostRequire = createRequire(import.meta.url);
 const exports = {};

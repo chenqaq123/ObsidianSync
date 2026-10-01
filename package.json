@@ -1,6 +1,7 @@
 {
   "name": "feishu-wiki-sync",
-  "version": "0.1.1",
+  "version": "0.1.2",
+  "license": "MIT",
   "description": "Obsidian plugin for bidirectional sync with Feishu Wiki documents and Markdown files",
   "private": true,
   "type": "module",
@@ -13,14 +14,15 @@
     "install:vault": "node scripts/install-to-vault.mjs",
     "test": "npm run test:rules && npm run test:safety && npm run test:e2e",
     "test:safety": "node tests/run-safety.mjs",
-    "check": "npm run typecheck && npm test",
+    "check:release": "node scripts/check-release.mjs",
+    "check": "npm run check:release && npm run typecheck && npm test",
     "package": "npm run check && npm run build && node tests/build-smoke.mjs && node scripts/package.mjs",
     "preinstall:vault": "npm run build"
   },
   "devDependencies": {
     "@types/node": "^20.11.0",
     "esbuild": "^0.20.0",
-    "obsidian": "^1.4.11",
+    "obsidian": "1.13.1",
     "typescript": "^5.3.3"
   },
   "engines": {

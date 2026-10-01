@@ -75,7 +75,7 @@ export default class FeishuWikiSyncPlugin extends Plugin implements SettingsHost
 
     this.statusBar = this.addStatusBarItem();
     this.statusBar.addClass("mod-clickable");
-    this.statusBar.onClickEvent(() => void this.runSync("both"));
+    this.registerDomEvent(this.statusBar, "click", () => void this.runSync("both"));
     this.updateStatusBar();
 
     this.addSettingTab(new FeishuWikiSyncSettingTab(this.app, this));
@@ -93,11 +93,12 @@ export default class FeishuWikiSyncPlugin extends Plugin implements SettingsHost
     this.addRibbonIcon("refresh-cw", "Feishu Wiki Sync：双向同步", () => void this.runSync("both"));
 
     this.refreshAutoSync();
-    this.app.workspace.onLayoutReady(() => this.updateStatusBar());
   }
 
   onunload(): void {
     if (this.autoSyncHandle !== null) window.clearInterval(this.autoSyncHandle);
+    this.autoSyncHandle = null;
+    this.statusBar = null;
     this.auth?.cancelAuthorization();
   }
 
@@ -135,11 +136,11 @@ export default class FeishuWikiSyncPlugin extends Plugin implements SettingsHost
     }
     const minutes = this.settings.autoSyncMinutes;
     if (!minutes || minutes <= 0) return;
-    this.autoSyncHandle = window.setInterval(() => {
+    this.autoSyncHandle = this.registerInterval(window.setInterval(() => {
       if (this.isSyncBusy()) return;
       if (this.settings.authMode === "user" && !this.auth.hasValidUserGrant()) return;
       void this.runSync("both", { quiet: true });
-    }, minutes * 60_000);
+    }, minutes * 60_000));
   }
 
   async startAuthorization(): Promise<void> {

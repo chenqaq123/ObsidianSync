@@ -1,56 +1,5309 @@
-"use strict";var $t=Object.defineProperty;var io=Object.getOwnPropertyDescriptor;var so=Object.getOwnPropertyNames;var ao=Object.prototype.hasOwnProperty;var co=(n,e)=>{for(var t in e)$t(n,t,{get:e[t],enumerable:!0})},lo=(n,e,t,o)=>{if(e&&typeof e=="object"||typeof e=="function")for(let r of so(e))!ao.call(n,r)&&r!==t&&$t(n,r,{get:()=>e[r],enumerable:!(o=io(e,r))||o.enumerable});return n};var uo=n=>lo($t({},"__esModule",{value:!0}),n);var Lr={};co(Lr,{default:()=>vt});module.exports=uo(Lr);var j=require("obsidian"),tn=require("crypto");var sn=require("obsidian"),_t="https://open.feishu.cn",an=new Set([99991661,99991663,99991664,99991668,99991677,20005]),ho=new Set([99991400,1061045,233523001]),Rt=4,cn=6e4,fo=5*6e4,po="/open-apis/docs_ai/",We=class extends Error{},xt;function go(n,e){return xt!==void 0?xt:e||n.startsWith(po)?fo:cn}async function Ve(n,e=xt??cn){let t;try{return await Promise.race([(0,sn.requestUrl)(n),new Promise((o,r)=>{t=setTimeout(()=>r(new We(`\u8D85\u8FC7 ${Math.round(e/1e3)} \u79D2\u6CA1\u6709\u54CD\u5E94`)),e)})])}finally{t!==void 0&&clearTimeout(t)}}var N=class extends Error{constructor(e,t){super(e),this.name="FeishuError",this.code=t.code??-1,this.status=t.status??0,this.endpoint=t.endpoint,this.logId=t.logId,this.authRelated=this.status===401||an.has(this.code)}describe(){let e=[this.message];return this.code!==-1&&e.push(`code=${this.code}`),this.status&&e.push(`HTTP ${this.status}`),this.logId&&e.push(`log_id=${this.logId}`),e.join(" \xB7 ")}},ee=class extends Error{constructor(e="\u98DE\u4E66\u6388\u6743\u5DF2\u5931\u6548\uFF0C\u8BF7\u5728\u63D2\u4EF6\u8BBE\u7F6E\u91CC\u91CD\u65B0\u6388\u6743"){super(e),this.name="FeishuAuthRequiredError"}};function mo(n,e){let t=new URL(n.startsWith("http")?n:`${_t}${n}`);if(e)for(let[o,r]of Object.entries(e))r!==void 0&&t.searchParams.set(o,String(r));return t.toString()}function yo(n){return encodeURIComponent(n)}function L(n){return yo(n)}function wo(n){let e=n.reduce((r,i)=>r+i.byteLength,0),t=new Uint8Array(e),o=0;for(let r of n)t.set(r,o),o+=r.byteLength;return t}function on(n){return n.replace(/"/g,'\\"').replace(/\r/g,"").replace(/\n/g," ")}function ko(n){return n.replace(/\r/g,"").replace(/\n/g," ")}function Po(n){let e=`----obsidianfeishu${Math.random().toString(16).slice(2)}${Date.now().toString(16)}`,t=new TextEncoder,o=[];for(let[r,i]of Object.entries(n.fields))o.push(t.encode(`--${e}\r
-Content-Disposition: form-data; name="${on(r)}"\r
+/*!
+MIT License
+
+Copyright (c) 2026 cgx
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+
+# Third-party notices
+
+The Feishu document and image interoperability implementation references
+Lark CLI (https://github.com/larksuite/cli), especially its `shortcuts/doc`
+implementation and document format references. The TypeScript implementation
+in this repository adapts those request formats and image placeholder/binding
+steps; it does not bundle or execute the CLI. Its upstream license is retained
+below. Plugin-specific conversion rules and sync behavior differ from the CLI.
+
+Source: https://github.com/larksuite/cli/blob/main/LICENSE
+
+MIT License
+
+Copyright (c) 2026 Lark Technologies Pte. Ltd.
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.
+
+Obsidian and Electron are supplied by the host application. Build tools and
+type declarations are development dependencies, recorded in package-lock.json;
+they are not distributed in the plugin bundle.
+
+*/
+"use strict";
+var __defProp = Object.defineProperty;
+var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+var __getOwnPropNames = Object.getOwnPropertyNames;
+var __hasOwnProp = Object.prototype.hasOwnProperty;
+var __export = (target, all) => {
+  for (var name in all)
+    __defProp(target, name, { get: all[name], enumerable: true });
+};
+var __copyProps = (to, from, except, desc) => {
+  if (from && typeof from === "object" || typeof from === "function") {
+    for (let key of __getOwnPropNames(from))
+      if (!__hasOwnProp.call(to, key) && key !== except)
+        __defProp(to, key, { get: () => from[key], enumerable: !(desc = __getOwnPropDesc(from, key)) || desc.enumerable });
+  }
+  return to;
+};
+var __toCommonJS = (mod) => __copyProps(__defProp({}, "__esModule", { value: true }), mod);
+
+// src/main.ts
+var main_exports = {};
+__export(main_exports, {
+  default: () => FeishuWikiSyncPlugin
+});
+module.exports = __toCommonJS(main_exports);
+var import_obsidian12 = require("obsidian");
+var import_crypto2 = require("crypto");
+
+// src/feishu/client.ts
+var import_obsidian = require("obsidian");
+var API_BASE = "https://open.feishu.cn";
+var AUTH_CODES = /* @__PURE__ */ new Set([99991661, 99991663, 99991664, 99991668, 99991677, 20005]);
+var RETRY_CODES = /* @__PURE__ */ new Set([99991400, 1061045, 233523001]);
+var MAX_ATTEMPTS = 4;
+var REQUEST_TIMEOUT_MS = 6e4;
+var SLOW_REQUEST_TIMEOUT_MS = 5 * 6e4;
+var SLOW_PATH_PREFIX = "/open-apis/docs_ai/";
+var RequestTimeoutError = class extends Error {
+};
+var budgetOverrideForTest;
+function requestBudget(path, multipart) {
+  if (budgetOverrideForTest !== void 0)
+    return budgetOverrideForTest;
+  return multipart || path.startsWith(SLOW_PATH_PREFIX) ? SLOW_REQUEST_TIMEOUT_MS : REQUEST_TIMEOUT_MS;
+}
+async function requestWithBudget(options, budgetMs = budgetOverrideForTest ?? REQUEST_TIMEOUT_MS) {
+  let timer;
+  try {
+    return await Promise.race([
+      (0, import_obsidian.requestUrl)(options),
+      new Promise((_, reject) => {
+        timer = setTimeout(
+          () => reject(new RequestTimeoutError(`\u8D85\u8FC7 ${Math.round(budgetMs / 1e3)} \u79D2\u6CA1\u6709\u54CD\u5E94`)),
+          budgetMs
+        );
+      })
+    ]);
+  } finally {
+    if (timer !== void 0)
+      clearTimeout(timer);
+  }
+}
+var FeishuError = class extends Error {
+  constructor(message, init) {
+    super(message);
+    this.name = "FeishuError";
+    this.code = init.code ?? -1;
+    this.status = init.status ?? 0;
+    this.endpoint = init.endpoint;
+    this.logId = init.logId;
+    this.authRelated = this.status === 401 || AUTH_CODES.has(this.code);
+  }
+  describe() {
+    const parts = [this.message];
+    if (this.code !== -1)
+      parts.push(`code=${this.code}`);
+    if (this.status)
+      parts.push(`HTTP ${this.status}`);
+    if (this.logId)
+      parts.push(`log_id=${this.logId}`);
+    return parts.join(" \xB7 ");
+  }
+};
+var FeishuAuthRequiredError = class extends Error {
+  constructor(message = "\u98DE\u4E66\u6388\u6743\u5DF2\u5931\u6548\uFF0C\u8BF7\u5728\u63D2\u4EF6\u8BBE\u7F6E\u91CC\u91CD\u65B0\u6388\u6743") {
+    super(message);
+    this.name = "FeishuAuthRequiredError";
+  }
+};
+function buildUrl(path, query) {
+  const url = new URL(path.startsWith("http") ? path : `${API_BASE}${path}`);
+  if (query) {
+    for (const [key, value] of Object.entries(query)) {
+      if (value === void 0)
+        continue;
+      url.searchParams.set(key, String(value));
+    }
+  }
+  return url.toString();
+}
+function encodeSegment(segment) {
+  return encodeURIComponent(segment);
+}
+function pathSegment(segment) {
+  return encodeSegment(segment);
+}
+function concatChunks(chunks) {
+  const total = chunks.reduce((sum, chunk) => sum + chunk.byteLength, 0);
+  const merged = new Uint8Array(total);
+  let offset = 0;
+  for (const chunk of chunks) {
+    merged.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return merged;
+}
+function escapeMultipartValue(value) {
+  return value.replace(/"/g, '\\"').replace(/\r/g, "").replace(/\n/g, " ");
+}
+function sanitizeMultipartFieldValue(value) {
+  return value.replace(/\r/g, "").replace(/\n/g, " ");
+}
+function buildMultipart(spec) {
+  const boundary = `----obsidianfeishu${Math.random().toString(16).slice(2)}${Date.now().toString(16)}`;
+  const encoder = new TextEncoder();
+  const chunks = [];
+  for (const [name, value] of Object.entries(spec.fields)) {
+    chunks.push(
+      encoder.encode(`--${boundary}\r
+Content-Disposition: form-data; name="${escapeMultipartValue(name)}"\r
 \r
-${ko(i)}\r
-`));return o.push(t.encode(`--${e}\r
-Content-Disposition: form-data; name="file"; filename="${on(n.file.name)}"\r
+${sanitizeMultipartFieldValue(value)}\r
+`)
+    );
+  }
+  chunks.push(
+    encoder.encode(
+      `--${boundary}\r
+Content-Disposition: form-data; name="file"; filename="${escapeMultipartValue(spec.file.name)}"\r
 Content-Type: application/octet-stream\r
 \r
-`)),o.push(new Uint8Array(n.file.data)),o.push(t.encode(`\r
---${e}--\r
-`)),{body:wo(o).buffer,contentType:`multipart/form-data; boundary=${e}`}}function qe(n){if(n)try{let e=JSON.parse(n);return typeof e=="object"&&e!==null?e:void 0}catch{return}}function rn(n){return new Promise(e=>window.setTimeout(e,n))}var ke=class{constructor(e,t){this.getToken=e;this.log=t}async json(e,t,o={}){let r=await this.send(e,t,o);if(r.status>=400||r.payload&&r.payload.code!==0)throw this.buildError(t,r);let i=r.payload;if(!i)throw new N(`${t} \u8FD4\u56DE\u4E86\u975E JSON \u54CD\u5E94\uFF08HTTP ${r.status}\uFF09\uFF1A${(r.text||"").slice(0,120)}`,{status:r.status,endpoint:t});return i.data??i}async binary(e,t){return(await this.binaryResponse(e,t)).data}async binaryResponse(e,t){let o=await this.send("GET",e,{query:t});if(o.status<200||o.status>=300)throw this.buildError(e,o);let r=o.payload;if(r&&typeof r.code=="number"&&r.code!==0)throw this.buildError(e,o);let i=o.headers??{},s=Object.keys(i).find(d=>d.toLowerCase()==="content-type");return{data:o.arrayBuffer,headers:i,contentType:s?i[s]:void 0}}buildError(e,t){let o=t.payload,r=typeof o?.code=="number"?o.code:void 0,i=typeof o?.msg=="string"&&o.msg||(t.text||"").slice(0,300)||"\u8BF7\u6C42\u5931\u8D25";return new N(`${e} \u8FD4\u56DE\u9519\u8BEF\uFF1A${i}`,{code:r,status:t.status,endpoint:e,logId:typeof o?.log_id=="string"?o.log_id:void 0})}async send(e,t,o){let r=mo(t,o.query),i,s=!1,d=e==="GET"||t.endsWith("/fetch")||t==="/open-apis/drive/v1/metas/batch_query";for(let a=1;a<=Rt;a+=1){let u,h;try{u={Authorization:`Bearer ${await this.getToken(s)}`},s=!1}catch(f){throw f}if(o.multipart){let f=Po(o.multipart);u["Content-Type"]=f.contentType,h=f.body}else o.body!==void 0&&(u["Content-Type"]="application/json; charset=utf-8",h=JSON.stringify(o.body));try{let f=await Ve({url:r,method:e,headers:u,body:h,throw:!1},go(t,o.multipart!==void 0)),g={status:f.status,text:f.text,arrayBuffer:f.arrayBuffer,headers:f.headers??{},payload:qe(f.text)},$=typeof g.payload?.code=="number"?g.payload.code:void 0;if((g.status===401||$!==void 0&&an.has($))&&a<2){this.log.debug(`${t} \u547D\u4E2D\u9274\u6743\u9519\u8BEF\uFF0C\u5237\u65B0 token \u540E\u91CD\u8BD5`),s=!0;continue}if((g.status===429||$!==void 0&&ho.has($)||g.status>=500&&d)&&a<Rt){let M=Math.min(8e3,400*2**(a-1))+Math.floor(Math.random()*200);this.log.debug(`${t} \u547D\u4E2D\u53EF\u91CD\u8BD5\u9519\u8BEF\uFF08status=${g.status} code=${$}\uFF09\uFF0C${M}ms \u540E\u91CD\u8BD5`),await rn(M);continue}return g}catch(f){if(i=f,!d){let g=f instanceof We?"\u8BF7\u6C42\u8D85\u65F6":"\u5199\u8BF7\u6C42\u7ED3\u679C\u4E0D\u786E\u5B9A";throw new N(`${t} ${g}\uFF1A${String(f)}`,{endpoint:t})}if(d&&a<Rt){let g=Math.min(8e3,400*2**(a-1))+Math.floor(Math.random()*200);this.log.debug(`${t} \u7F51\u7EDC\u5F02\u5E38\uFF0C${g}ms \u540E\u91CD\u8BD5\uFF1A${String(f)}`),await rn(g);continue}}}throw new N(`${t} \u8BF7\u6C42\u5931\u8D25\uFF1A${String(i)}`,{endpoint:t})}};var To="https://accounts.feishu.cn/open-apis/authen/v1/authorize",bo="https://accounts.feishu.cn/oauth/v3/token",It=12e4;function So(n,e){let r=(n===void 0?void 0:{20010:"\u5F53\u524D\u98DE\u4E66\u8D26\u53F7\u4E0D\u5728\u8FD9\u4E2A\u5E94\u7528\u7684\u53EF\u7528\u8303\u56F4\u5185\uFF1A\u8BF7\u5230\u5F00\u53D1\u8005\u540E\u53F0\u7684\u300C\u5E94\u7528\u53D1\u5E03 \u2192 \u7248\u672C\u7BA1\u7406\u4E0E\u53D1\u5E03\u300D\u628A\u53EF\u7528\u8303\u56F4\u8BBE\u4E3A\u5168\u5458\u6216\u5305\u542B\u4F60\u81EA\u5DF1\uFF0C\u5E76\u53D1\u5E03\u7248\u672C",20027:"\u8BF7\u6C42\u4E86\u5E94\u7528\u5C1A\u672A\u5F00\u901A\u7684\u6743\u9650\uFF1A\u8BF7\u5230\u5F00\u53D1\u8005\u540E\u53F0\u300C\u6743\u9650\u7BA1\u7406\u300D\u5F00\u901A drive:drive\u3001wiki:wiki\u3001docs:document.media:download\u3001offline_access\uFF0C\u5E76\u786E\u8BA4\u63D2\u4EF6\u91CC\u7684\u6388\u6743\u8303\u56F4\u4E0E\u4E4B\u4E00\u81F4",20029:"\u91CD\u5B9A\u5411 URL \u4E0D\u5339\u914D\uFF1A\u8BF7\u786E\u8BA4\u5F00\u53D1\u8005\u540E\u53F0\u300C\u5B89\u5168\u8BBE\u7F6E \u2192 \u91CD\u5B9A\u5411 URL\u300D\u91CC\u767B\u8BB0\u7684\u5730\u5740\u4E0E\u63D2\u4EF6\u8BBE\u7F6E\u91CC\u7684\u5B8C\u5168\u4E00\u81F4"}[n])??(/revoked|invalid_grant/i.test(e)?"refresh token \u4E00\u6B21\u6027\u6709\u6548\uFF1A\u901A\u5E38\u662F\u540C\u4E00\u4E2A\u98DE\u4E66\u5E94\u7528\u5728\u522B\u5904\uFF08\u53E6\u4E00\u53F0\u8BBE\u5907\u3001\u53E6\u4E00\u4E2A Obsidian \u5B9E\u4F8B\uFF0C\u6216\u547D\u4EE4\u884C\u5DE5\u5177\uFF09\u5237\u65B0\u8FC7 token\uFF0C\u5BFC\u81F4\u8FD9\u91CC\u8FD9\u4EFD\u88AB\u4F5C\u5E9F\u3002\u91CD\u65B0\u6388\u6743\u5373\u53EF":void 0);return r?`${e}\uFF08${r}\uFF09`:e}function vo(){let n=globalThis.require;if(!n)return null;try{return n("http")}catch{return null}}function Et(n){let e=globalThis.require;try{let t=e?.("electron");if(t?.shell?.openExternal){t.shell.openExternal(n);return}}catch{}window.open(n)}var Ge=class{constructor(e,t,o,r){this.config=e;this.readTokens=t;this.writeTokens=o;this.log=r}hasValidUserGrant(){let e=this.readTokens();return e?.refreshToken?e.refreshExpiresAt>Date.now():!1}async getToken(e=!1){let t=this.config();if(!t.appId||!t.appSecret)throw new ee("\u8BF7\u5148\u5728\u63D2\u4EF6\u8BBE\u7F6E\u91CC\u586B\u5199\u98DE\u4E66\u5E94\u7528\u7684 App ID \u4E0E App Secret");return t.mode==="tenant"?this.tenantToken(e):this.userToken(e)}async tenantToken(e){let t=Date.now(),o=this.config(),r=`${o.appId}:${o.appSecret}`;if(!e&&this.tenantKey===r&&this.tenant&&this.tenant.expiresAt-It>t)return this.tenant.token;let i=await Ve({url:`${_t}/open-apis/auth/v3/tenant_access_token/internal`,method:"POST",headers:{"Content-Type":"application/json; charset=utf-8"},body:JSON.stringify({app_id:o.appId,app_secret:o.appSecret}),throw:!1}),s=qe(i.text);if(i.status>=400||!s||s.code!==0||!s.tenant_access_token)throw new ee(`\u83B7\u53D6 tenant_access_token \u5931\u8D25\uFF1A${s?.msg??`HTTP ${i.status}`}`);let d=s.expire??7200;return this.tenant={token:s.tenant_access_token,expiresAt:Date.now()+d*1e3},this.tenantKey=r,this.tenant.token}async userToken(e){if(this.userRefresh)return this.userRefresh;let t=this.readTokens();if(!t?.refreshToken)throw new ee("\u5C1A\u672A\u5B8C\u6210\u7528\u6237\u6388\u6743\uFF0C\u8BF7\u5728\u63D2\u4EF6\u8BBE\u7F6E\u91CC\u70B9\u51FB\u300C\u6388\u6743\u98DE\u4E66\u8D26\u53F7\u300D");let o=Date.now();if(!e&&t.accessToken&&t.accessExpiresAt-It>o)return t.accessToken;if(t.refreshExpiresAt-It<=o)throw new ee("\u7528\u6237\u6388\u6743\u7684 refresh token \u5DF2\u8FC7\u671F\uFF0C\u8BF7\u91CD\u65B0\u6388\u6743");this.userRefresh=this.refreshUserToken(t);try{return await this.userRefresh}finally{this.userRefresh=void 0}}async refreshUserToken(e){let t=this.config(),o=await this.postToken({grant_type:"refresh_token",client_id:t.appId,client_secret:t.appSecret,refresh_token:e.refreshToken}),r=this.toTokens(o,e);if(this.readTokens()!==e||this.config().appId!==t.appId||this.config().appSecret!==t.appSecret)throw new ee("\u6388\u6743\u914D\u7F6E\u5728\u5237\u65B0\u671F\u95F4\u5DF2\u6539\u53D8\uFF0C\u8BF7\u91CD\u65B0\u6388\u6743");return await this.writeTokens(r),this.log.debug("\u5DF2\u5237\u65B0 user_access_token"),r.accessToken}buildAuthorizeUrl(e){let t=this.config(),o=new URL(To);return o.searchParams.set("client_id",t.appId),o.searchParams.set("redirect_uri",t.redirectUri),o.searchParams.set("response_type","code"),o.searchParams.set("state",e),t.oauthScope.trim()&&o.searchParams.set("scope",t.oauthScope.trim()),o.toString()}async exchangeCode(e){let t=this.config(),o=await this.postToken({grant_type:"authorization_code",client_id:t.appId,client_secret:t.appSecret,code:e,redirect_uri:t.redirectUri}),r=this.toTokens(o,void 0);return await this.writeTokens(r),r}startCallbackServer(e){this.cancelAuthorization();let t=vo();if(!t)throw new Error("\u5F53\u524D\u73AF\u5883\u65E0\u6CD5\u542F\u52A8\u672C\u5730\u56DE\u8C03\u670D\u52A1\uFF0C\u8BF7\u4F7F\u7528\u300C\u624B\u52A8\u7C98\u8D34\u6388\u6743\u7801\u300D\u65B9\u5F0F");let o=this.config(),r=new URL(o.redirectUri);if(r.protocol!=="http:"||!["localhost","127.0.0.1","[::1]"].includes(r.hostname))throw new Error("\u81EA\u52A8\u6388\u6743\u9700\u8981 http://localhost\u3001127.0.0.1 \u6216 [::1] \u56DE\u8C03\u5730\u5740\uFF1B\u5176\u4ED6\u5730\u5740\u8BF7\u7528\u624B\u52A8\u6388\u6743");let i=r.port?Number(r.port):80,s=r.pathname||"/callback",d,a,u=new Promise((w,P)=>{d=w,a=P});u.catch(()=>{});let h=t.createServer((w,P)=>{let k=w.url??"/",M=new URL(k,`http://localhost:${i}`);if(M.pathname!==s){P.writeHead(404).end("not found");return}let A=M.searchParams.get("code"),S=M.searchParams.get("error"),E=M.searchParams.get("state");if(P.writeHead(200,{"Content-Type":"text/html; charset=utf-8"}),e&&E!==e){P.end("<html><body><h3>\u6388\u6743\u5931\u8D25\uFF1Astate \u6821\u9A8C\u4E0D\u901A\u8FC7\uFF0C\u8BF7\u91CD\u65B0\u53D1\u8D77\u6388\u6743\u3002</h3></body></html>"),a(new Error("\u6388\u6743\u5931\u8D25\uFF1Astate \u6821\u9A8C\u4E0D\u901A\u8FC7"));return}A?(P.end("<html><body><h3>\u6388\u6743\u6210\u529F\uFF0C\u53EF\u4EE5\u5173\u95ED\u672C\u9875\u9762\u5E76\u56DE\u5230 Obsidian\u3002</h3></body></html>"),d(A)):(P.end("<html><body><h3>\u6388\u6743\u672A\u5B8C\u6210\uFF0C\u8BF7\u8FD4\u56DE Obsidian \u67E5\u770B\u9519\u8BEF\u3002</h3></body></html>"),a(new Error(`\u6388\u6743\u5931\u8D25\uFF1A${S??"\u672A\u6536\u5230 code"}`)))}),f=window.setTimeout(()=>a(new Error("\u7B49\u5F85\u6388\u6743\u8D85\u65F6\uFF085 \u5206\u949F\uFF09\uFF0C\u8BF7\u91CD\u8BD5")),5*60*1e3);h.on("error",w=>a(w instanceof Error?w:new Error(String(w))));let g=!1,$=()=>{g||(g=!0,window.clearTimeout(f),h.close(),a(new Error("\u6388\u6743\u5DF2\u53D6\u6D88")))};return h.listen(i,r.hostname==="[::1]"?"::1":r.hostname),this.callbackServer={close:$},{waitForCode:async()=>{try{return await u}finally{$()}},close:$}}closeCallbackServer(){this.callbackServer?.close(),this.callbackServer=void 0}cancelAuthorization(){this.closeCallbackServer()}async postToken(e){let t=new URLSearchParams(e).toString(),o=await Ve({url:bo,method:"POST",headers:{"Content-Type":"application/x-www-form-urlencoded; charset=utf-8"},body:t,throw:!1}),r=qe(o.text)??{},i=r.data??r;if(o.status>=400||typeof r.code=="number"&&r.code!==0||!i.access_token){let s=typeof r.code=="number"?r.code:void 0,d=r.error_description??r.error??r.msg??`HTTP ${o.status}`;throw new ee(`\u83B7\u53D6\u7528\u6237\u6388\u6743\u5931\u8D25\uFF1A${So(s,d)}`)}return i}toTokens(e,t){let o=Date.now();return{accessToken:e.access_token??"",refreshToken:e.refresh_token??t?.refreshToken??"",accessExpiresAt:o+(e.expires_in??7200)*1e3,refreshExpiresAt:e.refresh_token_expires_in?o+e.refresh_token_expires_in*1e3:t?.refreshExpiresAt??o+30*24*3600*1e3,scope:e.scope??t?.scope}}};var Mt=require("obsidian"),dn=".obsidian/feishu-sync",$o=`${dn}/sync.log`,ln=256*1024;function I(n){if(n instanceof Error){let e=n;return typeof e.describe=="function"?e.describe():n.message}return String(n)}var Xe=class{constructor(e,t){this.app=e;this.verbose=t;this.pending=[]}info(e){this.write("INFO",e)}warn(e){this.write("WARN",e),console.warn("[feishu-wiki-sync]",e)}error(e){this.write("ERROR",e),console.error("[feishu-wiki-sync]",e)}debug(e){this.verbose()&&this.write("DEBUG",e)}write(e,t){let o=`${new Date().toISOString()} ${e} ${t}`;console.log("[feishu-wiki-sync]",o),this.verbose()&&this.pending.push(o)}async flush(){if(!this.verbose()||this.pending.length===0){this.pending=[];return}let e=this.pending;this.pending=[];let t=this.app().vault.adapter;try{await pe(t,dn);let o=(0,Mt.normalizePath)($o),i=`${await t.exists(o)?await t.read(o):""}${e.join(`
-`)}
-`;await t.write(o,i.length>ln?i.slice(i.length-ln):i)}catch(o){console.warn("[feishu-wiki-sync] failed to write log",o)}}};async function pe(n,e){let t=(0,Mt.normalizePath)(e).split("/").filter(Boolean),o="";for(let r of t)if(o=o?`${o}/${r}`:r,!await n.exists(o))try{await n.mkdir(o)}catch(i){if(!await n.exists(o))throw i}}var R=require("obsidian");var Pe={skip:"\u5DF2\u540C\u6B65",push:"\u4E0A\u4F20\u8986\u76D6","create-remote":"\u4E0A\u4F20\u65B0\u5EFA",pull:"\u62C9\u53D6\u8986\u76D6","create-local":"\u62C9\u53D6\u65B0\u5EFA",link:"\u5EFA\u7ACB\u6620\u5C04",conflict:"\u51B2\u7A81","delete-remote":"\u5220\u9664\u8FDC\u7AEF","delete-local":"\u5220\u9664\u672C\u5730","local-deleted":"\u672C\u5730\u5DF2\u5220\u9664","remote-deleted":"\u8FDC\u7AEF\u5DF2\u5220\u9664","empty-local":"\u8DF3\u8FC7\u7A7A\u6587\u4EF6","dirty-editor":"\u8DF3\u8FC7\uFF08\u7F16\u8F91\u4E2D\uFF09",forget:"\u6E05\u7406\u6620\u5C04"};function Ee(){return{records:{},folders:{},conflicts:{},docRecords:{},images:{},imageUploads:{}}}var ce=".obsidian/feishu-sync/conflicts",Dt={authMode:"user",appId:"",appSecret:"",oauthScope:"drive:drive wiki:wiki docs:document.media:download docs:document.media:upload docx:document offline_access",redirectUri:"http://localhost:7634/callback",spaceId:"",rootNodeToken:"",rootPageTitle:"",syncMode:"md",folderMode:"nodes",flatSeparator:"__",excludePatterns:".trash/**",recreateRemoteIfDeleted:!1,propagateLocalDelete:!1,propagateRemoteDelete:!1,attachmentFolder:"attachments",docVerifyRemoteByContent:!1,attachmentLinkStyle:"shortest",showPlanBeforeSync:!0,autoSyncMinutes:0,debugLog:!1,state:Ee()};function ge(n){let e={};for(let t of n)e[t.action]=(e[t.action]??0)+1;return e}function G(n){let e=n.lastIndexOf("/");return e===-1?"":n.slice(0,e)}function te(n){let e=n.lastIndexOf("/");return e===-1?n:n.slice(e+1)}function Me(n,e){return n?`${n}/${e}`:e}var Wt=require("obsidian");var un=27,Ro=20*1024*1024;function ne(n){return n&&typeof n=="object"?n:void 0}function le(n,e){let t=n?.[e];if(typeof t=="string"&&t)return t;if(typeof t=="number")return String(t)}function At(n){let t=ne(ne(n)?.document)?.new_blocks;if(!Array.isArray(t))return[];let o=[];for(let r of t){let i=ne(r),s=le(i,"block_id");s&&o.push({blockId:s,blockToken:le(i,"block_token"),blockType:i?.block_type})}return o}function Ct(n){let t=ne(ne(n)?.document)?.revision_id;if(typeof t=="number")return t;if(typeof t=="string"&&/^\d+$/.test(t))return Number(t)}function hn(n){if(typeof n=="number")return n===un;if(typeof n=="string"){let e=n.trim();return/^\d+$/.test(e)?Number(e)===un:e.toLowerCase()==="image"}return!1}function fn(n,e){let t=new Set(e),o=new Map;for(let i of n){if(!i.blockToken||!t.has(i.blockToken))continue;let s=o.get(i.blockToken)??[];s.push(i),o.set(i.blockToken,s)}let r=new Map;for(let i of e){let s=(o.get(i)??[]).filter(d=>hn(d.blockType));s.length===1&&r.set(i,s[0].blockId)}return r}function pn(n){let e=new Uint8Array(n),t=globalThis.crypto;if(t?.getRandomValues)t.getRandomValues(e);else for(let o=0;o<e.length;o+=1)e[o]=Math.floor(Math.random()*256);return Array.from(e,o=>o.toString(16).padStart(2,"0")).join("")}function gn(){return`@lcli_img_${pn(16)}`}function xo(){let n=pn(16);return`${n.slice(0,8)}-${n.slice(8,12)}-4${n.slice(13,16)}-a${n.slice(17,20)}-${n.slice(20,32)}`}async function mn(n,e){if(e.bytes.byteLength>Ro)throw new Error(`\u56FE\u7247 ${e.fileName} \u8D85\u8FC7 20MB\uFF0C\u5355\u6B21\u4E0A\u4F20\u63A5\u53E3\u4E0D\u652F\u6301\uFF08\u5B98\u65B9 CLI \u8D70\u5206\u7247\u4E0A\u4F20\uFF0C\u672C\u63D2\u4EF6\u6682\u672A\u5B9E\u73B0\uFF09`);let t=await n.json("POST","/open-apis/drive/v1/medias/upload_all",{multipart:{fields:{file_name:e.fileName,parent_type:"docx_image",parent_node:e.blockId,size:String(e.bytes.byteLength),extra:JSON.stringify({drive_route_token:e.documentId})},file:{name:e.fileName,data:e.bytes}}}),o=le(t,"file_token");if(!o)throw new Error(`\u4E0A\u4F20\u56FE\u7247 ${e.fileName} \u540E\u6CA1\u6709\u62FF\u5230 file_token`);return o}async function Nt(n,e,t){t.length!==0&&await n.json("PATCH",`/open-apis/docx/v1/documents/${L(e)}/blocks/batch_update`,{query:{client_token:xo()},body:{requests:t.map(o=>({block_id:o.blockId,replace_image:{token:o.fileToken}}))}})}async function yn(n,e,t){let o=await n.json("GET",`/open-apis/docx/v1/documents/${L(e)}/blocks/${L(t)}`),r=ne(o?.block);if(!r)return;let i=ne(r.image);return le(i,"token")??le(r,"token")}async function wn(n,e,t,o){t.length!==0&&await n.json("PUT",`/open-apis/docs_ai/v1/documents/${L(e)}`,{body:{format:"xml",command:"block_delete",block_id:t.join(","),revision_id:o??-1}})}async function kn(n,e){let t=[],o;do{let r=await n.json("GET",`/open-apis/docx/v1/documents/${L(e)}/blocks`,{query:{page_size:500,document_revision_id:-1,page_token:o}});for(let i of r?.items??[]){let s=ne(i);if(!s||!hn(s.block_type))continue;let d=ne(s.image);t.push({blockId:le(s,"block_id")??"",fileToken:le(d,"token"),marker:le(s,"block_token")})}o=r?.has_more?r.page_token:void 0}while(o);return t}async function Pn(n,e){let t=await n.binaryResponse(`/open-apis/drive/v1/medias/${L(e)}/download`);if(t.data.byteLength===0)throw new N(`\u7D20\u6750 ${e} \u4E0B\u8F7D\u5F97\u5230 0 \u5B57\u8282\uFF0C\u5DF2\u653E\u5F03`,{endpoint:`/open-apis/drive/v1/medias/${e}/download`});return{bytes:t.data,contentType:t.contentType}}function Y(n,e){let t=0;for(let o=e-1;o>=0&&n[o]==="\\";o-=1)t+=1;return t%2===1}function Te(n,e=!0){let t,o=n[0]?.replace(/\r$/,"")==="---";return n.map((r,i)=>{if(o)return i>0&&/^(---|\.\.\.)\r?$/.test(r)&&(o=!1),!0;let s=r.replace(/^(?:[\t ]*>[\t ]?)+/,""),d=/^[\t ]*(`{3,}|~{3,})(.*)$/.exec(s.replace(/\r$/,""));return t?(d&&d[1][0]===t[0]&&d[1].length>=t.length&&!d[2].trim()&&(t=void 0),!0):d?(t=d[1],!0):e&&/^(?: {4}|\t)/.test(s)})}function Ft(n){let e=n.split(`
-`),t=Te(e),o=[],r=0,i,s=0;for(let d=0;d<e.length;d+=1){let a=e[d];if(t[d]&&i===void 0){r+=a.length+1;continue}if(i!==void 0&&/^[\t ]*(`{3,}|~{3,})/.test(a)){i=void 0,r+=a.length+1;continue}for(let u=0;u<a.length;){if(r+u<s){u=Math.min(a.length,s-r);continue}if(i===void 0&&a.startsWith("<latex>",u)&&!Y(a,u)){let w=n.indexOf("</latex>",r+u+7);if(w!==-1){s=w+8;continue}}if(i===void 0&&a[u]==="`"&&!Y(a,u)){let w=/^`+/.exec(a.slice(u))[0],P=n.indexOf(w,r+u+w.length);for(;P!==-1&&(n[P-1]==="`"||n[P+w.length]==="`");)P=n.indexOf(w,P+w.length);P!==-1&&(s=P+w.length),u+=w.length;continue}if(i===void 0&&a.startsWith("](",u)){let w=1,P=u+2;for(;P<a.length&&w>0;P+=1)Y(a,P)||(a[P]==="("&&(w+=1),a[P]===")"&&(w-=1));if(w===0){u=P;continue}}if(i===void 0&&a.startsWith("[[",u)){let w=a.indexOf("]]",u+2);if(w!==-1){u=w+2;continue}}if(a[u]!=="$"||Y(a,u)){u+=1;continue}let h=/^\$+/.exec(a.slice(u))[0].length;if(h>2){u+=h;continue}if(a.startsWith("$$",u)){i===void 0?i=r+u:(o.push({start:i,end:r+u+2,body:n.slice(i+2,r+u),block:!0}),i=void 0),u+=2;continue}if(i!==void 0){u+=1;continue}let f=u+1;for(;f<a.length&&(a[f]!=="$"||Y(a,f));)f+=1;let g=a.slice(u+1,f),$=/^-?\d[\d,.]*(.*)$/.exec(g);if($&&/[\p{L};；]/u.test($[1])&&!/[\\^_=<>+*/{}()-]/.test($[1])){u+=1;continue}f<a.length&&f>u+1&&a[f+1]!=="$"&&!/\d/.test(a[f+1]??"")?(o.push({start:r+u,end:r+f+1,body:g,block:!1}),u=f+1):u+=1}r+=a.length+1}return o}function Bt(n){let e=n.length;for(;e>0&&/\s/.test(n[e-1]);){if(n[e-1]===" "&&Y(n,e-1))return n.slice(0,e-2).trimStart()+"\\space{}";e-=1}return n.slice(0,e).trimStart()}function be(n,e){let t=[],o=0;for(let r of Ft(n))t.push(n.slice(o,r.start),e(r)),o=r.end;return t.push(n.slice(o)),t.join("")}function Lt(n,e){let t=n.split(`
-`),o=Te(t),r=[],i=0;for(let a=0;a<t.length;a+=1)o[a]&&r.push({start:i,end:i+t[a].length}),i+=t[a].length+1;let s=/`+/g,d;for(;d=s.exec(n);){if(Y(n,d.index)||r.some(u=>d.index>=u.start&&d.index<u.end))continue;let a=n.indexOf(d[0],s.lastIndex);for(;a!==-1&&(n[a-1]==="`"||n[a+d[0].length]==="`");)a=n.indexOf(d[0],a+d[0].length);a!==-1&&(r.push({start:d.index,end:a+d[0].length}),s.lastIndex=a+d[0].length)}return n.replace(/<p align="center">\s*<latex>([\s\S]*?)<\/latex>\s*<\/p>|<latex>([\s\S]*?)<\/latex>/g,(a,u,h,f)=>Y(n,f)||r.some(g=>f<g.end&&f+a.length>g.start)?a:e(u??h??"",u!==void 0))}function Je(n){return n.replace(/&(?:amp|lt|gt|quot|apos|#\d+|#x[\da-f]+);/gi,e=>{let t={"&amp;":"&","&lt;":"<","&gt;":">","&quot;":'"',"&apos;":"'"};if(e[1]!=="#")return t[e.toLowerCase()]??e;let o=e[2].toLowerCase()==="x"?parseInt(e.slice(3,-1),16):parseInt(e.slice(2,-1),10);return o>0&&o<=1114111&&!(o>=55296&&o<=57343)?String.fromCodePoint(o):e})}function Ht(n){let e=o=>o.replace(/\\(?=[#$*_~\[\]&:<>+=`-])/g,"\\\\"),t=Lt(n,(o,r)=>{let i=e(Je(o)),d=`<latex>${r?i.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;"):i}</latex>`;return r?`<p align="center">${d}</p>`:d});return be(t,o=>{let r=o.block?"$$":"$";return`${r}${e(o.body)}${r}`})}var de=".obsidian/feishu-sync/rules.json",Sn=3,_o=3,Io=/!\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g,Eo=/^\s*(```|~~~)/,Mo=/!\[\[([^\]|]+?)(?:\|([^\]]*))?\]\]/g,Qe=/!\[([^\]]*)\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)/g,Ot=/<img\b[^>]*\/?>/gi,Do=/^[a-z][a-z0-9+.-]*:/i;function Vt(n,e){let t=n.split(`
-`),o=Te(t,!1);return t.map((r,i)=>o[i]?r:e(r)).join(`
-`)}var Ao={id:"image-ref-normalize",description:"\u4E0A\u884C\uFF1A\u628A\u6807\u51C6 Markdown \u56FE\u7247 ![alt](\u76F8\u5BF9\u8DEF\u5F84) \u6362\u6210 Obsidian \u7684 ![[\u76F8\u5BF9\u8DEF\u5F84]]\u3002\u5B9E\u6D4B\u6807\u51C6\u56FE\u7247\u5F15\u7528\u4F1A\u88AB\u98DE\u4E66\u6574\u884C\u4E22\u5F03\uFF0C![[...]] \u80FD\u539F\u6837\u4FDD\u7559\u3002http(s) \u56FE\u7247\u5730\u5740\u4E0D\u6539\u3002",defaultEnabled:!0,apply:n=>Vt(n,e=>e.replace(Io,(t,o)=>/^[a-z][a-z0-9+.-]*:\/\//i.test(o)?t:`![[${o}]]`))},Co={id:"tab-indent-to-spaces",description:"\u4E0A\u884C\uFF1A\u884C\u9996 Tab \u6309 2 \u7A7A\u683C\u6362\u7B97\u3002\u5B9E\u6D4B\u98DE\u4E66\u4F1A\u628A Tab \u7F29\u8FDB\u89C4\u8303\u6210\u7A7A\u683C\uFF0C\u5148\u8F6C\u8FC7\u6765\u80FD\u51CF\u5C11\u300C\u53D1\u51FA vs \u53D6\u56DE\u300D\u7684\u65E0\u8C13\u5DEE\u5F02\u3002\u56F4\u680F\u4EE3\u7801\u5757\u5185\u90E8\u4E0D\u52A8\u3002",defaultEnabled:!0,apply:n=>Vt(n,e=>{let t=/^[\t ]+/.exec(e);return!t||!t[0].includes("	")?e:t[0].replace(/\t/g,"  ")+e.slice(t[0].length)})},No=/^\s*(?:[-*+]|\d+[.)])\s/,Fo=/^\s*\|/,Bo=/^(?:[\t ]|>|#{1,6}\s)/;function vn(n,e){return be(n,t=>{let o=t.block?"$$":"$";return`${o}${e(t.body,t.block)}${o}`})}var zt={id:"math-escape-hash",description:"\u53CC\u5411\uFF1A\u6570\u5B66\u73AF\u5883\u91CC\u7684\u88F8 # \u5199\u6210 \\#\uFF0C\u907F\u514D\u516C\u5F0F\u6E32\u67D3\u5931\u8D25\uFF1B\u5DF2\u8F6C\u4E49\u7684 # \u4E0D\u91CD\u590D\u8F6C\u4E49\uFF0C\u4EE3\u7801\u793A\u4F8B\u4E0D\u52A8\uFF0C\u8DE8\u884C\u7684 $$ \u516C\u5F0F\u540C\u6837\u5904\u7406\u3002",defaultEnabled:!0,apply:n=>vn(n,e=>e.replace(/#/g,(t,o)=>Y(e,o)?"#":"\\#"))},Ut={id:"math-trim-inline-spaces",description:"\u53CC\u5411\uFF1A\u53EA\u6E05\u7406\u884C\u5185\u516C\u5F0F\u5B9A\u754C\u7B26\u5185\u4FA7\u7684\u7A7A\u767D\uFF08$ x $ \u2192 $x$\uFF09\uFF0C\u786E\u4FDD Obsidian \u53EF\u8BC6\u522B\u3002\u4FDD\u7559\u516C\u5F0F\u6B63\u6587\u3001\\text{Agent Memory} \u5185\u7684\u7A7A\u683C\uFF0C\u4EE5\u53CA\u5757\u7EA7 $$...$$ \u7684\u7A7A\u683C\u548C\u6362\u884C\uFF1B\u4EE3\u7801\u3001\u4EF7\u683C\u4E0E\u8F6C\u4E49\u7F8E\u5143\u7B26\u53F7\u4E0D\u52A8\u3002",defaultEnabled:!0,apply:n=>vn(n,(e,t)=>t||!e.trim()?e:Bt(e))},Lo=/^(?:和|与|及|以及|或者|或|还是|暨|and|or)[\s。，、；：！？.,;:!?]*$/i,Ho={id:"inline-formula-to-block",description:"\u4E0A\u884C\uFF1A\u666E\u901A\u6BB5\u843D\u4E2D\u72EC\u5360\u4E00\u884C\u7684\u884C\u5185\u516C\u5F0F\u6539\u6210\u5757\u7EA7\u516C\u5F0F\uFF1B\u5C3E\u968F\u8FDE\u63A5\u8BCD\u53E6\u8D77\u4E00\u6BB5\u3002\u4FDD\u7559\u6B63\u6587\u3001\u6807\u70B9\u548C\u5217\u8868/\u5F15\u7528/\u4EE3\u7801\u7ED3\u6784\u3002",defaultEnabled:!0,apply:n=>be(n,e=>{if(e.block)return n.slice(e.start,e.end);let t=n.lastIndexOf(`
-`,e.start-1)+1,o=n.indexOf(`
-`,e.end),r=o===-1?n.length:o,i=n.slice(t,e.start),s=n.slice(e.end,r).trim();return i!==""||s&&!Lo.test(s)?n.slice(e.start,e.end):`$$
-${e.body.trim()}
-$$${s?`
+`
+    )
+  );
+  chunks.push(new Uint8Array(spec.file.data));
+  chunks.push(encoder.encode(`\r
+--${boundary}--\r
+`));
+  return { body: concatChunks(chunks).buffer, contentType: `multipart/form-data; boundary=${boundary}` };
+}
+function parseEnvelope(text) {
+  if (!text)
+    return void 0;
+  try {
+    const parsed = JSON.parse(text);
+    if (typeof parsed === "object" && parsed !== null) {
+      return parsed;
+    }
+    return void 0;
+  } catch {
+    return void 0;
+  }
+}
+function sleep(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+var FeishuClient = class {
+  constructor(getToken, log) {
+    this.getToken = getToken;
+    this.log = log;
+  }
+  async json(method, path, options = {}) {
+    const response = await this.send(method, path, options);
+    if (response.status >= 400 || response.payload && response.payload.code !== 0) {
+      throw this.buildError(path, response);
+    }
+    const payload = response.payload;
+    if (!payload) {
+      throw new FeishuError(`${path} \u8FD4\u56DE\u4E86\u975E JSON \u54CD\u5E94\uFF08HTTP ${response.status}\uFF09\uFF1A${(response.text || "").slice(0, 120)}`, {
+        status: response.status,
+        endpoint: path
+      });
+    }
+    return payload.data ?? payload;
+  }
+  async binary(path, query) {
+    return (await this.binaryResponse(path, query)).data;
+  }
+  /** 下载类请求需要 Content-Type / Content-Disposition 来推断扩展名（图片素材没有文件名）。 */
+  async binaryResponse(path, query) {
+    const response = await this.send("GET", path, { query });
+    if (response.status < 200 || response.status >= 300) {
+      throw this.buildError(path, response);
+    }
+    const payload = response.payload;
+    if (payload && typeof payload.code === "number" && payload.code !== 0) {
+      throw this.buildError(path, response);
+    }
+    const headers = response.headers ?? {};
+    const contentTypeKey = Object.keys(headers).find((key) => key.toLowerCase() === "content-type");
+    return { data: response.arrayBuffer, headers, contentType: contentTypeKey ? headers[contentTypeKey] : void 0 };
+  }
+  buildError(path, response) {
+    const payload = response.payload;
+    const code = typeof payload?.code === "number" ? payload.code : void 0;
+    const message = typeof payload?.msg === "string" && payload.msg || (response.text || "").slice(0, 300) || "\u8BF7\u6C42\u5931\u8D25";
+    return new FeishuError(`${path} \u8FD4\u56DE\u9519\u8BEF\uFF1A${message}`, {
+      code,
+      status: response.status,
+      endpoint: path,
+      logId: typeof payload?.log_id === "string" ? payload.log_id : void 0
+    });
+  }
+  async send(method, path, options) {
+    const url = buildUrl(path, options.query);
+    let lastError;
+    let refreshToken = false;
+    const canRetryUncertain = method === "GET" || path.endsWith("/fetch") || path === "/open-apis/drive/v1/metas/batch_query";
+    for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
+      let headers;
+      let body;
+      try {
+        headers = { Authorization: `Bearer ${await this.getToken(refreshToken)}` };
+        refreshToken = false;
+      } catch (error) {
+        throw error;
+      }
+      if (options.multipart) {
+        const built = buildMultipart(options.multipart);
+        headers["Content-Type"] = built.contentType;
+        body = built.body;
+      } else if (options.body !== void 0) {
+        headers["Content-Type"] = "application/json; charset=utf-8";
+        body = JSON.stringify(options.body);
+      }
+      try {
+        const response = await requestWithBudget(
+          { url, method, headers, body, throw: false },
+          requestBudget(path, options.multipart !== void 0)
+        );
+        const raw = {
+          status: response.status,
+          text: response.text,
+          arrayBuffer: response.arrayBuffer,
+          headers: response.headers ?? {},
+          payload: parseEnvelope(response.text)
+        };
+        const code = typeof raw.payload?.code === "number" ? raw.payload.code : void 0;
+        const authRelated = raw.status === 401 || code !== void 0 && AUTH_CODES.has(code);
+        if (authRelated && attempt < 2) {
+          this.log.debug(`${path} \u547D\u4E2D\u9274\u6743\u9519\u8BEF\uFF0C\u5237\u65B0 token \u540E\u91CD\u8BD5`);
+          refreshToken = true;
+          continue;
+        }
+        const refusedRetry = raw.status === 429 || code !== void 0 && RETRY_CODES.has(code);
+        const retryable = refusedRetry || raw.status >= 500 && canRetryUncertain;
+        if (retryable && attempt < MAX_ATTEMPTS) {
+          const delay = Math.min(8e3, 400 * 2 ** (attempt - 1)) + Math.floor(Math.random() * 200);
+          this.log.debug(`${path} \u547D\u4E2D\u53EF\u91CD\u8BD5\u9519\u8BEF\uFF08status=${raw.status} code=${code}\uFF09\uFF0C${delay}ms \u540E\u91CD\u8BD5`);
+          await sleep(delay);
+          continue;
+        }
+        return raw;
+      } catch (error) {
+        lastError = error;
+        if (!canRetryUncertain) {
+          const message = error instanceof RequestTimeoutError ? "\u8BF7\u6C42\u8D85\u65F6" : "\u5199\u8BF7\u6C42\u7ED3\u679C\u4E0D\u786E\u5B9A";
+          throw new FeishuError(`${path} ${message}\uFF1A${String(error)}`, { endpoint: path });
+        }
+        if (canRetryUncertain && attempt < MAX_ATTEMPTS) {
+          const delay = Math.min(8e3, 400 * 2 ** (attempt - 1)) + Math.floor(Math.random() * 200);
+          this.log.debug(`${path} \u7F51\u7EDC\u5F02\u5E38\uFF0C${delay}ms \u540E\u91CD\u8BD5\uFF1A${String(error)}`);
+          await sleep(delay);
+          continue;
+        }
+      }
+    }
+    throw new FeishuError(`${path} \u8BF7\u6C42\u5931\u8D25\uFF1A${String(lastError)}`, { endpoint: path });
+  }
+};
 
-`:""}`})},Oo={id:"block-formula-own-paragraph",description:"\u4E0A\u884C\uFF1A\u666E\u901A\u6B63\u6587\u91CC\u7684\u5757\u7EA7\u516C\u5F0F\u72EC\u5360\u6BB5\u843D\uFF0C\u524D\u540E\u7559\u7A7A\u884C\uFF1B\u5217\u8868\u3001\u8868\u683C\u3001\u5F15\u7528\u548C\u7F29\u8FDB\u7ED3\u6784\u91CC\u7684\u516C\u5F0F\u4FDD\u7559\u4F4D\u7F6E\u5E76\u63D0\u793A\u3002",defaultEnabled:!0,apply:(n,e)=>{let t=[],o=0;for(let r of Ft(n)){if(!r.block)continue;let i=n.lastIndexOf(`
-`,r.start-1)+1,s=n.slice(i,r.start);if(Bo.test(s)||No.test(s)||Fo.test(s)){e.warnings?.push(`\u7B2C ${n.slice(0,r.start).split(`
-`).length} \u884C\u7684\u5757\u7EA7\u516C\u5F0F\u5728\u7F29\u8FDB/\u5217\u8868\u9879/\u8868\u683C/\u5F15\u7528/\u6807\u9898\u91CC\uFF0C\u672A\u62C6\u6210\u72EC\u7ACB\u6BB5\u843D`);continue}let d=n.slice(o,r.start).replace(/[ \t]+$/,"");t.push(d);let a=t.join("");for(a&&!a.endsWith(`
+// src/feishu/auth.ts
+var AUTHORIZE_URL = "https://accounts.feishu.cn/open-apis/authen/v1/authorize";
+var TOKEN_URL = "https://accounts.feishu.cn/oauth/v3/token";
+var REFRESH_MARGIN_MS = 12e4;
+function oauthErrorHint(code, message) {
+  const hints = {
+    20010: "\u5F53\u524D\u98DE\u4E66\u8D26\u53F7\u4E0D\u5728\u8FD9\u4E2A\u5E94\u7528\u7684\u53EF\u7528\u8303\u56F4\u5185\uFF1A\u8BF7\u5230\u5F00\u53D1\u8005\u540E\u53F0\u7684\u300C\u5E94\u7528\u53D1\u5E03 \u2192 \u7248\u672C\u7BA1\u7406\u4E0E\u53D1\u5E03\u300D\u628A\u53EF\u7528\u8303\u56F4\u8BBE\u4E3A\u5168\u5458\u6216\u5305\u542B\u4F60\u81EA\u5DF1\uFF0C\u5E76\u53D1\u5E03\u7248\u672C",
+    20027: "\u8BF7\u6C42\u4E86\u5E94\u7528\u5C1A\u672A\u5F00\u901A\u7684\u6743\u9650\uFF1A\u8BF7\u5230\u5F00\u53D1\u8005\u540E\u53F0\u300C\u6743\u9650\u7BA1\u7406\u300D\u5F00\u901A drive:drive\u3001wiki:wiki\u3001docs:document.media:download\u3001offline_access\uFF0C\u5E76\u786E\u8BA4\u63D2\u4EF6\u91CC\u7684\u6388\u6743\u8303\u56F4\u4E0E\u4E4B\u4E00\u81F4",
+    20029: "\u91CD\u5B9A\u5411 URL \u4E0D\u5339\u914D\uFF1A\u8BF7\u786E\u8BA4\u5F00\u53D1\u8005\u540E\u53F0\u300C\u5B89\u5168\u8BBE\u7F6E \u2192 \u91CD\u5B9A\u5411 URL\u300D\u91CC\u767B\u8BB0\u7684\u5730\u5740\u4E0E\u63D2\u4EF6\u8BBE\u7F6E\u91CC\u7684\u5B8C\u5168\u4E00\u81F4"
+  };
+  const hinted = code === void 0 ? void 0 : hints[code];
+  const hint = hinted ?? (/revoked|invalid_grant/i.test(message) ? "refresh token \u4E00\u6B21\u6027\u6709\u6548\uFF1A\u901A\u5E38\u662F\u540C\u4E00\u4E2A\u98DE\u4E66\u5E94\u7528\u5728\u522B\u5904\uFF08\u53E6\u4E00\u53F0\u8BBE\u5907\u3001\u53E6\u4E00\u4E2A Obsidian \u5B9E\u4F8B\uFF0C\u6216\u547D\u4EE4\u884C\u5DE5\u5177\uFF09\u5237\u65B0\u8FC7 token\uFF0C\u5BFC\u81F4\u8FD9\u91CC\u8FD9\u4EFD\u88AB\u4F5C\u5E9F\u3002\u91CD\u65B0\u6388\u6743\u5373\u53EF" : void 0);
+  return hint ? `${message}\uFF08${hint}\uFF09` : message;
+}
+function loadHttp() {
+  const requireFn = globalThis.require;
+  if (!requireFn)
+    return null;
+  try {
+    return requireFn("http");
+  } catch {
+    return null;
+  }
+}
+function openExternal(url) {
+  const requireFn = globalThis.require;
+  try {
+    const electron = requireFn?.("electron");
+    if (electron?.shell?.openExternal) {
+      electron.shell.openExternal(url);
+      return;
+    }
+  } catch {
+  }
+  window.open(url);
+}
+var AuthManager = class {
+  constructor(config, readTokens, writeTokens, log) {
+    this.config = config;
+    this.readTokens = readTokens;
+    this.writeTokens = writeTokens;
+    this.log = log;
+  }
+  hasValidUserGrant() {
+    const tokens = this.readTokens();
+    if (!tokens?.refreshToken)
+      return false;
+    return tokens.refreshExpiresAt > Date.now();
+  }
+  async getToken(forceRefresh = false) {
+    const config = this.config();
+    if (!config.appId || !config.appSecret) {
+      throw new FeishuAuthRequiredError("\u8BF7\u5148\u5728\u63D2\u4EF6\u8BBE\u7F6E\u91CC\u586B\u5199\u98DE\u4E66\u5E94\u7528\u7684 App ID \u4E0E App Secret");
+    }
+    return config.mode === "tenant" ? this.tenantToken(forceRefresh) : this.userToken(forceRefresh);
+  }
+  async tenantToken(forceRefresh) {
+    const now = Date.now();
+    const config = this.config();
+    const key = `${config.appId}:${config.appSecret}`;
+    if (!forceRefresh && this.tenantKey === key && this.tenant && this.tenant.expiresAt - REFRESH_MARGIN_MS > now) {
+      return this.tenant.token;
+    }
+    const response = await requestWithBudget({
+      url: `${API_BASE}/open-apis/auth/v3/tenant_access_token/internal`,
+      method: "POST",
+      headers: { "Content-Type": "application/json; charset=utf-8" },
+      body: JSON.stringify({ app_id: config.appId, app_secret: config.appSecret }),
+      throw: false
+    });
+    const payload = parseEnvelope(response.text);
+    if (response.status >= 400 || !payload || payload.code !== 0 || !payload.tenant_access_token) {
+      throw new FeishuAuthRequiredError(`\u83B7\u53D6 tenant_access_token \u5931\u8D25\uFF1A${payload?.msg ?? `HTTP ${response.status}`}`);
+    }
+    const expiresIn = payload.expire ?? 7200;
+    this.tenant = { token: payload.tenant_access_token, expiresAt: Date.now() + expiresIn * 1e3 };
+    this.tenantKey = key;
+    return this.tenant.token;
+  }
+  async userToken(forceRefresh) {
+    if (this.userRefresh)
+      return this.userRefresh;
+    const tokens = this.readTokens();
+    if (!tokens?.refreshToken) {
+      throw new FeishuAuthRequiredError("\u5C1A\u672A\u5B8C\u6210\u7528\u6237\u6388\u6743\uFF0C\u8BF7\u5728\u63D2\u4EF6\u8BBE\u7F6E\u91CC\u70B9\u51FB\u300C\u6388\u6743\u98DE\u4E66\u8D26\u53F7\u300D");
+    }
+    const now = Date.now();
+    if (!forceRefresh && tokens.accessToken && tokens.accessExpiresAt - REFRESH_MARGIN_MS > now) {
+      return tokens.accessToken;
+    }
+    if (tokens.refreshExpiresAt - REFRESH_MARGIN_MS <= now) {
+      throw new FeishuAuthRequiredError("\u7528\u6237\u6388\u6743\u7684 refresh token \u5DF2\u8FC7\u671F\uFF0C\u8BF7\u91CD\u65B0\u6388\u6743");
+    }
+    this.userRefresh = this.refreshUserToken(tokens);
+    try {
+      return await this.userRefresh;
+    } finally {
+      this.userRefresh = void 0;
+    }
+  }
+  async refreshUserToken(tokens) {
+    const config = this.config();
+    const payload = await this.postToken({
+      grant_type: "refresh_token",
+      client_id: config.appId,
+      client_secret: config.appSecret,
+      refresh_token: tokens.refreshToken
+    });
+    const refreshed = this.toTokens(payload, tokens);
+    if (this.readTokens() !== tokens || this.config().appId !== config.appId || this.config().appSecret !== config.appSecret) {
+      throw new FeishuAuthRequiredError("\u6388\u6743\u914D\u7F6E\u5728\u5237\u65B0\u671F\u95F4\u5DF2\u6539\u53D8\uFF0C\u8BF7\u91CD\u65B0\u6388\u6743");
+    }
+    await this.writeTokens(refreshed);
+    this.log.debug("\u5DF2\u5237\u65B0 user_access_token");
+    return refreshed.accessToken;
+  }
+  buildAuthorizeUrl(state) {
+    const config = this.config();
+    const url = new URL(AUTHORIZE_URL);
+    url.searchParams.set("client_id", config.appId);
+    url.searchParams.set("redirect_uri", config.redirectUri);
+    url.searchParams.set("response_type", "code");
+    url.searchParams.set("state", state);
+    if (config.oauthScope.trim())
+      url.searchParams.set("scope", config.oauthScope.trim());
+    return url.toString();
+  }
+  async exchangeCode(code) {
+    const config = this.config();
+    const payload = await this.postToken({
+      grant_type: "authorization_code",
+      client_id: config.appId,
+      client_secret: config.appSecret,
+      code,
+      redirect_uri: config.redirectUri
+    });
+    const tokens = this.toTokens(payload, void 0);
+    await this.writeTokens(tokens);
+    return tokens;
+  }
+  startCallbackServer(expectedState) {
+    this.cancelAuthorization();
+    const http = loadHttp();
+    if (!http) {
+      throw new Error("\u5F53\u524D\u73AF\u5883\u65E0\u6CD5\u542F\u52A8\u672C\u5730\u56DE\u8C03\u670D\u52A1\uFF0C\u8BF7\u4F7F\u7528\u300C\u624B\u52A8\u7C98\u8D34\u6388\u6743\u7801\u300D\u65B9\u5F0F");
+    }
+    const config = this.config();
+    const redirect = new URL(config.redirectUri);
+    if (redirect.protocol !== "http:" || !["localhost", "127.0.0.1", "[::1]"].includes(redirect.hostname)) {
+      throw new Error("\u81EA\u52A8\u6388\u6743\u9700\u8981 http://localhost\u3001127.0.0.1 \u6216 [::1] \u56DE\u8C03\u5730\u5740\uFF1B\u5176\u4ED6\u5730\u5740\u8BF7\u7528\u624B\u52A8\u6388\u6743");
+    }
+    const port = redirect.port ? Number(redirect.port) : 80;
+    const expectedPath = redirect.pathname || "/callback";
+    let resolveCode;
+    let rejectCode;
+    const codePromise = new Promise((resolve, reject) => {
+      resolveCode = resolve;
+      rejectCode = reject;
+    });
+    void codePromise.catch(() => void 0);
+    const server = http.createServer((req, res) => {
+      const requestUrlValue = req.url ?? "/";
+      const parsed = new URL(requestUrlValue, `http://localhost:${port}`);
+      if (parsed.pathname !== expectedPath) {
+        res.writeHead(404).end("not found");
+        return;
+      }
+      const code = parsed.searchParams.get("code");
+      const error = parsed.searchParams.get("error");
+      const receivedState = parsed.searchParams.get("state");
+      res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+      if (expectedState && receivedState !== expectedState) {
+        res.end("<html><body><h3>\u6388\u6743\u5931\u8D25\uFF1Astate \u6821\u9A8C\u4E0D\u901A\u8FC7\uFF0C\u8BF7\u91CD\u65B0\u53D1\u8D77\u6388\u6743\u3002</h3></body></html>");
+        rejectCode(new Error("\u6388\u6743\u5931\u8D25\uFF1Astate \u6821\u9A8C\u4E0D\u901A\u8FC7"));
+        return;
+      }
+      if (code) {
+        res.end("<html><body><h3>\u6388\u6743\u6210\u529F\uFF0C\u53EF\u4EE5\u5173\u95ED\u672C\u9875\u9762\u5E76\u56DE\u5230 Obsidian\u3002</h3></body></html>");
+        resolveCode(code);
+      } else {
+        res.end("<html><body><h3>\u6388\u6743\u672A\u5B8C\u6210\uFF0C\u8BF7\u8FD4\u56DE Obsidian \u67E5\u770B\u9519\u8BEF\u3002</h3></body></html>");
+        rejectCode(new Error(`\u6388\u6743\u5931\u8D25\uFF1A${error ?? "\u672A\u6536\u5230 code"}`));
+      }
+    });
+    const timeout = window.setTimeout(() => rejectCode(new Error("\u7B49\u5F85\u6388\u6743\u8D85\u65F6\uFF085 \u5206\u949F\uFF09\uFF0C\u8BF7\u91CD\u8BD5")), 5 * 60 * 1e3);
+    server.on("error", (error) => rejectCode(error instanceof Error ? error : new Error(String(error))));
+    let closed = false;
+    const close = () => {
+      if (closed)
+        return;
+      closed = true;
+      window.clearTimeout(timeout);
+      server.close();
+      rejectCode(new Error("\u6388\u6743\u5DF2\u53D6\u6D88"));
+    };
+    server.listen(port, redirect.hostname === "[::1]" ? "::1" : redirect.hostname);
+    this.callbackServer = { close };
+    return {
+      waitForCode: async () => {
+        try {
+          return await codePromise;
+        } finally {
+          close();
+        }
+      },
+      close
+    };
+  }
+  closeCallbackServer() {
+    this.callbackServer?.close();
+    this.callbackServer = void 0;
+  }
+  cancelAuthorization() {
+    this.closeCallbackServer();
+  }
+  async postToken(body) {
+    const form = new URLSearchParams(body).toString();
+    const response = await requestWithBudget({
+      url: TOKEN_URL,
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded; charset=utf-8" },
+      body: form,
+      throw: false
+    });
+    const parsed = parseEnvelope(response.text) ?? {};
+    const merged = parsed.data ?? parsed;
+    if (response.status >= 400 || typeof parsed.code === "number" && parsed.code !== 0 || !merged.access_token) {
+      const code = typeof parsed.code === "number" ? parsed.code : void 0;
+      const reason = parsed.error_description ?? parsed.error ?? parsed.msg ?? `HTTP ${response.status}`;
+      throw new FeishuAuthRequiredError(`\u83B7\u53D6\u7528\u6237\u6388\u6743\u5931\u8D25\uFF1A${oauthErrorHint(code, reason)}`);
+    }
+    return merged;
+  }
+  toTokens(payload, previous) {
+    const now = Date.now();
+    return {
+      accessToken: payload.access_token ?? "",
+      refreshToken: payload.refresh_token ?? previous?.refreshToken ?? "",
+      accessExpiresAt: now + (payload.expires_in ?? 7200) * 1e3,
+      refreshExpiresAt: payload.refresh_token_expires_in ? now + payload.refresh_token_expires_in * 1e3 : previous?.refreshExpiresAt ?? now + 30 * 24 * 3600 * 1e3,
+      scope: payload.scope ?? previous?.scope
+    };
+  }
+};
 
-`)&&t.push(a.endsWith(`
-`)?`
-`:`
+// src/log.ts
+var import_obsidian2 = require("obsidian");
+var LOG_DIR = ".obsidian/feishu-sync";
+var LOG_PATH = `${LOG_DIR}/sync.log`;
+var MAX_LOG_BYTES = 256 * 1024;
+function describeError(error) {
+  if (error instanceof Error) {
+    const candidate = error;
+    return typeof candidate.describe === "function" ? candidate.describe() : error.message;
+  }
+  return String(error);
+}
+var Logger = class {
+  constructor(app, verbose) {
+    this.app = app;
+    this.verbose = verbose;
+    this.pending = [];
+  }
+  info(message) {
+    this.write("INFO", message);
+  }
+  warn(message) {
+    this.write("WARN", message);
+    console.warn("[feishu-wiki-sync]", message);
+  }
+  error(message) {
+    this.write("ERROR", message);
+    console.error("[feishu-wiki-sync]", message);
+  }
+  debug(message) {
+    if (this.verbose())
+      this.write("DEBUG", message);
+  }
+  write(level, message) {
+    const line = `${(/* @__PURE__ */ new Date()).toISOString()} ${level} ${message}`;
+    if (this.verbose()) {
+      if (level !== "WARN" && level !== "ERROR")
+        console.debug("[feishu-wiki-sync]", line);
+      this.pending.push(line);
+    }
+  }
+  async flush() {
+    if (!this.verbose() || this.pending.length === 0) {
+      this.pending = [];
+      return;
+    }
+    const lines = this.pending;
+    this.pending = [];
+    const adapter = this.app().vault.adapter;
+    try {
+      await ensureFolder(adapter, LOG_DIR);
+      const path = (0, import_obsidian2.normalizePath)(LOG_PATH);
+      const existing = await adapter.exists(path) ? await adapter.read(path) : "";
+      const merged = `${existing}${lines.join("\n")}
+`;
+      await adapter.write(path, merged.length > MAX_LOG_BYTES ? merged.slice(merged.length - MAX_LOG_BYTES) : merged);
+    } catch (error) {
+      console.warn("[feishu-wiki-sync] failed to write log", error);
+    }
+  }
+};
+async function ensureFolder(adapter, folderPath) {
+  const segments = (0, import_obsidian2.normalizePath)(folderPath).split("/").filter(Boolean);
+  let current = "";
+  for (const segment of segments) {
+    current = current ? `${current}/${segment}` : segment;
+    if (!await adapter.exists(current)) {
+      try {
+        await adapter.mkdir(current);
+      } catch (error) {
+        if (!await adapter.exists(current))
+          throw error;
+      }
+    }
+  }
+}
 
-`),t.push(n.slice(r.start,r.end)),o=r.end;n[o]===" "||n[o]==="	";)o+=1;o<n.length&&!n.slice(o).startsWith(`
+// src/settings-tab.ts
+var import_obsidian4 = require("obsidian");
 
-`)&&t.push(n[o]===`
-`?`
-`:`
+// src/sync/types.ts
+var ACTION_LABELS = {
+  skip: "\u5DF2\u540C\u6B65",
+  push: "\u4E0A\u4F20\u8986\u76D6",
+  "create-remote": "\u4E0A\u4F20\u65B0\u5EFA",
+  pull: "\u62C9\u53D6\u8986\u76D6",
+  "create-local": "\u62C9\u53D6\u65B0\u5EFA",
+  link: "\u5EFA\u7ACB\u6620\u5C04",
+  conflict: "\u51B2\u7A81",
+  "delete-remote": "\u5220\u9664\u8FDC\u7AEF",
+  "delete-local": "\u5220\u9664\u672C\u5730",
+  "local-deleted": "\u672C\u5730\u5DF2\u5220\u9664",
+  "remote-deleted": "\u8FDC\u7AEF\u5DF2\u5220\u9664",
+  "empty-local": "\u8DF3\u8FC7\u7A7A\u6587\u4EF6",
+  "dirty-editor": "\u8DF3\u8FC7\uFF08\u7F16\u8F91\u4E2D\uFF09",
+  forget: "\u6E05\u7406\u6620\u5C04"
+};
+function emptyState() {
+  return { records: {}, folders: {}, conflicts: {}, docRecords: {}, images: {}, imageUploads: {} };
+}
+var CONFLICT_DIR = ".obsidian/feishu-sync/conflicts";
+var DEFAULT_SETTINGS = {
+  authMode: "user",
+  appId: "",
+  appSecret: "",
+  oauthScope: "drive:drive wiki:wiki docs:document.media:download docs:document.media:upload docx:document offline_access",
+  redirectUri: "http://localhost:7634/callback",
+  spaceId: "",
+  rootNodeToken: "",
+  rootPageTitle: "",
+  syncMode: "md",
+  folderMode: "nodes",
+  flatSeparator: "__",
+  excludePatterns: ".trash/**",
+  recreateRemoteIfDeleted: false,
+  propagateLocalDelete: false,
+  propagateRemoteDelete: false,
+  attachmentFolder: "attachments",
+  docVerifyRemoteByContent: false,
+  attachmentLinkStyle: "shortest",
+  showPlanBeforeSync: true,
+  autoSyncMinutes: 0,
+  debugLog: false,
+  state: emptyState()
+};
+function summarize(items) {
+  const counts = {};
+  for (const item3 of items) {
+    counts[item3.action] = (counts[item3.action] ?? 0) + 1;
+  }
+  return counts;
+}
+function dirnameOf(relPath) {
+  const index = relPath.lastIndexOf("/");
+  return index === -1 ? "" : relPath.slice(0, index);
+}
+function basenameOf(relPath) {
+  const index = relPath.lastIndexOf("/");
+  return index === -1 ? relPath : relPath.slice(index + 1);
+}
+function joinPath(dir, name) {
+  return dir ? `${dir}/${name}` : name;
+}
 
-`)}return t.push(n.slice(o)),t.join("")}},zo={id:"native-math",description:"\u4E0A\u884C\uFF1A\u516C\u5F0F\u4F7F\u7528\u98DE\u4E66\u539F\u751F <latex> \u6807\u7B7E\uFF1B\u72EC\u7ACB\u5757\u7EA7\u516C\u5F0F\u653E\u5165\u5C45\u4E2D\u6BB5\u843D\uFF0C\u4FDD\u7559\u516C\u5F0F\u4E0E\u6B63\u6587\u7684\u8FB9\u754C\u3002",defaultEnabled:!0,apply:n=>be(n,e=>{if(!e.body.trim())return n.slice(e.start,e.end);let o=`<latex>${e.body.trim().replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}</latex>`;if(!e.block)return o;let r=n.slice(n.lastIndexOf(`
-`,e.start-1)+1,e.start),i=n.indexOf(`
-`,e.end),s=n.slice(e.end,i===-1?n.length:i);return!r.trim()&&!s.trim()?`<p align="center">${o}</p>`:o})},$n={id:"restore-native-math",description:"\u4E0B\u884C\uFF1A\u628A\u98DE\u4E66\u6B8B\u7559\u7684\u539F\u751F\u516C\u5F0F\u6807\u7B7E\u8FD8\u539F\u4E3A Obsidian \u6570\u5B66\u8BED\u6CD5\uFF1B\u5C45\u4E2D\u516C\u5F0F\u7528 $$...$$\uFF0C\u884C\u5185\u516C\u5F0F\u7528 $...$\uFF0C\u4E0D\u628A XML \u6807\u7B7E\u5199\u5165\u7B14\u8BB0\u3002",defaultEnabled:!0,apply:n=>Lt(n,(e,t)=>{let o=Je(e);return t?`$$
-${o}
-$$`:`$${Bt(o)||"{}"}$`})},Uo={id:"list-exit-after-hardbreak",description:"\u4E0A\u884C\uFF1A\u5217\u8868\u9879\u4EE5\u4E24\u4E2A\u7A7A\u683C\u786C\u6362\u884C\u7ED3\u675F\uFF0C\u4E0B\u4E00\u884C\u53C8\u662F\u65E0\u7F29\u8FDB\u6B63\u6587\u65F6\uFF0C\u8865\u7A7A\u884C\u7ED3\u675F\u5217\u8868\uFF1B\u7F29\u8FDB\u7684\u7EED\u884C\u3001\u5B50\u5217\u8868\u548C\u4EE3\u7801\u4FDD\u6301\u539F\u6837\u3002",defaultEnabled:!0,apply:n=>{let e=n.split(`
-`),t=Te(e);return e.map((o,r)=>{if(!r||t[r]||t[r-1])return o;let i=e[r-1],s=/^[ \t]*(?:[-*+]|\d+[.)])\s/.test(i),d=/ {2,}\r?$/.test(i),a=/^[^\s>#|`~]/.test(o)&&!/^(?:[-*+]|\d+[.)])\s/.test(o);return s&&d&&a?`
-${o}`:o}).join(`
-`)}};function qt(n){let e=n.split(`
-`),t=Te(e),o=be(n,s=>n.slice(s.start,s.end).replace(/[^\n]/g," ")).split(`
-`),r=[],i=0;for(let s=0;s<e.length;s+=1){if(!t[s]){let d=o[s],a=`\u539F\u7A3F\u7B2C ${s+1} \u884C`;/^\\\$\\\$/.test(d.trim())&&r.push(`${a}\uFF1A\u5757\u7EA7\u516C\u5F0F\u5B9A\u754C\u7B26\u5DF2\u88AB\u8F6C\u4E49\uFF0C\u4F1A\u663E\u793A\u4E3A\u5B57\u9762 $$\uFF1B\u8BF7\u786E\u8BA4\u539F\u7A3F\uFF0C\u672A\u81EA\u52A8\u53CD\u8F6C\u4E49`),/^(?:#{1,6}\s+)?(?:[A-Za-z]\\?_\{|\\(?:text|rightarrow|left|frac)\b)/.test(d.trim())&&r.push(`${a}\uFF1ALaTeX \u7591\u4F3C\u843D\u5728\u516C\u5F0F\u73AF\u5883\u5916\uFF0C\u5C06\u663E\u793A\u6E90\u7801\uFF1B\u8BF7\u4FEE\u590D\u539F\u7A3F\u4E2D\u7684\u5B9A\u754C\u7B26`);let u=/^(#{1,6})\s/.exec(d);if(u){let h=u[1].length;(!i&&h>1||h>i+1)&&r.push(`${a}\uFF1A\u6807\u9898\u5C42\u7EA7\u8DF3\u5230 H${h}\uFF1B\u4FDD\u7559\u539F\u7A3F\u5C42\u7EA7\uFF0C\u8BF7\u68C0\u67E5\u6587\u7AE0\u7ED3\u6784`),h===1&&i>1&&r.push(`${a}\uFF1A\u6B63\u6587\u4E2D\u51FA\u73B0 H1 \u5927\u6807\u9898\uFF0C\u8BF7\u786E\u8BA4\u662F\u5426\u8BEF\u52A0\u4E86 #`),i=h}/(^|[^\\])\$\$/.test(d)&&r.push(`${a}\uFF1A\u516C\u5F0F\u5B9A\u754C\u7B26\u4E0D\u5B8C\u6574\uFF0C\u5DF2\u4FDD\u7559\u539F\u6587`)}if(r.length>=30){r.push("\u539F\u7A3F\u683C\u5F0F\u63D0\u793A\u8FC7\u591A\uFF0C\u5DF2\u7701\u7565\u540E\u7EED\u63D0\u793A");break}}return r}var jo={id:"source-format-diagnostics",description:"\u4E0A\u884C\uFF1A\u53EF\u9009\u7684\u539F\u7A3F\u683C\u5F0F\u68C0\u67E5\uFF0C\u9ED8\u8BA4\u5173\u95ED\u3002\u5F00\u542F\u540E\u63D0\u793A\u8F6C\u4E49\u7684\u516C\u5F0F\u5B9A\u754C\u7B26\u3001\u7591\u4F3C\u88F8\u9732 LaTeX\u3001\u6807\u9898\u8DF3\u7EA7\u7B49\u95EE\u9898\uFF1B\u53EA\u63D0\u793A\uFF0C\u4E0D\u731C\u6D4B\u6216\u6539\u5199\u539F\u610F\u3002",defaultEnabled:!1,apply:(n,e)=>(e.warnings?.push(...qt(n)),n)},Wo={id:"footnote-downgrade",description:"\u4E0A\u884C\uFF1A\u811A\u6CE8\u964D\u7EA7\u6210\u666E\u901A\u6587\u672C\u2014\u2014\u5F15\u7528\u6807\u8BB0 [^x] \u5220\u6389\uFF0C\u5B9A\u4E49\u884C [^x]: \u6B63\u6587 \u53D8\u6210\u300C\u811A\u6CE8 x\uFF1A\u6B63\u6587\u300D\u3002\u5B9E\u6D4B\u98DE\u4E66\u4F1A\u4E22\u6389\u811A\u6CE8\uFF0C\u9ED8\u8BA4\u5173\u95ED\uFF1A\u5173\u7740\u65F6\u811A\u6CE8\u4F1A\u539F\u6837\u53D1\u51FA\u53BB\uFF08\u98DE\u4E66\u4FA7\u4ECD\u4F1A\u4E22\uFF09\uFF0C\u5F00\u7740\u5219\u81F3\u5C11\u6B63\u6587\u80FD\u7559\u5728\u98DE\u4E66\u91CC\uFF0C\u4F46\u56DE\u5199\u65F6\u65E0\u6CD5\u8FD8\u539F\u6210\u811A\u6CE8\u8BED\u6CD5\u3002",defaultEnabled:!1,apply:n=>{let e=new Set;for(let t of n.split(`
-`)){let o=/^\[\^([^\]]+)\]:/.exec(t);o&&e.add(o[1])}return n.split(`
-`).map(t=>{let o=/^\[\^([^\]]+)\]:\s*(.*)$/.exec(t);return o?`\u811A\u6CE8 ${o[1]}\uFF1A${o[2]}`:t.replace(/\[\^([^\]]+)\]/g,(r,i)=>e.has(i)?"":r)}).join(`
-`)}},Vo={id:"drop-title-heading",description:"\u4E0B\u884C\uFF1A\u53D6\u56DE\u5185\u5BB9\u9996\u884C\u82E5\u662F\u300C# \u6587\u6863\u6807\u9898\u300D\u5C31\u5220\u6389\u2014\u2014\u98DE\u4E66\u628A <title> \u53D6\u56DE\u6210\u4E86\u9996\u884C H1\uFF0C\u76F4\u63A5\u5199\u56DE\u4F1A\u628A\u6807\u9898\u5F53\u6B63\u6587\u590D\u5236\u8FDB\u7B14\u8BB0\u3002\u672C\u5730\u73B0\u6709\u5185\u5BB9\u672C\u6765\u5C31\u4EE5\u8FD9\u884C\u5F00\u5934\u65F6\u4FDD\u7559\uFF08\u8BF4\u660E\u6807\u9898\u672C\u6765\u5C31\u662F\u7B14\u8BB0\u6B63\u6587\u7684\u4E00\u90E8\u5206\uFF09\u3002",defaultEnabled:!0,apply:(n,e)=>{let t=e.documentTitle.trim();if(!t)return n;let o=`# ${t}`,r=/^<title>([\s\S]*?)<\/title>(?:\r?\n)?(?:\r?\n)?/.exec(n);if(r&&Je(r[1]).trim()===t)return n.slice(r[0].length);let i=n.split(`
-`);if((i[0]??"").trim()!==o||(e.localContent.split(`
-`)[0]??"").trim()===o)return n;let s=i.slice(1);return s.length>0&&s[0].trim()===""&&s.shift(),s.join(`
-`)}},qo={id:"restore-image-ref",description:"\u4E0B\u884C\uFF1A\u628A\u98DE\u4E66\u4FA7\u7684\u56FE\u7247\u8FD8\u539F\u6210\u6807\u51C6 Markdown \u56FE\u7247\u5F15\u7528\u3002\u7B49\u56FE\u7247\u4E0A\u4F20\u94FE\u8DEF\uFF08medias/upload_all + reference_map\uFF09\u505A\u597D\u540E\u518D\u542F\u7528\uFF0C\u73B0\u5728\u6253\u5F00\u4E5F\u662F\u7A7A\u64CD\u4F5C\u3002",defaultEnabled:!1,apply:n=>n};function Go(n){return n.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&#34;")}function Xo(n){let e=n.trim();return!(!e||Do.test(e))}function Jo(n,e){let t=e.resolveImage,o=e.imageUploads;if(!t||!o)return n;let r=(s,d,a)=>{if(!Xo(d))return s;let u=d.trim().replace(/^<|>$/g,""),h=t(u,e.relPath);if(!h)return e.warnings?.push(`\u56FE\u7247 ${u} \u5728 vault \u91CC\u627E\u4E0D\u5230\uFF0C\u5DF2\u539F\u6837\u4FDD\u7559`),s;let f=gn();o.push({raw:s,marker:f,vaultPath:h.path,fileName:u.split("/").filter(Boolean).pop()??"image",size:h.size});let g=a.trim()?` caption="${Go(a.trim())}"`:"";return`<img path="${f}"${g}/>`};return n.replace(Mo,(s,d)=>r(s,d,"")).replace(Qe,(s,d,a)=>r(s,a,d))}var Qo={id:"image-upload",description:"\u4E0A\u884C\uFF1A\u628A vault \u5185\u7684\u672C\u5730\u56FE\u7247\uFF08![[x.png]] \u6216 ![alt](attachments/x.png)\uFF09\u6362\u6210\u5B98\u65B9\u7684\u5360\u4F4D\u6807\u8BB0\uFF0C\u5EFA/\u66F4\u65B0\u6587\u6863\u540E\u4E0A\u4F20\u7D20\u6750\u5E76\u7ED1\u5B9A\u6210\u771F\u6B63\u7684\u56FE\u7247\u5757\u3002\u9700\u8981 docs:document.media:upload \u6743\u9650\uFF1Bhttp(s) \u5916\u94FE\u4E0E vault \u91CC\u627E\u4E0D\u5230\u7684\u6587\u4EF6\u4FDD\u6301\u539F\u6837\uFF08\u4F1A\u5728\u62A5\u544A\u91CC\u5217\u51FA\uFF09\u3002",defaultEnabled:!0,apply:(n,e)=>Vt(n,t=>Jo(t,e))};function Tn(n){let e=n.trim();try{e=decodeURIComponent(e)}catch{}let t=[/\/file\/([A-Za-z0-9_-]+)/,/\/medias\/([A-Za-z0-9_-]+)\/(?:download|preview_download)/,/[?&]file_token=([A-Za-z0-9_-]+)/,/\/medias\/([A-Za-z0-9_-]+)(?:[?#/]|$)/];for(let o of t){let r=o.exec(e);if(r?.[1])return r[1]}}function Gt(n){let e=[],t=n.split(`
-`),o=!1;for(let r of t){if(Eo.test(r)){o=!o;continue}if(o)continue;Qe.lastIndex=0;let i=Qe.exec(r);for(;i;){let d=i[2];e.push({raw:i[0],url:d,token:Tn(d),alt:i[1],index:e.length}),i=Qe.exec(r)}Ot.lastIndex=0;let s=Ot.exec(r);for(;s;){let d=s[0],a=/(?:href|src|url)="([^"]*)"/.exec(d)?.[1]??"",u=/token="([^"]*)"/.exec(d)?.[1]??(a?Tn(a):void 0);if(a||u){let h=/(?:caption|alt)="([^"]*)"/.exec(d)?.[1]??"";e.push({raw:d,url:a,token:u||void 0,alt:h,index:e.length})}s=Ot.exec(r)}}return e}function Rn(n){let e=n;for(let t of Gt(n))t.token&&(e=e.split(t.raw).join(t.raw.replace(t.url,`media:${t.token}`)));return e}var Yo={id:"unescape-image-markup",description:"\u4E0B\u884C\uFF1A\u98DE\u4E66\u628A\u5B83\u89E3\u6790\u4E0D\u4E86\u7684\u56FE\u7247\u5F15\u7528\u8F6C\u4E49\u6210 !\\[\\](\u8DEF\u5F84) \u8FD9\u6837\u7684\u5F62\u6001\uFF0C\u76F4\u63A5\u5199\u56DE\u672C\u5730\u4F1A\u53D8\u6210\u6E32\u67D3\u4E0D\u51FA\u6765\u7684\u574F\u5F15\u7528\u3002\u8FD9\u6761\u89C4\u5219\u628A\u56FE\u7247\u5F15\u7528\u91CC\u7684\u8F6C\u4E49\u65B9\u62EC\u53F7\u8FD8\u539F\uFF08\u53EA\u5904\u7406\u56FE\u7247\u8BED\u6CD5\uFF0C\u4E0D\u52A8\u666E\u901A\u94FE\u63A5\u4E0E\u6B63\u6587\uFF09\u3002",defaultEnabled:!0,apply:n=>n.replace(/!\\\[\\\[([^\]]*?)\\\]\\\]/g,"![[$1]]").replace(/!\\\[\\\]\(/g,"![](")},Ko={id:"image-download",description:"\u4E0B\u884C\uFF1A\u628A\u53D6\u56DE\u5185\u5BB9\u91CC\u7684\u98DE\u4E66\u56FE\u7247\u4E0B\u8F7D\u5230\u672C\u5730\u9644\u4EF6\u76EE\u5F55\uFF0C\u5E76\u628A\u5F15\u7528\u6539\u5199\u6210 ![[\u9644\u4EF6\u76EE\u5F55/\u6587\u4EF6\u540D]]\u3002\u9700\u8981 docs:document.media:download \u6743\u9650\uFF1B\u4E0B\u8F7D\u5931\u8D25\u65F6\u4FDD\u7559\u539F\u59CB\u5F15\u7528\u5E76\u5728\u62A5\u544A\u91CC\u8BF4\u660E\uFF0C\u4E0D\u4F1A\u8BA9\u6574\u6B21\u62C9\u53D6\u5931\u8D25\u3002",defaultEnabled:!0,apply:(n,e)=>{let t=e.imageDownloads;if(!t||t.size===0)return n;let o=n;for(let[r,i]of t){if(!i)continue;let s=e.attachmentLinkStyle==="path"?i:i.split("/").pop()??i;o=o.split(r).join(`![[${s}]]`)}return o}},me={toFeishu:[jo,Ao,Co,zt,Ut,Ho,Oo,Uo,zo,Wo,Qo],toObsidian:[Yo,Vo,$n,zt,Ut,Ko,qo]};function jt(n){return{id:n.id,enabled:n.defaultEnabled,description:n.description}}function De(){return{version:Sn,toFeishu:me.toFeishu.map(jt),toObsidian:me.toObsidian.map(jt)}}function bn(n,e,t){let o=me[n],r=new Map(o.map(d=>[d.id,d])),i=[],s=new Set;if(Array.isArray(e))for(let d of e){let a=typeof d?.id=="string"?d.id:"";if(!a)continue;let u=r.get(a);if(!u){t.push(`\u89C4\u5219\u6587\u4EF6\u91CC ${n} \u7684 "${a}" \u4E0D\u662F\u5185\u7F6E\u89C4\u5219\uFF0C\u5DF2\u5FFD\u7565`);continue}if(s.has(a))continue;s.add(a);let h=typeof d.enabled=="boolean"?d.enabled:u.defaultEnabled;i.push({id:a,enabled:h,description:u.description})}for(let d of o)s.has(d.id)||(t.push(`\u89C4\u5219\u6587\u4EF6\u91CC ${n} \u7F3A\u5C11 "${d.id}"\uFF0C\u5DF2\u6309\u9ED8\u8BA4\u503C\uFF08${d.defaultEnabled?"\u5F00":"\u5173"}\uFF09\u8865\u4E0A`),i.push(jt(d)));return i}function Zo(n,e=[]){let t=n??{};return{version:typeof t.version=="number"?t.version:Sn,toFeishu:bn("toFeishu",t.toFeishu,e),toObsidian:bn("toObsidian",t.toObsidian,e)}}function er(n,e=[]){return Zo(JSON.parse(n),e)}async function Ye(n,e){let t=(0,Wt.normalizePath)(de),o=t.slice(0,t.lastIndexOf("/"));o&&await pe(n,o),await n.write(t,`${JSON.stringify(e,null,2)}
-`)}async function Ke(n,e){let t=(0,Wt.normalizePath)(de);if(!await n.exists(t)){let o=De();try{await Ye(n,o),e?.info(`\u5DF2\u5199\u5165\u9ED8\u8BA4\u8F6C\u6362\u89C4\u5219\uFF1A${de}`)}catch(r){e?.warn(`\u5199\u5165\u9ED8\u8BA4\u8F6C\u6362\u89C4\u5219\u5931\u8D25\uFF08\u7EE7\u7EED\u7528\u5185\u7F6E\u9ED8\u8BA4\u503C\uFF09\uFF1A${String(r)}`)}return o}try{let o=[],r=er(await n.read(t),o);for(let i of o)e?.warn(`\u8F6C\u6362\u89C4\u5219\uFF1A${i}`);return r}catch(o){return e?.warn(`\u8F6C\u6362\u89C4\u5219\u6587\u4EF6\u65E0\u6CD5\u89E3\u6790\uFF0C\u672C\u6B21\u4F7F\u7528\u5185\u7F6E\u9ED8\u8BA4\u503C\uFF08\u6587\u4EF6\u672A\u6539\u52A8\uFF09\uFF1A${String(o)}`),De()}}function Ae(n,e,t,o){let r=new Set(o[n].filter(s=>s.enabled).map(s=>s.id)),i=e;for(let s of me[n])r.has(s.id)&&(i=s.apply(i,t));return i}var tr=["math-escape-hash","math-trim-inline-spaces","inline-formula-to-block","block-formula-own-paragraph","list-exit-after-hardbreak","native-math"];function xn(n,e,t,o){let r=new Set(o.toFeishu.filter(s=>s.enabled).map(s=>s.id)),i=s=>{let d=s;for(let a of me.toFeishu)!tr.includes(a.id)||!r.has(a.id)||(d=a.apply(d,t));return d};return i(n)===i(e)}function Ce(n,e,t){return n[e].some(o=>o.id===t&&o.enabled)}function _n(n,e){let t=n;for(let o of[$n,zt,Ut])Ce(e,"toObsidian",o.id)&&(t=o.apply(t,{relPath:"",documentTitle:"",localContent:n}));return t}function K(n){let e=new Set(n.toFeishu.filter(t=>t.enabled).map(t=>t.id));return JSON.stringify([_o,me.toFeishu.filter(t=>t.id!=="source-format-diagnostics"&&e.has(t.id)).map(t=>t.id)])}function Ze(n){let e=new Set(n.toObsidian.filter(t=>t.enabled).map(t=>t.id));return JSON.stringify([1,me.toObsidian.filter(t=>e.has(t.id)).map(t=>t.id)])}var Xt=class extends R.FuzzySuggestModal{constructor(t,o,r){super(t);this.spaces=o;this.onChoose=r;this.setPlaceholder("\u9009\u62E9\u8981\u540C\u6B65\u7684\u77E5\u8BC6\u7A7A\u95F4")}getItems(){return this.spaces}getItemText(t){return`${t.name} \xB7 ${t.space_id}`}onChooseItem(t){this.onChoose(t)}},et=class extends R.PluginSettingTab{constructor(t,o){super(t,o);this.host=o}display(){let{containerEl:t}=this,o=this.host.settings;t.empty(),t.createEl("h2",{text:"Feishu Wiki Sync"}),t.createEl("p",{cls:"setting-item-description",text:"\u5C06\u5F53\u524D\u4ED3\u5E93\u7684 Markdown \u7B14\u8BB0\u4E0E\u98DE\u4E66\u77E5\u8BC6\u5E93\u53CC\u5411\u540C\u6B65\u3002\u6587\u6863\u6A21\u5F0F\u4FBF\u4E8E\u5728\u98DE\u4E66\u9605\u8BFB\u4E0E\u7F16\u8F91\uFF1B\u6587\u4EF6\u955C\u50CF\u6A21\u5F0F\u4FDD\u7559\u539F\u59CB Markdown\u3002"}),this.renderAuth(t,o),this.renderTarget(t,o),this.renderSyncMode(t,o),this.renderRules(t),this.renderBehaviour(t,o),this.renderState(t,o)}renderSyncMode(t,o){t.createEl("h3",{text:"\u540C\u6B65\u6A21\u5F0F"}),new R.Setting(t).setName("\u7B14\u8BB0\u540C\u6B65\u5F62\u6001").setDesc("\u6587\u4EF6\u955C\u50CF\u4FDD\u7559\u539F\u59CB Markdown\uFF1B\u6587\u6863\u6A21\u5F0F\u751F\u6210\u53EF\u7F16\u8F91\u7684\u98DE\u4E66\u65B0\u7248\u6587\u6863\uFF0C\u652F\u6301\u56FE\u7247\u3001\u5217\u8868\u3001\u4EE3\u7801\u3001\u8868\u683C\u548C\u516C\u5F0F\u3002\u6587\u6863\u6A21\u5F0F\u4F1A\u8F6C\u6362\u6392\u7248\uFF0C\u4E0D\u80FD\u4FDD\u8BC1\u6E90\u7801\u9010\u5B57\u4E0D\u53D8\uFF1B\u5207\u6362\u6A21\u5F0F\u4F1A\u91CD\u65B0\u5BF9\u63A5\uFF0C\u540C\u540D\u4F46\u5185\u5BB9\u4E0D\u540C\u5219\u4FDD\u7559\u53CC\u65B9\u5E76\u62A5\u544A\u51B2\u7A81\u3002").addDropdown(r=>r.addOption("md","\u6587\u4EF6\u955C\u50CF\uFF08\u539F\u751F Markdown\uFF09").addOption("doc","\u6587\u6863\u6A21\u5F0F\uFF08\u98DE\u4E66\u65B0\u7248\u6587\u6863\uFF09").setValue(o.syncMode).onChange(async i=>{let s=i==="doc"?"doc":"md";s!==o.syncMode&&(o.syncMode=s,await this.host.saveSettings(),this.host.refreshAutoSync(),new R.Notice(s==="doc"?"\u5DF2\u5207\u5230\u6587\u6863\u6A21\u5F0F\uFF1A\u4E0B\u4E00\u6B21\u540C\u6B65\u6309\u300C\u9996\u6B21\u5BF9\u63A5\u300D\u5224\u5B9A\uFF0C\u4E0D\u4F1A\u76F4\u63A5\u8986\u76D6\u672C\u5730":"\u5DF2\u5207\u5230\u6587\u4EF6\u955C\u50CF\u6A21\u5F0F\uFF1A\u4E0B\u4E00\u6B21\u540C\u6B65\u6309\u300C\u9996\u6B21\u5BF9\u63A5\u300D\u5224\u5B9A\uFF0C\u4E0D\u4F1A\u76F4\u63A5\u8986\u76D6\u672C\u5730"),this.display())})),t.createEl("p",{cls:"setting-item-description",text:`\u5F53\u524D\uFF1A${o.syncMode==="doc"?"\u6587\u6863\u6A21\u5F0F\uFF08\u98DE\u4E66\u65B0\u7248\u6587\u6863 docx\uFF09":"\u6587\u4EF6\u955C\u50CF\uFF08\u539F\u751F Markdown \u6587\u4EF6\uFF09"} \xB7 \u6587\u6863\u6A21\u5F0F\u7684\u8F6C\u6362\u89C4\u5219\u5728 ${de}`})}renderRules(t){t.createEl("h3",{text:"\u8F6C\u6362\u89C4\u5219\uFF08\u6587\u6863\u6A21\u5F0F\uFF09"}),t.createEl("p",{cls:"setting-item-description",text:`\u89C4\u5219\u6587\u4EF6\uFF1A${de}\uFF0C\u6BCF\u6761\u89C4\u5219\u90FD\u6709 enabled \u5F00\u5173\u4E0E description \u8BF4\u660E\u3002\u4E0A\u884C\u89C4\u5219\u5728\u53D1\u7ED9\u98DE\u4E66\u4E4B\u524D\u4F5C\u7528\u4E8E\u672C\u5730 Markdown\uFF0C\u4E0B\u884C\u89C4\u5219\u5728\u5199\u56DE\u672C\u5730\u4E4B\u524D\u4F5C\u7528\u4E8E\u53D6\u56DE\u7684 Markdown\u3002\u6587\u4EF6\u4E0D\u5B58\u5728\u65F6\u4F1A\u81EA\u52A8\u5199\u5165\u4E00\u4EFD\u5B8C\u6574\u9ED8\u8BA4\u89C4\u5219\uFF1B\u52A0\u8F7D\u65F6\u4E0E\u5185\u7F6E\u9ED8\u8BA4\u6309 id \u5408\u5E76\uFF0C\u6539\u8FC7\u7684\u4EE5\u6587\u4EF6\u4E3A\u51C6\u3002\u4E0A\u884C\u89C4\u5219\u66F4\u65B0\u540E\uFF0C\u65E7\u6587\u6863\u4F1A\u8FDB\u5165\u5237\u65B0\u8BA1\u5212\uFF1B\u98DE\u4E66\u6709\u65B0\u6539\u52A8\u65F6\u4F18\u5148\u5904\u7406\u6539\u52A8\u3002\u539F\u7A3F\u683C\u5F0F\u63D0\u793A\u9ED8\u8BA4\u5173\u95ED\uFF0C\u53EF\u901A\u8FC7 source-format-diagnostics \u5F00\u542F\u3002`}),new R.Setting(t).setName("\u6253\u5F00\u89C4\u5219\u6587\u4EF6").setDesc("\u7528\u7CFB\u7EDF\u9ED8\u8BA4\u7A0B\u5E8F\u6253\u5F00 rules.json\uFF0C\u6539\u5B8C\u4FDD\u5B58\uFF0C\u4E0B\u6B21\u540C\u6B65\u751F\u6548").addButton(o=>o.setButtonText("\u6253\u5F00").onClick(async()=>{let r=this.host.app.vault.adapter,i=(0,R.normalizePath)(de);try{await r.exists(i)||await Ye(r,De());let s=this.host.app;typeof s.openWithDefaultApp=="function"?await s.openWithDefaultApp(i):new R.Notice(`\u8BF7\u5728\u6587\u4EF6\u7CFB\u7EDF\u91CC\u6253\u5F00 ${i}`)}catch(s){new R.Notice(`\u6253\u5F00\u89C4\u5219\u6587\u4EF6\u5931\u8D25\uFF1A${String(s)}\u3002\u6587\u4EF6\u4F4D\u7F6E\uFF1A${i}`,8e3)}})),new R.Setting(t).setName("\u91CD\u5EFA\u4E3A\u9ED8\u8BA4\u89C4\u5219").setDesc("\u7528\u5185\u7F6E\u9ED8\u8BA4\u89C4\u5219\u8986\u76D6 rules.json\uFF08\u4F1A\u4E22\u6389\u4F60\u5728\u6587\u4EF6\u91CC\u7684\u6539\u52A8\uFF09\uFF0C\u5E76\u505A\u4E00\u6B21\u89E3\u6790\u68C0\u67E5").addButton(o=>o.setButtonText("\u91CD\u5EFA").onClick(async()=>{try{let r=this.host.app.vault.adapter;await Ye(r,De());let i=await Ke(r,this.host.logger),s=d=>d.filter(a=>a.enabled).length;new R.Notice(`\u5DF2\u91CD\u5EFA ${de}\uFF1A\u4E0A\u884C ${s(i.toFeishu)} \u6761\u3001\u4E0B\u884C ${s(i.toObsidian)} \u6761\u89C4\u5219\u5F00\u542F`,8e3),this.display()}catch(r){new R.Notice(`\u91CD\u5EFA\u89C4\u5219\u6587\u4EF6\u5931\u8D25\uFF1A${String(r)}`,8e3)}}))}renderAuth(t,o){if(t.createEl("h3",{text:"\u98DE\u4E66\u5E94\u7528\u4E0E\u6388\u6743"}),t.createEl("p",{cls:"setting-item-description",text:"\u9700\u8981\u4E00\u4E2A\u98DE\u4E66\u4F01\u4E1A\u81EA\u5EFA\u5E94\u7528\u3002\u9ED8\u8BA4\u6388\u6743\u8303\u56F4\uFF1Adrive:drive\u3001wiki:wiki\u3001docx:document\u3001docs:document.media:download\u3001docs:document.media:upload\uFF1B\u8BE6\u89C1 README \u7684\u914D\u7F6E\u6B65\u9AA4\u3002\u7528\u300C\u7528\u6237\u6388\u6743\u300D\u65F6\u8FD8\u8981\u5728\u5F00\u653E\u5E73\u53F0\u767B\u8BB0\u4E0B\u65B9\u91CD\u5B9A\u5411\u5730\u5740\uFF0C\u5E76\u5305\u542B offline_access \u4EE5\u81EA\u52A8\u7EED\u671F\u3002"}),new R.Setting(t).setName("\u8EAB\u4EFD\u6A21\u5F0F").setDesc("\u7528\u6237\u6388\u6743\uFF1A\u4EE5\u4F60\u672C\u4EBA\u7684\u8EAB\u4EFD\u8BBF\u95EE\u4E2A\u4EBA\u77E5\u8BC6\u5E93\uFF08\u63A8\u8350\uFF09\u3002\u5E94\u7528\u8EAB\u4EFD\uFF1A\u9700\u8981\u628A\u5E94\u7528\u6DFB\u52A0\u4E3A\u77E5\u8BC6\u5E93\u6210\u5458\u3002").addDropdown(r=>r.addOption("user","\u7528\u6237\u6388\u6743\uFF08user_access_token\uFF09").addOption("tenant","\u5E94\u7528\u8EAB\u4EFD\uFF08tenant_access_token\uFF09").setValue(o.authMode).onChange(async i=>{o.authMode=i,await this.host.saveSettings(),this.display()})),new R.Setting(t).setName("App ID").setDesc("\u98DE\u4E66\u5F00\u653E\u5E73\u53F0 \u2192 \u51ED\u8BC1\u4E0E\u57FA\u7840\u4FE1\u606F").addText(r=>r.setValue(o.appId).onChange(async i=>{o.appId!==i.trim()&&(o.userTokens=void 0),o.appId=i.trim(),await this.host.saveSettings()})),new R.Setting(t).setName("App Secret").setDesc("\u4FDD\u5B58\u5728\u63D2\u4EF6\u7684 data.json \u91CC\uFF0C\u8BF7\u52FF\u628A\u8BE5\u6587\u4EF6\u540C\u6B65\u5230\u516C\u5F00\u4ED3\u5E93").addText(r=>{r.inputEl.type="password",r.setValue(o.appSecret).onChange(async i=>{o.appSecret!==i.trim()&&(o.userTokens=void 0),o.appSecret=i.trim(),await this.host.saveSettings()})}),o.authMode==="user"){new R.Setting(t).setName("\u91CD\u5B9A\u5411\u5730\u5740").setDesc("\u9700\u8981\u4E0E\u5F00\u653E\u5E73\u53F0\u91CC\u767B\u8BB0\u7684\u56DE\u8C03\u5730\u5740\u5B8C\u5168\u4E00\u81F4").addText(i=>i.setValue(o.redirectUri).onChange(async s=>{o.redirectUri=s.trim(),await this.host.saveSettings()})),new R.Setting(t).setName("\u6388\u6743\u8303\u56F4").setDesc("\u7A7A\u683C\u5206\u9694\uFF0C\u5FC5\u987B\u90FD\u662F\u5E94\u7528\u5DF2\u5F00\u901A\u7684\u6743\u9650\uFF1Boffline_access \u7528\u4E8E\u81EA\u52A8\u7EED\u671F").addText(i=>i.setValue(o.oauthScope).onChange(async s=>{o.oauthScope=s.trim(),await this.host.saveSettings()}));let r=o.userTokens;new R.Setting(t).setName("\u6388\u6743\u72B6\u6001").setDesc(r?.refreshToken?`\u5DF2\u6388\u6743\uFF0Crefresh token \u6709\u6548\u81F3 ${new Date(r.refreshExpiresAt).toLocaleString()}`:"\u5C1A\u672A\u6388\u6743").addButton(i=>i.setButtonText(r?.refreshToken?"\u91CD\u65B0\u6388\u6743":"\u6388\u6743\u98DE\u4E66\u8D26\u53F7").setCta().onClick(async()=>{try{await this.host.startAuthorization(),this.display()}catch(s){new R.Notice(`\u6388\u6743\u5931\u8D25\uFF1A${s instanceof Error?s.message:String(s)}`)}})).addButton(i=>i.setButtonText("\u624B\u52A8\u7C98\u8D34\u6388\u6743\u7801").onClick(async()=>{try{await this.host.startManualAuthorization(),this.display()}catch(s){new R.Notice(`\u6388\u6743\u5931\u8D25\uFF1A${s instanceof Error?s.message:String(s)}`)}})).addButton(i=>i.setButtonText("\u64A4\u9500\u6388\u6743").onClick(async()=>{await this.host.revokeAuthorization(),this.display()}))}new R.Setting(t).setName("\u8FDE\u63A5\u6D4B\u8BD5").setDesc("\u62C9\u53D6\u5F53\u524D\u8EAB\u4EFD\u53EF\u89C1\u7684\u77E5\u8BC6\u7A7A\u95F4\u5217\u8868").addButton(r=>r.setButtonText("\u6D4B\u8BD5").onClick(async()=>{try{let i=await this.host.engine.listSpaces();new R.Notice(i.length>0?`\u8FDE\u63A5\u6210\u529F\uFF0C\u53EF\u89C1\u77E5\u8BC6\u7A7A\u95F4 ${i.length} \u4E2A`:"\u8FDE\u63A5\u6210\u529F\uFF0C\u4F46\u6CA1\u6709\u53EF\u89C1\u7684\u77E5\u8BC6\u7A7A\u95F4")}catch(i){new R.Notice(`\u8FDE\u63A5\u5931\u8D25\uFF1A${i instanceof Error?i.message:String(i)}`,8e3)}}))}renderTarget(t,o){t.createEl("h3",{text:"\u540C\u6B65\u76EE\u6807"}),t.createEl("p",{cls:"setting-item-description",text:"\u672C\u5730 vault \u6839\u76EE\u5F55 \u2194 \u77E5\u8BC6\u7A7A\u95F4\u3002\u53EA\u6709 .md \u6587\u4EF6\u53C2\u4E0E\u540C\u6B65\uFF1B\u540C\u6B65\u4F1A\u5728\u77E5\u8BC6\u5E93\u91CC\u6309\u672C\u5730\u76EE\u5F55\u5C42\u7EA7\u521B\u5EFA\u9875\u9762\u3002"}),new R.Setting(t).setName("\u77E5\u8BC6\u7A7A\u95F4 space_id").setDesc("\u5EFA\u8BAE\u7528\u300C\u62C9\u53D6\u5217\u8868\u300D\u9009\u62E9\uFF1B\u624B\u586B\u65F6\u4F7F\u7528\u6570\u5B57 space_id\uFF0C\u4E0D\u8981\u7C98\u8D34 /wiki/ \u9875\u9762\u94FE\u63A5").addText(r=>r.setValue(o.spaceId).onChange(async i=>{o.spaceId=i.trim(),await this.host.saveSettings()})).addButton(r=>r.setButtonText("\u62C9\u53D6\u5217\u8868").onClick(async()=>{try{let i=await this.host.engine.listSpaces();if(i.length===0){new R.Notice("\u5F53\u524D\u8EAB\u4EFD\u770B\u4E0D\u5230\u4EFB\u4F55\u77E5\u8BC6\u7A7A\u95F4");return}new Xt(this.app,i,async s=>{o.spaceId=s.space_id,await this.host.saveSettings(),new R.Notice(`\u5DF2\u9009\u62E9\u77E5\u8BC6\u7A7A\u95F4\uFF1A${s.name}`),this.display()}).open()}catch(i){new R.Notice(`\u62C9\u53D6\u5931\u8D25\uFF1A${i instanceof Error?i.message:String(i)}`,8e3)}})),new R.Setting(t).setName("\u540C\u6B65\u6839\u8282\u70B9\uFF08\u53EF\u7559\u7A7A\uFF09").setDesc("\u7559\u7A7A = \u4EE5\u77E5\u8BC6\u7A7A\u95F4\u9876\u5C42\u4E3A\u540C\u6B65\u6839\uFF1Avault \u7684\u4E00\u7EA7\u76EE\u5F55\u4F1A\u53D8\u6210\u77E5\u8BC6\u5E93\u91CC\u7684\u4E00\u7EA7\u9875\u9762\uFF08vault \u6839\u76EE\u5F55\u4E0B\u7684\u6563\u88C5\u7B14\u8BB0\u4F1A\u653E\u8FDB\u4E0B\u65B9\u90A3\u4E2A\u9876\u5C42\u9875\u9762\u91CC\uFF09\u3002\u586B\u8282\u70B9\u94FE\u63A5\u6216 node_token \u5219\u6240\u6709\u5185\u5BB9\u90FD\u6302\u5230\u8BE5\u8282\u70B9\u4E0B\u9762\uFF0C\u98DE\u4E66\u4FA7\u4E0D\u4F1A\u591A\u51FA\u4E00\u4E2A\u6839\u9875\u9762\u3002\u6CE8\u610F\uFF1A\u7559\u7A7A\u65F6\uFF0C\u77E5\u8BC6\u5E93\u9876\u5C42\u5DF2\u6709\u7684 .md \u6587\u4EF6\u4F1A\u88AB\u62C9\u53D6\u5230\u4F60\u7684 vault \u6839\u76EE\u5F55\u3002").addText(r=>r.setValue(o.rootNodeToken).onChange(async i=>{o.rootNodeToken=i.trim(),await this.host.saveSettings(),this.display()})),o.rootNodeToken.trim()||new R.Setting(t).setName("\u6839\u76EE\u5F55\u9875\u9762\u6807\u9898").setDesc("\u5B58\u653E vault \u6839\u76EE\u5F55\u4E0B\u7B14\u8BB0\u7684\u90A3\u4E2A\u77E5\u8BC6\u5E93\u4E00\u7EA7\u9875\u9762\u7684\u540D\u79F0\uFF0C\u7559\u7A7A\u5219\u7528 vault \u7684\u540D\u5B57\uFF08\u5F53\u524D\uFF1A"+this.app.vault.getName()+"\uFF09").addText(r=>r.setValue(o.rootPageTitle).onChange(async i=>{o.rootPageTitle=i.trim(),await this.host.saveSettings()}))}renderBehaviour(t,o){t.createEl("h3",{text:"\u540C\u6B65\u884C\u4E3A"}),new R.Setting(t).setName("\u9644\u4EF6\u76EE\u5F55").setDesc("\u6587\u6863\u6A21\u5F0F\u4E0B\u884C\u65F6\uFF0C\u4ECE\u98DE\u4E66\u4E0B\u8F7D\u7684\u56FE\u7247\u653E\u5230\u8FD9\u4E2A\u76EE\u5F55\uFF08\u76F8\u5BF9 vault \u6839\uFF0C\u586B attachments \u8FD9\u7C7B\u76F8\u5BF9\u8DEF\u5F84\uFF1B\u76EE\u5F55\u4E0D\u5B58\u5728\u4F1A\u81EA\u52A8\u521B\u5EFA\uFF09\u3002").addText(r=>r.setValue(o.attachmentFolder).onChange(async i=>{o.attachmentFolder=i.trim()||"attachments",await this.host.saveSettings()})),new R.Setting(t).setName("\u9644\u4EF6\u94FE\u63A5\u5199\u6CD5").setDesc("\u4ECE\u98DE\u4E66\u4E0B\u8F7D\u56FE\u7247\u540E\uFF0C\u7B14\u8BB0\u91CC\u5F15\u7528\u5199\u6210\u54EA\u79CD\u5F62\u5F0F\u3002\u6700\u77ED\u8DEF\u5F84 = \u53EA\u5199\u6587\u4EF6\u540D\uFF08\u5982 ![[image-xxx.png]]\uFF0C\u4E0E Obsidian\u300C\u6700\u77ED\u8DEF\u5F84\u300D\u94FE\u63A5\u683C\u5F0F\u4E00\u81F4\uFF09\uFF1B\u5E26\u76EE\u5F55 = \u5199 ![[\u9644\u4EF6\u76EE\u5F55/\u6587\u4EF6\u540D]]\u3002").addDropdown(r=>r.addOption("shortest","\u53EA\u5199\u6587\u4EF6\u540D\uFF08\u6700\u77ED\u8DEF\u5F84\uFF09").addOption("path","\u5E26\u9644\u4EF6\u76EE\u5F55\u524D\u7F00").setValue(o.attachmentLinkStyle).onChange(async i=>{o.attachmentLinkStyle=i,await this.host.saveSettings()})),new R.Setting(t).setName("\u76EE\u5F55\u5C42\u7EA7").setDesc("\u955C\u50CF\u76EE\u5F55\uFF1A\u4E3A\u6BCF\u4E2A\u672C\u5730\u6587\u4EF6\u5939\u5EFA\u4E00\u4E2A\u77E5\u8BC6\u5E93\u8282\u70B9\uFF08\u4F1A\u591A\u51FA\u4E00\u4E9B\u7A7A\u6587\u6863\u9875\uFF09\u3002\u6241\u5E73\uFF1A\u6240\u6709\u7B14\u8BB0\u6302\u5728\u6839\u8282\u70B9\u4E0B\uFF0C\u6587\u4EF6\u540D\u7528\u5206\u9694\u7B26\u7F16\u7801\u8DEF\u5F84\u3002").addDropdown(r=>r.addOption("nodes","\u955C\u50CF\u76EE\u5F55\uFF08\u63A8\u8350\uFF09").addOption("flat","\u6241\u5E73\u5316").setValue(o.folderMode).onChange(async i=>{o.folderMode=i,await this.host.saveSettings(),this.display()})),o.folderMode==="flat"&&new R.Setting(t).setName("\u6241\u5E73\u5206\u9694\u7B26").setDesc("\u7528\u8BE5\u5B57\u7B26\u4E32\u66FF\u6362\u8DEF\u5F84\u91CC\u7684 /").addText(r=>r.setValue(o.flatSeparator).onChange(async i=>{o.flatSeparator=i||"__",await this.host.saveSettings()})),new R.Setting(t).setName("\u6392\u9664\u89C4\u5219").setDesc("\u6BCF\u884C\u4E00\u6761 glob\uFF0C\u652F\u6301 * \u4E0E **\u3002.obsidian/ \u4E0E .trash/ \u59CB\u7EC8\u6392\u9664\uFF0C\u51B2\u7A81\u526F\u672C\u76EE\u5F55\u4E5F\u59CB\u7EC8\u6392\u9664\u3002").addTextArea(r=>{r.setValue(o.excludePatterns).onChange(async i=>{o.excludePatterns=i,await this.host.saveSettings()}),r.inputEl.rows=4}),new R.Setting(t).setName("\u8FDC\u7AEF\u5DF2\u5220\u9664\u65F6\u81EA\u52A8\u91CD\u5EFA").setDesc("\u5173\u95ED\u65F6\uFF08\u63A8\u8350\uFF09\u53EA\u4F1A\u63D0\u793A\uFF0C\u4E0D\u4F1A\u628A\u672C\u5730\u6709\u4FEE\u6539\u7684\u7B14\u8BB0\u91CD\u65B0\u4F20\u4E0A\u53BB").addToggle(r=>r.setValue(o.recreateRemoteIfDeleted).onChange(async i=>{o.recreateRemoteIfDeleted=i,await this.host.saveSettings()})),new R.Setting(t).setName("\u6587\u6863\u6A21\u5F0F\uFF1A\u6BCF\u8F6E\u53D6\u56DE\u5168\u6587\u6821\u9A8C").setDesc("\u5173\u95ED\uFF08\u9ED8\u8BA4\uFF09\uFF1A\u5148\u7528\u98DE\u4E66\u8FD4\u56DE\u7684\u300C\u6700\u540E\u4FEE\u6539\u65F6\u95F4\u300D\uFF08\u79D2\u7EA7\uFF09\u5224\u65AD\u8FDC\u7AEF\u6709\u6CA1\u6709\u53D8\uFF0C\u6CA1\u53D8\u5C31\u4E0D\u53D6\u56DE\u5168\u6587\uFF0C\u4E00\u8F6E\u53EA\u591A\u4E00\u6B21\u6279\u91CF\u5143\u6570\u636E\u8BF7\u6C42\u3002\u4EE3\u4EF7\u662F\u7406\u8BBA\u4E0A\u5B58\u5728\u6781\u7AEF\u60C5\u51B5\u2014\u2014\u540C\u4E00\u79D2\u5185\u7684\u8FDC\u7AEF\u6539\u52A8\u53EF\u80FD\u88AB\u6F0F\u5224\u5230\u4E0B\u4E00\u6B21\u65F6\u95F4\u6233\u53D8\u5316\u3002\u6253\u5F00\uFF1A\u5FFD\u7565\u65F6\u95F4\u6233\uFF0C\u6BCF\u8F6E\u5BF9\u6BCF\u7BC7\u5DF2\u8BB0\u5F55\u6587\u6863\u90FD\u53D6\u56DE\u5168\u6587\u9010\u7BC7\u6821\u9A8C\uFF0C\u6700\u7A33\uFF0C\u4F46\u8BF7\u6C42\u6570\u4E0E\u6D41\u91CF\u660E\u663E\u66F4\u9AD8\u3002").addToggle(r=>r.setValue(o.docVerifyRemoteByContent).onChange(async i=>{o.docVerifyRemoteByContent=i,await this.host.saveSettings()})),t.createEl("h3",{text:"\u5220\u9664\u4F20\u64AD\uFF08\u9ED8\u8BA4\u5173\u95ED\uFF09"}),t.createEl("p",{cls:"setting-item-description",text:"\u4E24\u4E2A\u5F00\u5173\u90FD\u5173\u7740\u65F6\uFF0C\u4EFB\u4F55\u4E00\u8FB9\u5220\u9664\u90FD\u53EA\u5728\u540C\u6B65\u7ED3\u679C\u91CC\u63D0\u793A\uFF0C\u4E0D\u4F1A\u81EA\u52A8\u5220\u53E6\u4E00\u8FB9\u3002\u6253\u5F00\u540E\u5220\u9664\u4F1A\u51FA\u73B0\u5728\u8BA1\u5212\u9884\u89C8\u7684\u72EC\u7ACB\u5206\u7EC4\u91CC\uFF0C\u9700\u8981\u4F60\u5728\u9884\u89C8\u6846\u91CC\u786E\u8BA4\u624D\u4F1A\u6267\u884C\u3002"}),new R.Setting(t).setName("\u672C\u5730\u5220\u9664\u540E\u540C\u65F6\u5220\u9664\u8FDC\u7AEF").setDesc("\u672C\u5730\u5220\u6389\u7684\u7B14\u8BB0\uFF0C\u540C\u6B65\u65F6\u628A\u8FDC\u7AEF\u5BF9\u5E94\u7684\u6587\u4EF6/\u6587\u6863\u4E00\u8D77\u5220\u6389\uFF08\u8D70\u4E91\u7A7A\u95F4\u63A5\u53E3\uFF0C\u5220\u9664\u8FDB\u98DE\u4E66\u56DE\u6536\u7AD9\uFF0C\u53EF\u4EE5\u6062\u590D\uFF09\u3002\u8FDC\u7AEF\u81EA\u4E0A\u6B21\u540C\u6B65\u540E\u88AB\u6539\u8FC7\u3001\u6216\u8BE5\u8DEF\u5F84\u547D\u4E2D\u6392\u9664\u89C4\u5219\u65F6\uFF0C\u90FD\u4E0D\u4F1A\u5220\uFF0C\u4ECD\u7136\u6309\u51B2\u7A81/\u5FFD\u7565\u5904\u7406\u3002\u5220\u9664\u59CB\u7EC8\u9700\u8981\u624B\u52A8\u540C\u6B65\u786E\u8BA4\uFF1B\u5B9A\u65F6\u540C\u6B65\u53EA\u63D0\u793A\u5F85\u5220\u9664\u9879\u3002").addToggle(r=>r.setValue(o.propagateLocalDelete).onChange(async i=>{o.propagateLocalDelete=i,await this.host.saveSettings()})),new R.Setting(t).setName("\u8FDC\u7AEF\u5220\u9664\u540E\u540C\u65F6\u5220\u9664\u672C\u5730").setDesc("\u8FDC\u7AEF\u5220\u6389\u7684\u6587\u4EF6/\u6587\u6863\uFF0C\u540C\u6B65\u65F6\u628A\u672C\u5730\u7B14\u8BB0\u79FB\u8FDB vault \u7684 .trash\uFF08\u4E0D\u662F\u6C38\u4E45\u5220\u9664\uFF09\uFF0C\u5E76\u6E05\u6389\u6620\u5C04\u5173\u7CFB\u3002\u672C\u5730\u81EA\u4E0A\u6B21\u540C\u6B65\u540E\u88AB\u6539\u8FC7\u65F6\u4E0D\u4F1A\u5220\uFF0C\u53EA\u4F1A\u63D0\u793A\u3002\u6CE8\u610F\uFF1A\u8FD9\u6761\u4F1A\u771F\u7684\u52A8\u4F60\u672C\u5730\u7684\u6587\u4EF6\uFF0C\u540C\u6837\u4F1A\u5728\u8BA1\u5212\u9884\u89C8\u91CC\u5355\u72EC\u5217\u51FA\u7B49\u4F60\u786E\u8BA4\u3002").addToggle(r=>r.setValue(o.propagateRemoteDelete).onChange(async i=>{o.propagateRemoteDelete=i,await this.host.saveSettings()})),new R.Setting(t).setName("\u540C\u6B65\u524D\u9884\u89C8\u8BA1\u5212").setDesc("\u6BCF\u6B21\u540C\u6B65\u5148\u5F39\u51FA\u8BA1\u5212\u786E\u8BA4\u6846").addToggle(r=>r.setValue(o.showPlanBeforeSync).onChange(async i=>{o.showPlanBeforeSync=i,await this.host.saveSettings()})),new R.Setting(t).setName("\u5B9A\u65F6\u81EA\u52A8\u540C\u6B65").setDesc("\u5355\u4F4D\u5206\u949F\uFF0C0 \u8868\u793A\u5173\u95ED\u3002\u81EA\u52A8\u540C\u6B65\u8DF3\u8FC7\u9884\u89C8\u3001\u4FDD\u7559\u51B2\u7A81\u526F\u672C\uFF1B\u5220\u9664\u9879\u7559\u5F85\u624B\u52A8\u540C\u6B65\u786E\u8BA4\u3002").addText(r=>r.setValue(String(o.autoSyncMinutes)).onChange(async i=>{let s=Number.parseInt(i,10);o.autoSyncMinutes=Number.isFinite(s)&&s>0?s:0,await this.host.saveSettings(),this.host.refreshAutoSync()})),new R.Setting(t).setName("\u8C03\u8BD5\u65E5\u5FD7").setDesc("\u5199\u5165 .obsidian/feishu-sync/sync.log").addToggle(r=>r.setValue(o.debugLog).onChange(async i=>{o.debugLog=i,await this.host.saveSettings()}))}renderState(t,o){t.createEl("h3",{text:"\u72B6\u6001"});let r=Object.keys(o.syncMode==="doc"?o.state.docRecords:o.state.records).length,i=Object.keys(o.state.folders).length;t.createEl("p",{cls:"setting-item-description",text:`\u4E0A\u6B21\u540C\u6B65\uFF1A${o.state.lastSyncAt?new Date(o.state.lastSyncAt).toLocaleString():"\u4ECE\u672A\u540C\u6B65"} \xB7 \u5DF2\u6620\u5C04\u7B14\u8BB0 ${r} \u7BC7 \xB7 \u5DF2\u5EFA\u76EE\u5F55\u8282\u70B9 ${i} \u4E2A`}),t.createEl("p",{cls:"setting-item-description",text:`\u51B2\u7A81\u526F\u672C\u76EE\u5F55\uFF1A${ce}/\uFF08\u672C\u5730\u4E0E\u8FDC\u7AEF\u90FD\u4E0D\u6539\u52A8\uFF0C\u526F\u672C\u4EC5\u4F5C\u53C2\u8003\uFF09`}),new R.Setting(t).setName("\u6E05\u7A7A\u540C\u6B65\u72B6\u6001").setDesc("\u6E05\u6389\u4E24\u79CD\u6A21\u5F0F\u7684\u6620\u5C04\u3001\u56FE\u7247\u7F13\u5B58\u4E0E\u540C\u6B65\u65F6\u95F4\uFF0C\u4FDD\u7559\u8D26\u53F7\u3001\u89C4\u5219\u548C\u7B14\u8BB0\u3002\u4E0B\u6B21\u6309\u9996\u6B21\u5BF9\u63A5\u5224\u5B9A\uFF1B\u540C\u540D\u4F46\u5185\u5BB9\u4E0D\u540C\u4F1A\u62A5\u544A\u51B2\u7A81\u3002").addButton(d=>d.setWarning().setButtonText("\u6E05\u7A7A").onClick(async()=>{if(this.host.isSyncBusy()){new R.Notice("\u540C\u6B65\u6B63\u5728\u8FDB\u884C\u4E2D\uFF0C\u8BF7\u7B49\u5B83\u7ED3\u675F\u540E\u518D\u6E05\u7A7A\u72B6\u6001");return}o.state=Ee(),await this.host.saveSettings(),new R.Notice("\u540C\u6B65\u72B6\u6001\u5DF2\u6E05\u7A7A"),this.display()})),t.createEl("h3",{text:"\u5DF2\u77E5\u8FB9\u754C"});let s=t.createEl("ul",{cls:"setting-item-description"});s.createEl("li",{text:"\u98DE\u4E66\u4E0D\u63A5\u53D7 0 \u5B57\u8282 Markdown\uFF0C\u7A7A\u6587\u4EF6\u5728\u6587\u4EF6\u955C\u50CF\u6A21\u5F0F\u4E0B\u4F1A\u88AB\u8DF3\u8FC7\u5E76\u63D0\u793A\uFF1B\u6587\u6863\u6A21\u5F0F\u4E0B\u7A7A\u7B14\u8BB0\u4E5F\u4F1A\u540C\u6B65\uFF08\u6B63\u6587\u4E3A\u7A7A\uFF0C\u98DE\u4E66\u4FA7\u53EA\u6709\u6807\u9898\uFF09\u3002"}),s.createEl("li",{text:"\u6587\u6863\u6A21\u5F0F\u4F1A\u4E0A\u4F20\u672C\u5730\u56FE\u7247\uFF08\u5199\u8FDB\u6587\u6863\u7684\u56FE\u7247\u5757\uFF09\u5E76\u4E0B\u8F7D\u98DE\u4E66\u91CC\u7684\u56FE\u7247\u5230\u9644\u4EF6\u76EE\u5F55\uFF1B\u89C4\u5219\u6587\u4EF6\u91CC image-upload / image-download \u53EF\u5173\u3002\u6587\u4EF6\u955C\u50CF\u6A21\u5F0F\u4E0D\u505A\u56FE\u7247\u5904\u7406\uFF0C\u56FE\u7247\u53EA\u662F\u7B14\u8BB0\u91CC\u7684\u6587\u672C\u3002"}),s.createEl("li",{text:"\u5220\u9664\u9ED8\u8BA4\u4E0D\u4F1A\u4F20\u64AD\uFF0C\u53EA\u5728\u7ED3\u679C\u91CC\u63D0\u793A\uFF1B\u8981\u4F20\u64AD\u5C31\u5728\u4E0A\u9762\u6253\u5F00\u5BF9\u5E94\u7684\u5220\u9664\u5F00\u5173\uFF08\u8FDC\u7AEF\u5220\u9664\u8FDB\u98DE\u4E66\u56DE\u6536\u7AD9\uFF0C\u672C\u5730\u5220\u9664\u8FDB .trash\uFF09\u3002"}),s.createEl("li",{text:"\u4E24\u8FB9\u540C\u65F6\u4FEE\u6539\u540C\u4E00\u7BC7\u65F6\u6309\u51B2\u7A81\u5904\u7406\uFF1A\u8FDC\u7AEF\u7248\u672C\u53E6\u5B58\u4E3A\u526F\u672C\uFF0C\u672C\u5730\u4E0E\u8FDC\u7AEF\u90FD\u4E0D\u52A8\u3002"})}};var Dn=require("crypto"),An=require("obsidian");var tt=require("obsidian");var nr=[".obsidian/**",".trash/**",`${ce}/**`,"**/.DS_Store"];function ue(n){if(!n||/[\\\x00-\x1f:]/.test(n)||n.split("/").some(e=>!e||e==="."||e===".."))throw new Error(`\u65E0\u6548\u7684\u4ED3\u5E93\u76F8\u5BF9\u8DEF\u5F84\uFF1A${n}`)}function or(n){let e="^";for(let t=0;t<n.length;t+=1){let o=n[t];o==="*"?n[t+1]==="*"?n[t+2]==="/"?(e+="(?:.*/)?",t+=2):(e+=".*",t+=1):e+="[^/]*":o==="?"?e+="[^/]":"\\^$.|+()[]{}".includes(o)?e+=`\\${o}`:e+=o}return new RegExp(`${e}$`)}var Se=class{constructor(e){let t=e.split(`
-`).map(o=>o.trim()).filter(o=>o&&!o.startsWith("#")).map(o=>o.endsWith("/")?`${o}**`:o).map(o=>o.replace(/^\.\//,"").replace(/^\//,""));this.patterns=[...nr,...t].map(or)}isExcluded(e){return this.patterns.some(t=>t.test(e))}};function Ne(n,e){let t=new Map;for(let o of n.vault.getMarkdownFiles()){if(e.isExcluded(o.path))continue;let r=o.stat;t.set(o.path,{relPath:o.path,size:r?.size??0,mtime:r?.mtime??0})}return t}async function he(n,e){let t=n.vault.getAbstractFileByPath(e);if(!(t instanceof tt.TFile))throw new Error(`\u627E\u4E0D\u5230\u672C\u5730\u6587\u4EF6\uFF1A${e}`);return n.vault.readBinary(t)}function U(n,e){let t=n.vault.getAbstractFileByPath(e);return t instanceof tt.TFile?{size:t.stat?.size??0,mtime:t.stat?.mtime??0}:{size:0,mtime:0}}async function ve(n,e,t){ue(e);let o=n.vault.getAbstractFileByPath(e);if(o instanceof tt.TFile){await n.vault.modifyBinary(o,t);return}let r=e.includes("/")?e.slice(0,e.lastIndexOf("/")):"";r&&!n.vault.getAbstractFileByPath(r)&&await n.vault.createFolder(r).catch(()=>{}),await n.vault.createBinary(e,t)}var En=50,In=20;function Mn(n,e){if(!Array.isArray(n.items))throw new Error("\u77E5\u8BC6\u5E93\u5217\u8868\u54CD\u5E94\u7F3A\u5C11 items\uFF0C\u5DF2\u505C\u6B62\u540C\u6B65\uFF0C\u907F\u514D\u8BEF\u5224\u8FDC\u7AEF\u5220\u9664");if(n.has_more){if(!n.page_token||e.has(n.page_token))throw new Error("\u77E5\u8BC6\u5E93\u5206\u9875\u6E38\u6807\u7F3A\u5931\u6216\u91CD\u590D\uFF0C\u5DF2\u505C\u6B62\u540C\u6B65");return e.add(n.page_token),n.page_token}}async function nt(n){let e=[],t=new Set,o;do{let r=await n.json("GET","/open-apis/wiki/v2/spaces",{query:{page_size:En,page_token:o}});e.push(...r.items??[]),o=Mn(r,t)}while(o);return e}async function oe(n,e,t){let o=[],r=new Set,i;do{let s=await n.json("GET",`/open-apis/wiki/v2/spaces/${L(e)}/nodes`,{query:{page_size:En,parent_node_token:t,page_token:i}});o.push(...s.items??[]),i=Mn(s,r)}while(i);return o}async function ot(n,e,t){return(await n.json("GET","/open-apis/wiki/v2/spaces/node_by_token",{query:{token:e,obj_type:t}}))?.node}async function $e(n,e,t,o={}){let r=[],i=[{nodeToken:t,relDir:"",depth:0}],s=new Set(t?[t]:[]),d=o.onProgress;for(;i.length>0;){let a=i.shift();if(a.depth>In)throw new Error(`\u77E5\u8BC6\u5E93\u76EE\u5F55\u8D85\u8FC7 ${In} \u5C42\uFF0C\u8BF7\u9009\u62E9\u66F4\u5C0F\u7684\u540C\u6B65\u6839\u8282\u70B9\uFF1B\u672A\u6267\u884C\u540C\u6B65`);let u=await oe(n,e,a.nodeToken);for(let h of u){let f=(h.title??"").trim();if(h.node_type==="shortcut"||s.has(h.node_token))continue;if(s.add(h.node_token),h.obj_type==="file"){if(!/\.md$/i.test(f))continue;r.push({nodeToken:h.node_token,objToken:h.obj_token,objType:h.obj_type,parentNodeToken:h.parent_node_token,title:f,relDir:a.relDir,depth:a.depth+1});continue}let g=h.node_token===o.rootContainerNode?"":a.relDir?`${a.relDir}/${f}`:f;r.push({nodeToken:h.node_token,objToken:h.obj_token,objType:h.obj_type,parentNodeToken:h.parent_node_token,title:f,relDir:a.relDir,depth:a.depth+1}),h.has_child!==!1&&i.push({nodeToken:h.node_token,relDir:g,depth:a.depth+1})}d?.(r.length,a.relDir)}return r}async function Re(n,e,t,o){let r={obj_type:"docx",node_type:"origin",title:o};t&&(r.parent_node_token=t);let i=await n.json("POST",`/open-apis/wiki/v2/spaces/${L(e)}/nodes`,{body:r});if(!i?.node?.node_token)throw new Error(`\u521B\u5EFA\u77E5\u8BC6\u5E93\u8282\u70B9\u5931\u8D25\uFF1A${o}`);return i.node}async function rt(n,e,t,o,r){let i={obj_type:r,obj_token:o,apply:!0};t&&(i.parent_wiki_token=t),await n.json("POST",`/open-apis/wiki/v2/spaces/${L(e)}/nodes/move_docs_to_wiki`,{body:i})}async function it(n,e,t,o){if(!o)throw new Error("\u7F3A\u5C11\u539F\u6709\u8FDC\u7AEF\u6620\u5C04\uFF0C\u672A\u5220\u9664\u672C\u5730\u7B14\u8BB0");if((await $e(n,e,t)).some(i=>i.objToken===o))throw new Error("\u8FDC\u7AEF\u7B14\u8BB0\u5728\u9884\u89C8\u540E\u5DF2\u6062\u590D\uFF0C\u672A\u5220\u9664\u672C\u5730\uFF0C\u8BF7\u91CD\u65B0\u540C\u6B65")}function Fe(n){let{state:e,userTokens:t,debugLog:o,autoSyncMinutes:r,showPlanBeforeSync:i,...s}=n,{lastSyncAt:d,...a}=e;return(0,Dn.createHash)("sha256").update(JSON.stringify([s,a])).digest("hex")}function st(n){if(ue(n.attachmentFolder),n.attachmentFolder.startsWith(".obsidian")||n.attachmentFolder.startsWith(".trash"))throw new Error("\u9644\u4EF6\u76EE\u5F55\u4E0D\u80FD\u653E\u5728 .obsidian \u6216 .trash \u4E2D");if(n.folderMode==="flat"&&(!n.flatSeparator||/[\\/:\x00-\x1f]/.test(n.flatSeparator)))throw new Error("\u6241\u5E73\u5206\u9694\u7B26\u4E0D\u80FD\u4E3A\u7A7A\uFF0C\u4E5F\u4E0D\u80FD\u5305\u542B\u8DEF\u5F84\u5206\u9694\u7B26");if(/\/wiki\//i.test(n.spaceId))throw new Error("space_id \u9700\u8981\u77E5\u8BC6\u7A7A\u95F4 ID\uFF1B\u8BF7\u7528\u300C\u62C9\u53D6\u5217\u8868\u300D\u9009\u62E9\uFF0C\u9875\u9762\u94FE\u63A5\u586B\u5165\u540C\u6B65\u6839\u8282\u70B9")}function at(n,e){for(let t of n)if(ue(t),e.folderMode==="flat"&&t.includes(e.flatSeparator))throw new Error(`\u7B14\u8BB0\u8DEF\u5F84\u5305\u542B\u6241\u5E73\u5206\u9694\u7B26 ${e.flatSeparator}\uFF0C\u65E0\u6CD5\u65E0\u6B67\u4E49\u8FD8\u539F\uFF1A${t}\uFF1B\u8BF7\u4F7F\u7528\u955C\u50CF\u76EE\u5F55\u6A21\u5F0F`)}function xe(n,e){if(n.settingsFingerprint!==Fe(e))throw new Error("\u9884\u89C8\u540E\u540C\u6B65\u8BBE\u7F6E\u6216\u6620\u5C04\u72B6\u6001\u53D1\u751F\u53D8\u5316\uFF0C\u8BF7\u91CD\u65B0\u9884\u89C8\u540C\u6B65\u8BA1\u5212")}function ct(n,e,t,o){let r=n.state.target,i=!!r&&(r.spaceId!==e||r.rootNodeToken!==t||(r.syncMode??"md")!==o||r.folderMode!==void 0&&r.folderMode!==n.folderMode||r.flatSeparator!==void 0&&r.flatSeparator!==n.flatSeparator||r.rootPageTitle!==void 0&&r.rootPageTitle!==n.rootPageTitle);return i&&(n.state=Ee()),n.state.target={spaceId:e,rootNodeToken:t,syncMode:o,folderMode:n.folderMode,flatSeparator:n.flatSeparator,rootPageTitle:n.rootPageTitle},i}function fe(n,e){if(e==="both")return n;let t=n.items.filter(o=>e==="pull"?!["push","create-remote","delete-remote"].includes(o.action):!["pull","create-local","delete-local"].includes(o.action));return{...n,items:t,counts:ge(t)}}async function lt(n,e){for(let t of n.workspace.getLeavesOfType("markdown")){let o=t.view;if(o?.file?.path!==e||!o.editor)continue;let r=n.vault.getAbstractFileByPath(e),i=r instanceof An.TFile?await n.vault.read(r):"";if(o.editor.getValue()!==i)return!0}return!1}function dt(n,e=!0){if(e)return n;let t=n.items.map(o=>o.action==="delete-local"||o.action==="delete-remote"?{...o,action:o.action==="delete-local"?"remote-deleted":"local-deleted",reason:"\u5220\u9664\u7B49\u5F85\u624B\u52A8\u540C\u6B65\u786E\u8BA4\uFF0C\u5B9A\u65F6\u540C\u6B65\u672A\u6267\u884C\u5220\u9664"}:o);return{...n,items:t,counts:ge(t)}}var Cn=50;function _e(n,e){if(n)for(let t of e){let o=n[t];if(typeof o=="string"&&o)return o;if(typeof o=="number")return String(o)}}async function ye(n,e,t="file"){let o=new Map;for(let r=0;r<e.length;r+=Cn){let i=e.slice(r,r+Cn),s=await n.json("POST","/open-apis/drive/v1/metas/batch_query",{body:{request_docs:i.map(d=>({doc_token:d,doc_type:t})),with_url:!0}});for(let d of s?.metas??[]){let a=_e(d,["doc_token","token"]);a&&o.set(a,{token:a,title:_e(d,["title","name"]),url:_e(d,["url"]),modifiedTime:_e(d,["latest_modify_time","modified_time","latest_modify_time_ms"])})}}return o}async function Nn(n,e){let t={file_name:e.fileName,parent_type:e.parentType,parent_node:e.parentNode,size:String(e.data.byteLength)};e.fileToken&&(t.file_token=e.fileToken);let o=await n.json("POST","/open-apis/drive/v1/files/upload_all",{multipart:{fields:t,file:{name:e.fileName,data:e.data}}}),r=_e(o,["file_token"])??e.fileToken;if(!r)throw new Error(`\u4E0A\u4F20 ${e.fileName} \u540E\u672A\u8FD4\u56DE file_token`);return{fileToken:r,version:_e(o,["version"])}}async function re(n,e,t){let o=await n.binary(`/open-apis/drive/v1/medias/${L(e)}/preview_download`,t?{version:t}:void 0);if(o.byteLength===0)throw new Error(`\u8FDC\u7AEF ${e} \u8FD4\u56DE\u4E86\u7A7A\u5185\u5BB9\uFF0C\u5DF2\u653E\u5F03\u672C\u6B21\u8986\u76D6`);return o}async function ut(n,e,t){await n.json("DELETE",`/open-apis/drive/v1/files/${L(e)}`,{query:{type:t}})}async function Fn(n,e,t){let o=async()=>{let r=await Nn(n,{fileName:e.fileName,data:e.data,parentType:"explorer",parentNode:""});return await rt(n,e.spaceId,e.parentNode,r.fileToken,"file"),r};if(!e.fileToken&&!e.parentNode)return o();try{return await Nn(n,{fileName:e.fileName,data:e.data,parentType:"wiki",parentNode:e.parentNode??"",fileToken:e.fileToken})}catch(r){if(r instanceof N&&r.authRelated||e.fileToken||!(r instanceof N)||![200,400].includes(r.status)||![1061002,1061006].includes(r.code))throw r;return t?.(r instanceof Error?r.message:String(r)),o()}}var Bn=require("obsidian");function rr(){let n=globalThis.require;if(!n)return null;try{return n("crypto")}catch{return null}}function ir(n){let e="";for(let t of n)e+=t.toString(16).padStart(2,"0");return e}async function H(n){let e=rr();if(e)return e.createHash("sha256").update(new Uint8Array(n)).digest("hex");let t=globalThis.crypto?.subtle;if(t){let o=await t.digest("SHA-256",n);return ir(new Uint8Array(o))}throw new Error("\u5F53\u524D\u73AF\u5883\u6CA1\u6709\u53EF\u7528\u7684 SHA-256 \u5B9E\u73B0")}function Be(n){return String(n).padStart(2,"0")}function sr(n){let e=new Date,t=`${e.getFullYear()}${Be(e.getMonth()+1)}${Be(e.getDate())}-${Be(e.getHours())}${Be(e.getMinutes())}${Be(e.getSeconds())}-${String(e.getMilliseconds()).padStart(3,"0")}`,o=n.replace(/\.md$/i,"");return`${ce}/${o}.${t}.md`}function Ie(n,e){return n.vault.getAbstractFileByPath(e)instanceof Bn.TFile}async function Le(n,e){return H(await he(n,e))}async function Ln(n,e,t){let o=[],{state:r,settings:i}=e,s=new Map,d,a=async()=>{if(e.rootNodeToken)return e.rootNodeToken;if(d)return d;let l=r.folders[""];if(l?.nodeToken)return d=l.nodeToken,d;let T=i.rootPageTitle.trim()||e.app.vault.getName(),p=(await oe(e.client,e.spaceId)).find(y=>y.title===T&&y.obj_type!=="file");if(p?.node_token)return r.folders[""]={nodeToken:p.node_token},d=p.node_token,e.logger.info(`\u590D\u7528\u77E5\u8BC6\u5E93\u9876\u5C42\u9875\u9762\u300C${T}\u300D\u5B58\u653E vault \u6839\u76EE\u5F55\u4E0B\u7684\u7B14\u8BB0`),d;let m=await Re(e.client,e.spaceId,void 0,T);return r.folders[""]={nodeToken:m.node_token},d=m.node_token,e.logger.info(`\u5728\u77E5\u8BC6\u5E93\u9876\u5C42\u521B\u5EFA\u9875\u9762\u300C${T}\u300D\u5B58\u653E vault \u6839\u76EE\u5F55\u4E0B\u7684\u7B14\u8BB0`),d},u=async(l,T)=>{if(i.folderMode==="flat"||l==="")return T?a():e.rootNodeToken;let c=s.get(l);if(c)return c;let p=r.folders[l];if(p?.nodeToken)return s.set(l,p.nodeToken),p.nodeToken;let m=G(l),y=await u(m,!1),b=await Re(e.client,e.spaceId,y,te(l));return r.folders[l]={nodeToken:b.node_token,parentNodeToken:y},s.set(l,b.node_token),e.logger.info(`\u521B\u5EFA\u77E5\u8BC6\u5E93\u76EE\u5F55\u8282\u70B9 ${l} -> ${b.node_token}`),b.node_token},h=l=>i.folderMode==="flat"?l.split("/").join(i.flatSeparator):te(l),f=async(l,T,c,p)=>{let m=sr(l),y=e.app.vault.adapter;return await pe(y,G(m)),await y.writeBinary(m,T),r.conflicts[l]={remoteHash:p,localHash:c,copyPath:m,at:Date.now()},m},g=n.items.filter(l=>l.action==="push"||l.action==="create-remote"),$=n.items.filter(l=>l.action==="pull"||l.action==="create-local"),w=n.items.filter(l=>l.action==="link"),P=n.items.filter(l=>l.action==="conflict"),k=n.items.filter(l=>l.action==="delete-remote"),M=n.items.filter(l=>l.action==="delete-local"),A=n.items.filter(l=>["local-deleted","remote-deleted","empty-local","dirty-editor","forget"].includes(l.action)),S=[],E=0,D=(t.allowPush?g.length+k.length:0)+(t.allowPull?$.length+M.length:0)+w.length+P.length,v=l=>{E+=1,t.onProgress?.(l,E,D)};if(t.allowPush)for(let l of g)S.push(async()=>{try{let T=U(e.app,l.relPath),c=await he(e.app,l.relPath);if(await t.isEditorDirty(l.relPath)||l.localHash!==void 0&&await H(c)!==l.localHash)throw new Error("\u9884\u89C8\u540E\u672C\u5730\u6B63\u6587\u5DF2\u6539\u53D8\uFF0C\u8BF7\u4FDD\u5B58\u540E\u91CD\u65B0\u9884\u89C8");if(l.action==="push"){let C=r.records[l.relPath],q=l.fileToken??C?.fileToken;if(!q||await H(await re(e.client,q))!==(l.remoteHash??C?.baseHash))throw new Error("\u9884\u89C8\u540E\u98DE\u4E66\u6B63\u6587\u5DF2\u6539\u53D8\uFF0C\u5DF2\u505C\u6B62\u8986\u76D6\uFF0C\u8BF7\u91CD\u65B0\u540C\u6B65")}let p=await u(l.parentDir,!0),m=r.records[l.relPath],y=l.action==="push"?m?.fileToken:void 0,b=await Fn(e.client,{spaceId:e.spaceId,parentNode:p,fileName:h(l.relPath),data:c,fileToken:y},C=>e.logger.warn(`\u76F4\u63A5\u4E0A\u4F20\u5230\u77E5\u8BC6\u5E93\u8282\u70B9\u5931\u8D25\uFF0C\u6539\u7528\u4E91\u7A7A\u95F4\u4E2D\u8F6C\uFF1A${C}`)),x=await H(c),_=U(e.app,l.relPath),W=_.size===T.size&&_.mtime===T.mtime,B=m?.nodeToken;b.fileToken!==m?.fileToken&&(B=(await ot(e.client,b.fileToken,"file").catch(()=>{}))?.node_token),r.records[l.relPath]={fileToken:b.fileToken,nodeToken:B,parentNodeToken:p,baseHash:x,localSize:W?_.size:-1,localMtime:W?_.mtime:-1,remoteModifiedTime:void 0,remoteVersion:b.version,lastSyncedAt:Date.now()},delete r.conflicts[l.relPath],o.push({relPath:l.relPath,action:l.action,ok:!0}),v(`\u4E0A\u4F20 ${l.relPath}`)}catch(T){e.logger.error(`\u4E0A\u4F20 ${l.relPath} \u5931\u8D25\uFF1A${I(T)}`),o.push({relPath:l.relPath,action:l.action,ok:!1,message:I(T)}),v(`\u4E0A\u4F20\u5931\u8D25 ${l.relPath}`)}});if(t.allowPull)for(let l of $)S.push(async()=>{let T=r.records[l.relPath],c=l.fileToken??T?.fileToken;if(!c){o.push({relPath:l.relPath,action:l.action,ok:!1,message:"\u7F3A\u5C11\u8FDC\u7AEF file_token"}),v(`\u8DF3\u8FC7 ${l.relPath}`);return}try{let p=Ie(e.app,l.relPath);if(l.action==="pull"&&!p){o.push({relPath:l.relPath,action:l.action,ok:!0,message:"\u751F\u6210\u8BA1\u5212\u540E\u672C\u5730\u6587\u4EF6\u5DF2\u88AB\u5220\u9664\uFF0C\u672A\u91CD\u65B0\u521B\u5EFA\uFF08\u5982\u9700\u6062\u590D\u8BF7\u518D\u8DD1\u4E00\u6B21\u540C\u6B65\uFF09"}),v(`\u8DF3\u8FC7 ${l.relPath}`);return}if(p&&(l.localSize!==void 0||l.localMtime!==void 0)){let _=U(e.app,l.relPath);if(_.size!==l.localSize||_.mtime!==l.localMtime){let B=await re(e.client,c),C=await H(B),q=await Le(e.app,l.relPath);if(q!==C){let se=await f(l.relPath,B,q,C);o.push({relPath:l.relPath,action:"conflict",ok:!0,message:"\u8BA1\u5212\u751F\u6210\u540E\u672C\u5730\u53C8\u6709\u65B0\u6539\u52A8\uFF0C\u5DF2\u6539\u4E3A\u4FDD\u7559\u53CC\u65B9\uFF0C\u672C\u5730\u4E0E\u8FDC\u7AEF\u90FD\u672A\u6539\u52A8",copyPath:se}),e.logger.warn(`\u62C9\u53D6\u524D\u53D1\u73B0\u672C\u5730\u5DF2\u6539\u52A8\uFF0C\u8F6C\u4E3A\u51B2\u7A81\uFF1A${l.relPath}`),v(`\u51B2\u7A81 ${l.relPath}`);return}r.records[l.relPath]={fileToken:c,nodeToken:l.nodeToken??T?.nodeToken,parentNodeToken:T?.parentNodeToken,baseHash:q,localSize:_.size,localMtime:_.mtime,remoteModifiedTime:l.remoteModifiedTime??T?.remoteModifiedTime,remoteVersion:T?.remoteVersion,lastSyncedAt:Date.now()},delete r.conflicts[l.relPath],o.push({relPath:l.relPath,action:"link",ok:!0,message:"\u4E24\u8FB9\u5185\u5BB9\u4E00\u81F4\uFF0C\u53EA\u66F4\u65B0\u4E86\u57FA\u7EBF"}),v(`\u5EFA\u7ACB\u6620\u5C04 ${l.relPath}`);return}}if(p&&await t.isEditorDirty(l.relPath)){o.push({relPath:l.relPath,action:"dirty-editor",ok:!0,message:"\u6587\u4EF6\u6B63\u5728\u7F16\u8F91\u4E14\u672A\u4FDD\u5B58\uFF0C\u672A\u8986\u76D6"}),v(`\u8DF3\u8FC7\u7F16\u8F91\u4E2D\u7684 ${l.relPath}`);return}let m=await re(e.client,c);if(l.action==="create-local"&&p){let _=await Le(e.app,l.relPath),W=await H(m);if(_!==W){let B=await f(l.relPath,m,_,W);o.push({relPath:l.relPath,action:"conflict",ok:!0,message:"\u672C\u5730\u5728\u8BA1\u5212\u751F\u6210\u540E\u51FA\u73B0\u4E86\u540C\u540D\u6587\u4EF6\u4E14\u5185\u5BB9\u4E0D\u540C\uFF0C\u5DF2\u4FDD\u7559\u53CC\u65B9",copyPath:B}),v(`\u51B2\u7A81 ${l.relPath}`);return}}let y=Ie(e.app,l.relPath);if(y!==p||y&&(await t.isEditorDirty(l.relPath)||l.localHash!==void 0&&await Le(e.app,l.relPath)!==l.localHash))throw new Error("\u4E0B\u8F7D\u671F\u95F4\u672C\u5730\u7B14\u8BB0\u5DF2\u6539\u53D8\uFF0C\u672A\u8986\u76D6\uFF0C\u8BF7\u91CD\u65B0\u540C\u6B65");await ve(e.app,l.relPath,m);let b=await H(m),x=U(e.app,l.relPath);r.records[l.relPath]={fileToken:c,nodeToken:l.nodeToken??T?.nodeToken,parentNodeToken:T?.parentNodeToken,baseHash:b,localSize:x.size,localMtime:x.mtime,remoteModifiedTime:l.remoteModifiedTime??T?.remoteModifiedTime,remoteVersion:T?.remoteVersion,lastSyncedAt:Date.now()},delete r.conflicts[l.relPath],o.push({relPath:l.relPath,action:l.action,ok:!0}),v(`\u4E0B\u8F7D ${l.relPath}`)}catch(p){e.logger.error(`\u4E0B\u8F7D ${l.relPath} \u5931\u8D25\uFF1A${I(p)}`),o.push({relPath:l.relPath,action:l.action,ok:!1,message:I(p)}),v(`\u4E0B\u8F7D\u5931\u8D25 ${l.relPath}`)}});for(let l of w)S.push(async()=>{try{let T=U(e.app,l.relPath),c=await he(e.app,l.relPath),p=await H(c),m=U(e.app,l.relPath),y=m.size===T.size&&m.mtime===T.mtime,b=r.records[l.relPath],x=l.fileToken??b?.fileToken;if(!x||await t.isEditorDirty(l.relPath)||p!==l.localHash||await H(await re(e.client,x))!==l.remoteHash)throw new Error("\u9884\u89C8\u540E\u5185\u5BB9\u5DF2\u6539\u53D8\uFF0C\u672A\u66F4\u65B0\u6620\u5C04\uFF0C\u8BF7\u91CD\u65B0\u540C\u6B65");r.records[l.relPath]={fileToken:l.fileToken??b?.fileToken??"",nodeToken:l.nodeToken??b?.nodeToken,parentNodeToken:b?.parentNodeToken,baseHash:p,localSize:y?m.size:-1,localMtime:y?m.mtime:-1,remoteModifiedTime:l.remoteModifiedTime,remoteVersion:l.remoteVersion??b?.remoteVersion,lastSyncedAt:Date.now()},delete r.conflicts[l.relPath],o.push({relPath:l.relPath,action:l.action,ok:!0,message:l.reason}),v(`\u5EFA\u7ACB\u6620\u5C04 ${l.relPath}`)}catch(T){o.push({relPath:l.relPath,action:l.action,ok:!1,message:I(T)}),v(`\u5EFA\u7ACB\u6620\u5C04\u5931\u8D25 ${l.relPath}`)}});for(let l of P)S.push(async()=>{let T=r.records[l.relPath],c=l.fileToken??T?.fileToken,p=r.conflicts[l.relPath];if(l.duplicateConflict&&p){o.push({relPath:l.relPath,action:"conflict",ok:!0,message:"\u4ECD\u662F\u4E0A\u6B21\u672A\u5904\u7406\u7684\u51B2\u7A81\uFF0C\u672A\u91CD\u590D\u751F\u6210\u526F\u672C",copyPath:p.copyPath}),v(`\u51B2\u7A81 ${l.relPath}`);return}if(!c){o.push({relPath:l.relPath,action:"conflict",ok:!1,message:"\u7F3A\u5C11\u8FDC\u7AEF file_token\uFF0C\u65E0\u6CD5\u53D6\u51FA\u51B2\u7A81\u7248\u672C"}),v(`\u51B2\u7A81 ${l.relPath}`);return}try{let m=await re(e.client,c),y=await H(m),x=Ie(e.app,l.relPath)?await Le(e.app,l.relPath):"";if(p&&p.remoteHash===y&&p.localHash===x){o.push({relPath:l.relPath,action:"conflict",ok:!0,message:"\u4ECD\u662F\u4E0A\u6B21\u672A\u5904\u7406\u7684\u51B2\u7A81\uFF0C\u672A\u91CD\u590D\u751F\u6210\u526F\u672C",copyPath:p.copyPath}),v(`\u51B2\u7A81 ${l.relPath}`);return}let _=await f(l.relPath,m,x,y);o.push({relPath:l.relPath,action:"conflict",ok:!0,message:"\u8FDC\u7AEF\u7248\u672C\u5DF2\u53E6\u5B58\u4E3A\u526F\u672C\uFF0C\u672C\u5730\u4E0E\u8FDC\u7AEF\u90FD\u672A\u6539\u52A8",copyPath:_}),e.logger.warn(`\u51B2\u7A81\uFF1A${l.relPath} -> ${_}`),v(`\u51B2\u7A81 ${l.relPath}`)}catch(m){o.push({relPath:l.relPath,action:"conflict",ok:!1,message:I(m)}),v(`\u51B2\u7A81\u5904\u7406\u5931\u8D25 ${l.relPath}`)}});for(let l of S)await l();if(t.allowPush)for(let l of k){let T=r.records[l.relPath],c=l.fileToken??T?.fileToken,p=l.remoteTitle??l.relPath;if(!c){o.push({relPath:l.relPath,action:"delete-remote",ok:!1,message:"\u7F3A\u5C11\u8FDC\u7AEF file_token\uFF0C\u672A\u5220\u9664"}),v(`\u8DF3\u8FC7\u5220\u9664 ${l.relPath}`);continue}try{if(Ie(e.app,l.relPath)||await t.isEditorDirty(l.relPath))throw new Error("\u672C\u5730\u7B14\u8BB0\u5DF2\u6062\u590D\u6216\u6B63\u5728\u7F16\u8F91\uFF0C\u672A\u5220\u9664\u8FDC\u7AEF\uFF0C\u8BF7\u91CD\u65B0\u9884\u89C8");let m=await H(await re(e.client,c));if(!T||m!==T.baseHash)throw new Error("\u98DE\u4E66\u5185\u5BB9\u5728\u9884\u89C8\u540E\u5DF2\u6539\u53D8\uFF0C\u672A\u5220\u9664\uFF0C\u8BF7\u91CD\u65B0\u540C\u6B65");if(Ie(e.app,l.relPath)||await t.isEditorDirty(l.relPath))throw new Error("\u68C0\u67E5\u671F\u95F4\u672C\u5730\u7B14\u8BB0\u5DF2\u6062\u590D\uFF0C\u672A\u5220\u9664\u8FDC\u7AEF");await ut(e.client,c,"file"),delete r.records[l.relPath],delete r.conflicts[l.relPath],e.logger.info(`\u5DF2\u5220\u9664\u8FDC\u7AEF\u6587\u4EF6 ${p}\uFF08${c}\uFF09\uFF0C\u8FDB\u98DE\u4E66\u56DE\u6536\u7AD9\u53EF\u6062\u590D`),o.push({relPath:l.relPath,action:"delete-remote",ok:!0,message:`\u5DF2\u5220\u9664\u8FDC\u7AEF\u300C${p}\u300D\uFF08\u8FDB\u98DE\u4E66\u56DE\u6536\u7AD9\uFF0C\u53EF\u6062\u590D\uFF09`}),v(`\u5220\u9664\u8FDC\u7AEF ${l.relPath}`)}catch(m){e.logger.error(`\u5220\u9664\u8FDC\u7AEF ${l.relPath} \u5931\u8D25\uFF1A${I(m)}`),o.push({relPath:l.relPath,action:"delete-remote",ok:!1,message:I(m)}),v(`\u5220\u9664\u8FDC\u7AEF\u5931\u8D25 ${l.relPath}`)}}if(t.allowPull)for(let l of M)try{let T=Ie(e.app,l.relPath)?e.app.vault.getAbstractFileByPath(l.relPath):null;if(T){if(await it(e.client,e.spaceId,e.rootNodeToken,r.records[l.relPath]?.fileToken),await t.isEditorDirty(l.relPath)||!l.localHash||await Le(e.app,l.relPath)!==l.localHash)throw new Error("\u672C\u5730\u7B14\u8BB0\u5728\u9884\u89C8\u540E\u5DF2\u6539\u53D8\uFF0C\u672A\u5220\u9664\uFF0C\u8BF7\u91CD\u65B0\u540C\u6B65");await e.app.vault.trash(T,!1)}delete r.records[l.relPath],delete r.conflicts[l.relPath],o.push({relPath:l.relPath,action:"delete-local",ok:!0,message:T?"\u8FDC\u7AEF\u5DF2\u5220\u9664\uFF0C\u672C\u5730\u7B14\u8BB0\u5DF2\u79FB\u5165 .trash":"\u8FDC\u7AEF\u5DF2\u5220\u9664\uFF0C\u672C\u5730\u6587\u4EF6\u5DF2\u4E0D\u5B58\u5728\uFF0C\u53EA\u6E05\u7406\u4E86\u6620\u5C04"}),v(`\u5220\u9664\u672C\u5730 ${l.relPath}`)}catch(T){e.logger.error(`\u5220\u9664\u672C\u5730 ${l.relPath} \u5931\u8D25\uFF1A${I(T)}`),o.push({relPath:l.relPath,action:"delete-local",ok:!1,message:I(T)}),v(`\u5220\u9664\u672C\u5730\u5931\u8D25 ${l.relPath}`)}t.allowPush&&g.length>0&&await ar(e,g);for(let l of A)l.action==="forget"&&(delete r.records[l.relPath],delete r.conflicts[l.relPath]),o.push({relPath:l.relPath,action:l.action,ok:!0,message:l.reason});return r.lastSyncAt=Date.now(),o}async function ar(n,e){let t=[];for(let o of e){let r=n.state.records[o.relPath];r?.fileToken&&t.push(r.fileToken)}if(t.length!==0)try{let o=await ye(n.client,t);for(let r of e){let i=n.state.records[r.relPath];if(!i)continue;let s=o.get(i.fileToken);s?.modifiedTime&&(i.remoteModifiedTime=s.modifiedTime)}}catch(o){n.logger.warn(`\u5237\u65B0\u8FDC\u7AEF\u5143\u6570\u636E\u5931\u8D25\uFF08\u4E0B\u6B21\u540C\u6B65\u4F1A\u91CD\u65B0\u6821\u9A8C\u5185\u5BB9\uFF09\uFF1A${I(o)}`)}}function F(n,e,t,o={}){return{relPath:n,action:e,reason:t,parentDir:G(n),...o}}function V(n){return{remoteTitle:n.entry.title,fileToken:n.entry.objToken,nodeToken:n.entry.nodeToken,remoteModifiedTime:n.modifiedTime}}function Jt(n,e,t,o,r,i){let s=e.conflicts[n],d=!!s&&s.remoteHash===i&&s.localHash===r;return F(n,"conflict",d?"\u4E0E\u4E0A\u6B21\u76F8\u540C\u7684\u51B2\u7A81\uFF0C\u672A\u91CD\u590D\u751F\u6210\u526F\u672C":t,{...o,localHash:r,remoteHash:i,duplicateConflict:d})}async function zn(n){let{state:e,local:t,remote:o}=n,r=[],i=new Set([...t.keys(),...o.keys(),...Object.keys(e.records)]);for(let s of Array.from(i).sort()){if(n.isExcluded(s))continue;let d=t.get(s),a=o.get(s),u=e.records[s];if(!u){if(d&&a){if(d.size===0){r.push(F(s,"empty-local","\u7A7A\u6587\u4EF6\u4E0D\u4F1A\u88AB\u4E0A\u4F20\uFF08\u98DE\u4E66\u4E0D\u63A5\u53D7 0 \u5B57\u8282 Markdown\uFF09",V(a)));continue}let[P,k]=await Promise.all([n.hashLocal(s),n.hashRemote(a.entry.objToken)]);P===k?r.push(F(s,"link","\u4E24\u8FB9\u5185\u5BB9\u4E00\u81F4\uFF0C\u53EA\u5EFA\u7ACB\u6620\u5C04",{...V(a),localHash:P,remoteHash:k})):r.push(Jt(s,e,"\u9996\u6B21\u5BF9\u63A5\uFF1A\u540C\u540D\u6587\u4EF6\u4E24\u8FB9\u5185\u5BB9\u4E0D\u540C\uFF0C\u5DF2\u4FDD\u7559\u53CC\u65B9",V(a),P,k));continue}if(d){d.size===0?r.push(F(s,"empty-local","\u7A7A\u6587\u4EF6\u4E0D\u4F1A\u88AB\u4E0A\u4F20\uFF08\u98DE\u4E66\u4E0D\u63A5\u53D7 0 \u5B57\u8282 Markdown\uFF09")):r.push(F(s,"create-remote"));continue}a&&r.push(F(s,"create-local",void 0,V(a)));continue}if(!d&&!a){r.push(F(s,"forget","\u4E24\u8FB9\u90FD\u5DF2\u4E0D\u5B58\u5728\uFF0C\u6E05\u7406\u6620\u5C04"));continue}if(!d){if(!a){r.push(F(s,"forget","\u4E24\u8FB9\u90FD\u5DF2\u4E0D\u5B58\u5728\uFF0C\u6E05\u7406\u6620\u5C04"));continue}let P=await On(n,u,a);P.changed?r.push(Jt(s,e,"\u672C\u5730\u5DF2\u5220\u9664\u3001\u8FDC\u7AEF\u88AB\u4FEE\u6539\uFF1A\u4E3A\u907F\u514D\u4E22\u5185\u5BB9\uFF0C\u672A\u81EA\u52A8\u5904\u7406",{...V(a),fileToken:u.fileToken},"",P.hash??"")):n.propagateLocalDelete?r.push(F(s,"delete-remote","\u672C\u5730\u5DF2\u5220\u9664\uFF0C\u6309\u8BBE\u7F6E\u5220\u9664\u8FDC\u7AEF\uFF08\u8FDB\u98DE\u4E66\u56DE\u6536\u7AD9\uFF0C\u53EF\u6062\u590D\uFF09",{...V(a),fileToken:u.fileToken})):r.push(F(s,"local-deleted","\u672C\u5730\u5DF2\u5220\u9664\u3001\u8FDC\u7AEF\u672A\u53D8\uFF08\u672A\u81EA\u52A8\u5220\u9664\u8FDC\u7AEF\uFF09",V(a)));continue}if(!a){await Hn(n,u,d)?n.recreateRemoteIfDeleted?r.push(F(s,"create-remote","\u8FDC\u7AEF\u5DF2\u5220\u9664\u4F46\u672C\u5730\u6709\u4FEE\u6539\uFF0C\u6309\u8BBE\u7F6E\u91CD\u65B0\u4E0A\u4F20")):r.push(F(s,"remote-deleted","\u8FDC\u7AEF\u5DF2\u5220\u9664\u3001\u672C\u5730\u6709\u4FEE\u6539\uFF1A\u4E3A\u907F\u514D\u8BEF\u6062\u590D\uFF0C\u672A\u81EA\u52A8\u91CD\u5EFA")):n.propagateRemoteDelete?r.push(F(s,"delete-local","\u8FDC\u7AEF\u5DF2\u5220\u9664\u4E14\u672C\u5730\u672A\u53D8\uFF0C\u6309\u8BBE\u7F6E\u628A\u672C\u5730\u7B14\u8BB0\u79FB\u8FDB .trash",{fileToken:u.fileToken,localSize:d.size,localMtime:d.mtime})):r.push(F(s,"remote-deleted","\u8FDC\u7AEF\u5DF2\u5220\u9664\u3001\u672C\u5730\u672A\u53D8\uFF08\u672A\u81EA\u52A8\u5220\u9664\u672C\u5730\uFF09"));continue}if(d.size===0){r.push(F(s,"empty-local","\u7A7A\u6587\u4EF6\u4E0D\u53C2\u4E0E\u540C\u6B65",V(a)));continue}let h=await Hn(n,u,d),g=(await On(n,u,a)).changed;if(!h&&!g){r.push(F(s,"skip"));continue}if(h&&!g){r.push(F(s,"push",void 0,V(a)));continue}if(!h&&g){r.push(F(s,"pull",void 0,{...V(a),localSize:d.size,localMtime:d.mtime}));continue}let[$,w]=await Promise.all([n.hashLocal(s),n.hashRemote(a.entry.objToken)]);if($===w){r.push(F(s,"link","\u4E24\u8FB9\u5185\u5BB9\u4E00\u81F4\uFF0C\u53EA\u66F4\u65B0\u57FA\u7EBF",{...V(a),localHash:$,remoteHash:w}));continue}if($===u.baseHash){r.push(F(s,"pull","\u672C\u5730\u5185\u5BB9\u672A\u53D8\uFF0C\u8FDC\u7AEF\u624D\u662F\u65B0\u7248\u672C",{...V(a),localHash:$,remoteHash:w,localSize:d.size,localMtime:d.mtime}));continue}if(w===u.baseHash){r.push(F(s,"push","\u8FDC\u7AEF\u5185\u5BB9\u672A\u53D8\uFF0C\u672C\u5730\u624D\u662F\u65B0\u7248\u672C",{...V(a),localHash:$,remoteHash:w}));continue}r.push(Jt(s,e,"\u4E24\u8FB9\u90FD\u6539\u8FC7\u4E14\u5185\u5BB9\u4E0D\u540C\uFF0C\u5DF2\u4FDD\u7559\u53CC\u65B9",V(a),$,w))}for(let s of r){let d=t.get(s.relPath);!d||s.action==="skip"||(s.localSize=d.size,s.localMtime=d.mtime,s.localHash=await n.hashLocal(s.relPath))}return{items:r,counts:ge(r),localNoteCount:t.size,remoteNoteCount:o.size}}async function Hn(n,e,t){return e.localSize===t.size&&e.localMtime===t.mtime&&e.baseHash?!1:await n.hashLocal(t.relPath)!==e.baseHash}async function On(n,e,t){if(e.remoteModifiedTime&&t.modifiedTime&&e.remoteModifiedTime===t.modifiedTime)return{changed:!1};let o=await n.hashRemote(t.entry.objToken);return{changed:o!==e.baseHash,hash:o}}function He(n){let e=n.trim();if(!e)return"";if(!/^https?:\/\//i.test(e))return e;try{let o=new URL(e).pathname.split("/").filter(Boolean);return o.length>0?o[o.length-1]:e}catch{return e}}var ht=class{constructor(e){this.deps=e;this.syncing=!1}isSyncing(){return this.syncing}createClient(){return new ke(e=>this.deps.auth.getToken(e),this.deps.logger)}async listSpaces(){let e=this.createClient();return nt(e)}async run(e){if(this.syncing)throw new Error("\u5DF2\u6709\u540C\u6B65\u4EFB\u52A1\u5728\u6267\u884C\u4E2D");this.syncing=!0;try{return await this.runInternal(e)}finally{this.syncing=!1}}async runInternal(e){let t=this.deps.getSettings();st(t);let o=He(t.spaceId),r=He(t.rootNodeToken)||void 0;if(!o)throw new Error("\u8BF7\u5148\u5728\u63D2\u4EF6\u8BBE\u7F6E\u91CC\u586B\u5199\u77E5\u8BC6\u5E93 space_id");let i=this.createClient(),s=this.deps.logger,d=new Se(t.excludePatterns);e.preApprovedPlan&&xe(e.preApprovedPlan,t),ct(t,o,r??"","md")&&s.warn("\u540C\u6B65\u76EE\u6807\u6216\u6A21\u5F0F\u5DF2\u53D8\u66F4\uFF0C\u5DF2\u6E05\u7A7A\u65E7\u6620\u5C04\uFF0C\u672C\u8F6E\u6309\u9996\u6B21\u5BF9\u63A5\u5224\u5B9A");try{let a;if(e.preApprovedPlan)a=fe(e.preApprovedPlan,e.mode);else{if(!r&&!t.state.folders[""]?.nodeToken){let S=t.rootPageTitle.trim()||this.deps.app.vault.getName();try{let D=(await oe(i,o)).find(v=>v.title===S&&v.obj_type!=="file");D?.node_token&&(t.state.folders[""]={nodeToken:D.node_token},s.info(`\u8BC6\u522B\u5230\u5DF2\u6709\u7684\u77E5\u8BC6\u5E93\u9876\u5C42\u9875\u9762\u300C${S}\u300D\uFF0C\u590D\u7528\u5B83\u5B58\u653E vault \u6839\u76EE\u5F55\u4E0B\u7684\u7B14\u8BB0`))}catch(E){throw new Error(`\u8BFB\u53D6\u77E5\u8BC6\u5E93\u9876\u5C42\u9875\u9762\u5931\u8D25\uFF0C\u5DF2\u505C\u6B62\u540C\u6B65\u4EE5\u907F\u514D\u91CD\u590D\u521B\u5EFA\uFF1A${String(E)}`)}}e.onProgress?.("\u626B\u63CF\u672C\u5730\u7B14\u8BB0\u2026");let g=Ne(this.deps.app,d);at(g.keys(),t),e.onProgress?.("\u8BFB\u53D6\u98DE\u4E66\u77E5\u8BC6\u5E93\u8282\u70B9\u6811\u2026");let $=await $e(i,o,r,{rootContainerNode:t.state.folders[""]?.nodeToken,onProgress:S=>{S%50===0&&e.onProgress?.(`\u8BFB\u53D6\u98DE\u4E66\u77E5\u8BC6\u5E93\u8282\u70B9\u6811\u2026\uFF08\u5DF2\u89C1 ${S} \u4E2A\u8282\u70B9\uFF09`)}}),w=new Map,P=new Map;for(let S of $){if(S.objType!=="file"||S.relDir&&d.isExcluded(S.relDir))continue;let E=Me(S.relDir,S.title),D=t.folderMode==="flat"?E.split(t.flatSeparator).join("/"):E;if(d.isExcluded(D))continue;if(ue(D),D.split("/").some(T=>T===".."||T==="."||T==="")){s.warn(`\u8FDC\u7AEF\u6807\u9898\u5305\u542B\u975E\u6CD5\u8DEF\u5F84\u7247\u6BB5\uFF0C\u5DF2\u8DF3\u8FC7\uFF1A${E}`);continue}let v=D.normalize("NFC").toLowerCase(),l=P.get(v);if(l===D)throw new Error(`\u8FDC\u7AEF\u5B58\u5728\u591A\u4E2A\u540C\u540D\u8282\u70B9\uFF0C\u5DF2\u505C\u6B62\u540C\u6B65\uFF0C\u8BF7\u5148\u5728\u77E5\u8BC6\u5E93\u4E2D\u5904\u7406\uFF1A${D}`);if(l&&l!==D)throw new Error(`\u8FDC\u7AEF\u8DEF\u5F84\u5B58\u5728\u5927\u5C0F\u5199\u6216 Unicode \u6B67\u4E49\uFF0C\u5DF2\u505C\u6B62\u540C\u6B65\uFF1A${D} / ${l}`);P.set(v,D),w.set(D,{relPath:D,entry:S})}let k=new Map;if(w.size>0){e.onProgress?.("\u8BFB\u53D6\u8FDC\u7AEF\u5143\u6570\u636E\u2026");let S=Array.from(w.values()).map(E=>E.entry.objToken);try{let E=await ye(i,S);for(let[D,v]of E)v.modifiedTime&&k.set(D,v.modifiedTime)}catch(E){s.warn(`\u6279\u91CF\u8BFB\u53D6\u8FDC\u7AEF\u5143\u6570\u636E\u5931\u8D25\uFF0C\u5C06\u9010\u6587\u4EF6\u6821\u9A8C\u5185\u5BB9\uFF1A${String(E)}`)}}for(let S of w.values())S.modifiedTime=k.get(S.entry.objToken);let M=new Map,A=new Map;a=await zn({state:t.state,local:g,remote:w,isExcluded:S=>d.isExcluded(S),recreateRemoteIfDeleted:t.recreateRemoteIfDeleted,propagateLocalDelete:t.propagateLocalDelete,propagateRemoteDelete:t.propagateRemoteDelete,hashLocal:async S=>{let E=M.get(S);if(E)return E;let D=await he(this.deps.app,S),v=await H(D);return M.set(S,v),v},hashRemote:async S=>{let E=A.get(S);if(E)return E;let D=await re(i,S),v=await H(D);return A.set(S,v),v}}),a=fe(a,e.mode)}if(a=dt(a,e.allowDeletes),a.settingsFingerprint=Fe(t),e.dryRun)return{plan:a,report:[],executed:!1};let u=e.mode!=="pull",h=e.mode!=="push",f=a;if(e.confirm){let g=await e.confirm(a);if(g==="cancel")return{plan:a,report:[],executed:!1};g==="pull-only"&&(u=!1,f=fe(a,"pull"))}xe(a,t);try{let g=await Ln(f,{app:this.deps.app,client:i,settings:t,state:t.state,logger:s,spaceId:o,rootNodeToken:r},{allowPush:u,allowPull:h,isEditorDirty:$=>lt(this.deps.app,$),onProgress:($,w,P)=>e.onProgress?.(`${$}\uFF08${w}/${P}\uFF09`)});return{plan:f,report:g,executed:!0}}finally{await this.deps.saveSettings()}}catch(a){throw await this.deps.saveSettings(),a}}};var cr='{"open_create_async":true}',lr='{"enable_user_cite_reference_map":true,"include_comments":true,"return_html5_block_data":true}',Un=10*60*1e3,dr=3e3,ur=100,hr=1e4;function fr(n){return new Promise(e=>window.setTimeout(e,n))}function ft(n,e){let t=n?.[e];if(typeof t=="string"&&t)return t;if(typeof t=="number")return String(t)}function pr(n){return n.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;").replace(/"/g,"&#34;").replace(/'/g,"&#39;").replace(/\t/g,"&#x9;").replace(/\n/g,"&#xA;").replace(/\r/g,"&#xD;")}function pt(n,e){let t=`<title>${pr(n.trim())}</title>`;return e===""?t:`${t}
-${Ht(e)}`}function gr(n){let e=n?.warnings;return!Array.isArray(e)||e.length===0?"":`\uFF1B\u670D\u52A1\u7AEF warnings\uFF1A${e.map(t=>String(t)).join(" / ")}`}function Qt(n,e){if(typeof e?.result=="string"&&e.result.toLowerCase()==="failed")throw new N(`docs_ai ${n} \u8FD4\u56DE result=failed${gr(e)}`,{endpoint:n})}function mr(n){return!n||n<=0?dr:Math.min(hr,Math.max(ur,n))}function yr(n,e){let t=e.result?.create_document;if(typeof t!="string"||t.trim()==="")throw new N(`docs_ai ${n} \u7684\u5F02\u6B65\u4EFB\u52A1\u6210\u529F\u4F46\u7F3A\u5C11 result.create_document`,{endpoint:n});try{let o=JSON.parse(t);if(!o||typeof o!="object")throw new Error("\u4E0D\u662F JSON \u5BF9\u8C61");return o}catch(o){throw new N(`docs_ai ${n} \u7684 result.create_document \u4E0D\u662F\u5408\u6CD5 JSON\uFF1A${String(o)}`,{endpoint:n})}}async function wr(n,e,t){let o=(e.task_id??"").trim();if(!o)throw new N(`docs_ai ${t.endpoint} \u8FD4\u56DE\u4E86\u6CA1\u6709 task_id \u7684\u5F02\u6B65\u4EFB\u52A1`,{endpoint:t.endpoint});let r=`/open-apis/docs_ai/v1/async_tasks/${L(o)}`,i=Date.now()+Un,s=e,d=0,a=0;for(;;){let u=(s.status??"").trim().toLowerCase();if(u==="succeeded")return yr(t.endpoint,s);if(u==="failed"||u==="expired"){let $=s.failure?.code?`\uFF08code: ${s.failure.code}\uFF09`:"",w=s.failure?.message||u;throw new N(`docs_ai \u6587\u6863\u5904\u7406\u5931\u8D25\uFF1A${w}${$}`,{endpoint:r})}if(u!==""&&u!=="processing")throw new N(`docs_ai ${r} \u8FD4\u56DE\u4E86\u672A\u77E5\u4EFB\u52A1\u72B6\u6001 ${s.status}`,{endpoint:r});if(Date.now()>=i)throw new N(`docs_ai \u7B49\u5F85\u6587\u6863\u5904\u7406\u8D85\u8FC7 ${Math.round(Un/6e4)} \u5206\u949F\uFF0C\u8BF7\u7A0D\u540E\u7528\u300C\u53D6\u56DE\u300D\u91CD\u8BD5`,{endpoint:r});d>0&&await fr(d),a+=1,t.onProgress?.(`\u7B49\u5F85\u98DE\u4E66\u5904\u7406\u6587\u6863\uFF08\u7B2C ${a} \u6B21\u8F6E\u8BE2\uFF09\u2026`);let f=(await n.json("GET",r))?.task;if(!f)throw new N(`docs_ai ${r} \u7684\u54CD\u5E94\u91CC\u6CA1\u6709 task`,{endpoint:r});let g=(f.task_id??"").trim();if(g&&g!==o)throw new N(`docs_ai ${r} \u8FD4\u56DE\u7684 task_id \u4E0E\u8BF7\u6C42\u4E0D\u4E00\u81F4`,{endpoint:r});s=f,d=mr(s.poll_after_ms)}}async function jn(n,e){let t=e.title.trim();if(!t)throw new Error("\u521B\u5EFA\u6587\u6863\u9700\u8981\u975E\u7A7A\u6807\u9898");let o="/open-apis/docs_ai/v1/documents",r={format:"markdown",content:pt(t,e.markdown),extra_param:cr};e.parentToken&&(r.parent_token=e.parentToken),e.onProgress?.("\u521B\u5EFA\u98DE\u4E66\u6587\u6863\u2026");let i=await n.json("POST",o,{body:r});Qt(o,i);let d=(i?.task?.task_id??"").trim()?await wr(n,i.task,{endpoint:o,onProgress:e.onProgress}):i;Qt(o,d);let a=d?.document,u=d,h=ft(a,"document_id")??ft(u,"document_id");if(!h)throw new N("docs_ai \u521B\u5EFA\u6587\u6863\u6210\u529F\u4F46\u6CA1\u6709\u8FD4\u56DE document_id",{endpoint:o});return{documentId:h,url:ft(a,"url")??ft(u,"url"),newBlocks:At(d),revisionId:Ct(d)}}async function Wn(n,e,t){let o=e.trim();if(!o)throw new Error("\u66F4\u65B0\u6587\u6863\u9700\u8981 document_id");let r=`/open-apis/docs_ai/v1/documents/${L(o)}`,i=t.includeTitle===!1?Ht(t.markdown):pt(t.title,t.markdown),s=await n.json("PUT",r,{body:{format:"markdown",command:"overwrite",revision_id:-1,content:i}});return Qt(r,s),{newBlocks:At(s),revisionId:Ct(s)}}async function gt(n,e){let t=e.trim();if(!t)throw new Error("\u53D6\u56DE\u6587\u6863\u9700\u8981 document_id");let o=`/open-apis/docs_ai/v1/documents/${L(t)}/fetch`,i=(await n.json("POST",o,{body:{format:"markdown",extra_param:lr,export_option:{export_block_id:!1,export_style_attrs:!1,export_cite_extra_data:!1}}}))?.document?.content;if(typeof i!="string")throw new N(`docs_ai \u53D6\u56DE\u6587\u6863 ${t} \u7684\u54CD\u5E94\u91CC\u6CA1\u6709 document.content`,{endpoint:o});return i}function ie(n,e){let t=te(n).replace(/\.md$/i,"");if(e.folderMode!=="flat")return t;let o=G(n);return o?`${o.split("/").join(e.flatSeparator)}${e.flatSeparator}${t}`:t}function Jn(n,e){if(!e.has(n))return{title:n,renamed:!1};let t=`${n} (note)`,o=2;for(;e.has(t);)t=`${n} (note ${o})`,o+=1;return{title:t,renamed:!0}}function Vn(n){return n.split("/").some(e=>e===".."||e==="."||e==="")}function kr(n,e,t){if(e.folderMode==="flat"){let r=`${n.title.split(e.flatSeparator).join("/")}.md`;if(Vn(r)){t.push(`\u8FDC\u7AEF\u6807\u9898\u91CC\u7684\u8DEF\u5F84\u7247\u6BB5\u975E\u6CD5\uFF0C\u5DF2\u8DF3\u8FC7\uFF1A${n.title}`);return}return r}let o=Me(n.relDir,`${n.title.replace(/\.md$/i,"")}.md`);if(Vn(o)){t.push(`\u8FDC\u7AEF\u6807\u9898\u5305\u542B\u975E\u6CD5\u8DEF\u5F84\u7247\u6BB5\uFF0C\u5DF2\u8DF3\u8FC7\uFF1A${n.title}`);return}return o}function Qn(n){let e=[],t=new Set;for(let u of Object.values(n.state.folders))u.nodeToken&&t.add(u.nodeToken);n.rootContainerNode&&t.add(n.rootContainerNode);let o=new Set;for(let u of n.entries)u.parentNodeToken&&o.add(u.parentNodeToken);for(let u of n.entries)u.objType!=="file"&&(t.has(u.nodeToken)||o.has(u.nodeToken))&&t.add(u.nodeToken);let r=new Map,i=new Set;for(let u of n.entries){if(!t.has(u.nodeToken))continue;let h=u.nodeToken===n.rootContainerNode?"":Me(u.relDir,u.title);n.folderMode==="nodes"&&!r.has(h)&&r.set(h,{nodeToken:u.nodeToken,title:u.title,parentNodeToken:u.parentNodeToken}),i.add(u.title)}let s=new Map;for(let[u,h]of Object.entries(n.state.docRecords))s.set(h.documentId,u);let d=new Map,a=new Map;for(let u of n.entries){if(u.objType!=="docx"||t.has(u.nodeToken)&&!s.has(u.objToken))continue;let h=s.get(u.objToken)??kr(u,n,e);if(!h||(ue(h),n.isExcluded(h)))continue;let f=h.normalize("NFC").toLowerCase(),g=a.get(f);if(g===h){e.push(`\u8FDC\u7AEF\u5B58\u5728\u591A\u4E2A\u540C\u540D\u6587\u6863\uFF0C\u53EA\u5904\u7406\u5176\u4E2D\u4E00\u4E2A\uFF1A${h}`);continue}if(g&&g!==h){e.push(`\u8FDC\u7AEF\u5B58\u5728\u4EC5\u5927\u5C0F\u5199\u6216 Unicode \u5F62\u5F0F\u4E0D\u540C\u7684\u540C\u540D\u6587\u6863\uFF0C\u5DF2\u8DF3\u8FC7\u5176\u4E2D\u4E00\u4E2A\uFF1A${h}\uFF08\u4E0E ${g} \u51B2\u7A81\uFF09`);continue}a.set(f,h),d.set(h,{relPath:h,documentId:u.objToken,nodeToken:u.nodeToken,parentNodeToken:u.parentNodeToken,title:u.title})}return{notes:d,containers:r,containerTitles:i,warnings:e}}function Zt(){return{localText:new Map,localHash:new Map,fetched:new Map,fetchedHash:new Map,pulled:new Map,fetchCount:0}}function z(n,e,t,o={}){return{relPath:n,action:e,reason:t,parentDir:G(n),...o}}function Yt(n,e,t,o,r,i){let s=e.conflicts[n],d=!!s&&s.remoteHash===i&&s.localHash===r;return z(n,"conflict",d?"\u4E0E\u4E0A\u6B21\u76F8\u540C\u7684\u51B2\u7A81\uFF0C\u672A\u91CD\u590D\u751F\u6210\u526F\u672C":t,{...o,localHash:r,remoteHash:i,duplicateConflict:d})}async function Oe(n,e){let t=n.cache.localText.get(e);if(t!==void 0)return t;let o=await n.readLocal(e);return n.cache.localText.set(e,o),o}async function mt(n,e){let t=n.cache.localHash.get(e);if(t!==void 0)return t;let o=await n.hashText(await Oe(n,e));return n.cache.localHash.set(e,o),o}async function Yn(n,e){let t=n.cache.fetched.get(e);if(t!==void 0)return t;n.cache.fetchCount+=1;let o=await n.fetchMarkdown(e);return n.cache.fetched.set(e,o),o}async function qn(n,e,t,o=!1){let r=n.remoteModifiedTimes.get(t);if(!o&&!n.verifyRemoteByContent&&e.remoteModifiedTime&&r!==void 0&&r===e.remoteModifiedTime)return{changed:!1,metaTime:r};let i=await Kt(n,t);return{changed:i!==e.baseRemoteHash,hash:i,metaTime:r}}async function Kt(n,e){let t=n.cache.fetchedHash.get(e);if(t!==void 0)return t;let o=await n.hashFetched(await Yn(n,e));return n.cache.fetchedHash.set(e,o),o}async function Gn(n,e,t,o){let r=n.cache.pulled.get(e);if(r!==void 0)return r;let i=await Yn(n,t.documentId),s=o?await Oe(n,e):"",d=Ae("toObsidian",i,{relPath:e,documentTitle:ie(e,n.settings),localContent:s},n.rules);return n.cache.pulled.set(e,d),d}async function Xn(n,e,t){return e.localSize===t.size&&e.localMtime===t.mtime&&e.baseLocalHash?!1:await mt(n,t.relPath)!==e.baseLocalHash}async function Kn(n){let{state:e,local:t,remote:o}=n,r=[],i=K(n.rules),s=[],d=new Set([...t.keys(),...o.notes.keys(),...Object.keys(e.docRecords)]);for(let a of Array.from(d).sort()){if(n.isExcluded(a))continue;let u=t.get(a),h=o.notes.get(a),f=e.docRecords[a];if(u&&Ce(n.rules,"toFeishu","source-format-diagnostics"))for(let v of qt(await Oe(n,a)))s.push({relPath:a,message:v});let g=h?{remoteTitle:h.title,nodeToken:h.nodeToken,documentId:h.documentId}:{};if(n.forcePush&&u&&u.size>0){r.push(z(a,h?"push":"create-remote","\u5F3A\u5236\u91CD\u63A8\uFF1A\u5FFD\u7565\u57FA\u7EBF",{...g,remoteHash:h?await Kt(n,h.documentId):void 0,localSize:u.size,localMtime:u.mtime}));continue}if(!f){if(u&&h){let[v,l,T,c]=await Promise.all([Gn(n,a,h,u),Oe(n,a),mt(n,a),Kt(n,h.documentId)]),p={...g,localHash:T,remoteHash:c,localSize:u.size,localMtime:u.mtime};v===l?r.push(z(a,"link","\u4E24\u8FB9\u5185\u5BB9\u4E00\u81F4\uFF0C\u53EA\u5EFA\u7ACB\u6620\u5C04",p)):r.push(Yt(a,e,"\u9996\u6B21\u5BF9\u63A5\uFF1A\u540C\u540D\u6587\u6863\u4E24\u8FB9\u5185\u5BB9\u4E0D\u540C\uFF0C\u5DF2\u4FDD\u7559\u53CC\u65B9",p,T,c));continue}if(u){r.push(z(a,"create-remote",u.size===0?"\u7A7A\u7B14\u8BB0\u5728\u6587\u6863\u6A21\u5F0F\u4E0B\u4E5F\u4F1A\u540C\u6B65\uFF08<title> \u4FDD\u8BC1 content \u975E\u7A7A\uFF09":void 0));continue}h&&r.push(z(a,"create-local",void 0,g));continue}if(!u&&!h){r.push(z(a,"forget","\u4E24\u8FB9\u90FD\u5DF2\u4E0D\u5B58\u5728\uFF0C\u6E05\u7406\u6620\u5C04"));continue}if(!u){let v=await qn(n,f,h.documentId),l=v.hash??f.baseRemoteHash,T=v.metaTime?{remoteModifiedTime:v.metaTime}:{};v.changed?r.push(Yt(a,e,"\u672C\u5730\u5DF2\u5220\u9664\u3001\u8FDC\u7AEF\u88AB\u4FEE\u6539\uFF1A\u4E3A\u907F\u514D\u4E22\u5185\u5BB9\uFF0C\u672A\u81EA\u52A8\u5904\u7406",{...g,localHash:"",remoteHash:l},"",l)):n.propagateLocalDelete?r.push(z(a,"delete-remote","\u672C\u5730\u5DF2\u5220\u9664\uFF0C\u6309\u8BBE\u7F6E\u5220\u9664\u8FDC\u7AEF\u6587\u6863\uFF08\u8FDB\u98DE\u4E66\u56DE\u6536\u7AD9\uFF0C\u53EF\u6062\u590D\uFF09",{...g,...T})):r.push(z(a,"local-deleted","\u672C\u5730\u5DF2\u5220\u9664\u3001\u8FDC\u7AEF\u672A\u53D8\uFF08\u672A\u81EA\u52A8\u5220\u9664\u8FDC\u7AEF\uFF09",{...g,...T}));continue}if(!h){await Xn(n,f,u)?n.recreateRemoteIfDeleted?r.push(z(a,"create-remote","\u8FDC\u7AEF\u5DF2\u5220\u9664\u4F46\u672C\u5730\u6709\u4FEE\u6539\uFF0C\u6309\u8BBE\u7F6E\u91CD\u65B0\u4E0A\u4F20")):r.push(z(a,"remote-deleted","\u8FDC\u7AEF\u5DF2\u5220\u9664\u3001\u672C\u5730\u6709\u4FEE\u6539\uFF1A\u4E3A\u907F\u514D\u8BEF\u6062\u590D\uFF0C\u672A\u81EA\u52A8\u91CD\u5EFA")):n.propagateRemoteDelete?r.push(z(a,"delete-local","\u8FDC\u7AEF\u5DF2\u5220\u9664\u4E14\u672C\u5730\u672A\u53D8\uFF0C\u6309\u8BBE\u7F6E\u628A\u672C\u5730\u7B14\u8BB0\u79FB\u8FDB .trash",{localSize:u.size,localMtime:u.mtime})):r.push(z(a,"remote-deleted","\u8FDC\u7AEF\u5DF2\u5220\u9664\u3001\u672C\u5730\u672A\u53D8\uFF08\u672A\u81EA\u52A8\u5220\u9664\u672C\u5730\uFF09"));continue}let $=await Xn(n,f,u),w=f.publishRulesFingerprint!==i,P=await qn(n,f,h.documentId,w),k=P.changed,M=P.hash,A=await mt(n,a),S={...g,localHash:A,remoteHash:M,localSize:u.size,localMtime:u.mtime,remoteModifiedTime:P.metaTime};if(!$&&!k){r.push(w?z(a,"push","\u8F6C\u6362\u89C4\u5219\u5DF2\u66F4\u65B0\uFF1A\u5237\u65B0\u98DE\u4E66\u6392\u7248\uFF0C\u672C\u5730\u6B63\u6587\u4E0D\u53D8",{...S,rulesRefresh:!0}):z(a,"skip",void 0,S));continue}if($&&!k){r.push(z(a,"push",void 0,S));continue}if(!$&&k){r.push(z(a,"pull",void 0,S));continue}let[E,D]=await Promise.all([Gn(n,a,h,u),Oe(n,a)]);if(E===D){r.push(z(a,"link","\u4E24\u8FB9\u5185\u5BB9\u4E00\u81F4\uFF0C\u53EA\u66F4\u65B0\u57FA\u7EBF",S));continue}r.push(Yt(a,e,"\u4E24\u8FB9\u90FD\u6539\u8FC7\u4E14\u5185\u5BB9\u4E0D\u540C\uFF0C\u5DF2\u4FDD\u7559\u53CC\u65B9",S,A,M??A))}for(let a of r){let u=t.get(a.relPath);!u||a.action==="skip"||(a.localSize=u.size,a.localMtime=u.mtime,a.localHash=await mt(n,a.relPath))}return{items:r,counts:ge(r),localNoteCount:t.size,remoteNoteCount:o.notes.size,publishRulesFingerprint:i,pullRulesFingerprint:Ze(n.rules),warnings:s}}var en=require("obsidian");function ze(n){return String(n).padStart(2,"0")}function Pr(n){let e=new Date,t=`${e.getFullYear()}${ze(e.getMonth()+1)}${ze(e.getDate())}-${ze(e.getHours())}${ze(e.getMinutes())}${ze(e.getSeconds())}-${String(e.getMilliseconds()).padStart(3,"0")}`,o=n.replace(/\.md$/i,"");return`${ce}/${o}.${t}.md`}function Zn(n){return new TextEncoder().encode(n).buffer}async function Z(n,e){let t=n.vault.getAbstractFileByPath(e);if(!(t instanceof en.TFile))throw new Error(`\u627E\u4E0D\u5230\u672C\u5730\u6587\u4EF6\uFF1A${e}`);return n.vault.read(t)}function J(n,e){return n.vault.getAbstractFileByPath(e)instanceof en.TFile}async function to(n,e,t){let o=[],{state:r,settings:i}=e,s=new Map,d,a=async()=>{if(e.rootNodeToken)return e.rootNodeToken;if(d)return d;let c=r.folders[""];if(c?.nodeToken)return d=c.nodeToken,d;let p=i.rootPageTitle.trim()||e.app.vault.getName(),y=(await oe(e.client,e.spaceId)).find(x=>x.title===p&&x.obj_type!=="file");if(y?.node_token)return r.folders[""]={nodeToken:y.node_token},d=y.node_token,e.logger.info(`\u590D\u7528\u77E5\u8BC6\u5E93\u9876\u5C42\u9875\u9762\u300C${p}\u300D\u5B58\u653E vault \u6839\u76EE\u5F55\u4E0B\u7684\u7B14\u8BB0`),d;let b=await Re(e.client,e.spaceId,void 0,p);return r.folders[""]={nodeToken:b.node_token},d=b.node_token,e.logger.info(`\u5728\u77E5\u8BC6\u5E93\u9876\u5C42\u521B\u5EFA\u9875\u9762\u300C${p}\u300D\u5B58\u653E vault \u6839\u76EE\u5F55\u4E0B\u7684\u7B14\u8BB0`),d},u=async(c,p)=>{if(i.folderMode==="flat"||c==="")return p?a():e.rootNodeToken;let m=s.get(c);if(m)return m;let y=r.folders[c];if(y?.nodeToken)return s.set(c,y.nodeToken),y.nodeToken;let b=G(c),x=await u(b,!1),_=await Re(e.client,e.spaceId,x,te(c));return r.folders[c]={nodeToken:_.node_token,parentNodeToken:x},s.set(c,_.node_token),e.logger.info(`\u521B\u5EFA\u77E5\u8BC6\u5E93\u76EE\u5F55\u8282\u70B9 ${c} -> ${_.node_token}`),_.node_token},h=async c=>{let p=await gt(e.client,c);return e.cache.fetched.set(c,p),e.cache.fetchedHash.set(c,await e.hashFetched(p)),p},f=async c=>{let p=e.cache.fetched.get(c);return p!==void 0?p:h(c)},g=async(c,p,m,y)=>{let b=Pr(c);return await pe(e.app.vault.adapter,G(b)),await e.app.vault.adapter.write(b,p),r.conflicts[c]={remoteHash:y,localHash:m,copyPath:b,at:Date.now()},b},$=n.items.filter(c=>c.action==="pull"||c.action==="create-local"),w=n.items.filter(c=>c.action==="push"||c.action==="create-remote"),P=n.items.filter(c=>c.action==="link"),k=n.items.filter(c=>c.action==="conflict"),M=n.items.filter(c=>c.action==="delete-remote"),A=n.items.filter(c=>c.action==="delete-local"),S=n.items.filter(c=>["local-deleted","remote-deleted","dirty-editor","forget"].includes(c.action)),E=[],D=0,v=(t.allowPush?w.length+M.length:0)+(t.allowPull?$.length+A.length:0)+P.length+k.length,l=c=>{D+=1,t.onProgress?.(c,D,v)},T=c=>t.onProgress?.(c,D,v);if(t.allowPush)for(let c of w)E.push(async()=>{try{let p=U(e.app,c.relPath),m=await Z(e.app,c.relPath),y=r.docRecords[c.relPath];if(await t.isEditorDirty(c.relPath))throw new Error("\u7B14\u8BB0\u6B63\u5728\u7F16\u8F91\uFF0C\u8BF7\u4FDD\u5B58\u540E\u91CD\u65B0\u9884\u89C8");if(c.localHash!==void 0&&await e.hashText(m)!==c.localHash)throw new Error("\u9884\u89C8\u540E\u672C\u5730\u6B63\u6587\u5DF2\u6539\u53D8\uFF0C\u8BF7\u91CD\u65B0\u9884\u89C8");let b=c.action==="push"?c.documentId??y?.documentId:void 0;if(b){let X=await h(b);if(await e.hashFetched(X)!==(c.remoteHash??y?.baseRemoteHash))throw new Error("\u9884\u89C8\u540E\u98DE\u4E66\u6B63\u6587\u5DF2\u6539\u53D8\uFF0C\u5DF2\u505C\u6B62\u8986\u76D6\uFF0C\u8BF7\u91CD\u65B0\u540C\u6B65\u5904\u7406\u8FDC\u7AEF\u6539\u52A8")}let x=y?.documentTitle?{title:y.documentTitle,renamed:!1}:Jn(ie(c.relPath,i),e.containerTitles),_={relPath:c.relPath,documentTitle:x.title,localContent:m,resolveImage:e.resolveImage,imageUploads:[],attachmentLinkStyle:i.attachmentLinkStyle,warnings:[]},W=Ae("toFeishu",m,_,e.rules),B=await u(c.parentDir,!0),C,q=[],se;if(b){let X=await Wn(e.client,b,{title:x.title,markdown:W});C=b,q=X.newBlocks,se=X.revisionId}else{let X=await jn(e.client,{title:x.title,markdown:W,onProgress:T});await rt(e.client,e.spaceId,B,X.documentId,"docx"),C=X.documentId,q=X.newBlocks,se=X.revisionId,x.renamed&&e.logger.info(`\u7B14\u8BB0 ${c.relPath} \u4E0E\u540C\u540D\u76EE\u5F55\u649E\u540D\uFF0C\u6587\u6863\u6807\u9898\u6539\u4E3A\u300C${x.title}\u300D`)}let O=await br(e,{relPath:c.relPath,documentId:C,newBlocks:q,revisionId:se,uploads:_.imageUploads??[]});for(let X of _.warnings??[])e.logger.warn(`\u8F6C\u6362\uFF1A${c.relPath} ${X}`);let Q=await h(C),ae=await e.hashFetched(Q);e.logger.debug(`${c.relPath}: \u53D6\u56DE\u5F62\u6001\u4E0E\u53D1\u9001\u5F62\u6001${Q===pt(x.title,W)?"\u4E00\u81F4":"\u4E0D\u540C\uFF08\u98DE\u4E66\u505A\u4E86\u683C\u5F0F\u5316\uFF0C\u57FA\u7EBF\u4EE5\u53D6\u56DE\u5F62\u6001\u4E3A\u51C6\uFF09"}`);let we=U(e.app,c.relPath),nn=we.size===p.size&&we.mtime===p.mtime,ro=y?.nodeToken??(await ot(e.client,C,"docx").catch(()=>{}))?.node_token;r.docRecords[c.relPath]={documentId:C,nodeToken:ro,parentNodeToken:B,documentTitle:x.title,baseLocalHash:await e.hashText(m),baseRemoteHash:ae,publishRulesFingerprint:O.failures.length?void 0:K(e.rules),remoteModifiedTime:void 0,localSize:nn?we.size:-1,localMtime:nn?we.mtime:-1,lastSyncedAt:Date.now()},delete r.conflicts[c.relPath],o.push({relPath:c.relPath,action:c.action,ok:O.failures.length===0,message:Sr(m,O,_.warnings??[])}),l(`\u4E0A\u4F20 ${c.relPath}`)}catch(p){e.logger.error(`\u4E0A\u4F20 ${c.relPath} \u5931\u8D25\uFF1A${I(p)}`),o.push({relPath:c.relPath,action:c.action,ok:!1,message:I(p)}),l(`\u4E0A\u4F20\u5931\u8D25 ${c.relPath}`)}});if(t.allowPull)for(let c of $)E.push(async()=>{let p=r.docRecords[c.relPath],m=c.documentId??p?.documentId;if(!m){o.push({relPath:c.relPath,action:c.action,ok:!1,message:"\u7F3A\u5C11\u8FDC\u7AEF document_id"}),l(`\u8DF3\u8FC7 ${c.relPath}`);return}try{let y=J(e.app,c.relPath);if(c.action==="pull"&&!y){o.push({relPath:c.relPath,action:c.action,ok:!0,message:"\u751F\u6210\u8BA1\u5212\u540E\u672C\u5730\u6587\u4EF6\u5DF2\u88AB\u5220\u9664\uFF0C\u672A\u91CD\u65B0\u521B\u5EFA\uFF08\u5982\u9700\u6062\u590D\u8BF7\u518D\u8DD1\u4E00\u6B21\u540C\u6B65\uFF09"}),l(`\u8DF3\u8FC7 ${c.relPath}`);return}let b=await f(m),x=y?await Z(e.app,c.relPath):"",_=[],W=await Mr(e,b,{documentId:m,relPath:c.relPath,warnings:_}),B=Ae("toObsidian",b,{relPath:c.relPath,documentTitle:p?.documentTitle??ie(c.relPath,i),localContent:x,attachmentLinkStyle:i.attachmentLinkStyle,imageDownloads:W,warnings:_},e.rules),C=await e.hashFetched(b);for(let O of _)e.logger.warn(`\u56FE\u7247\uFF1A${c.relPath} ${O}`);if(y&&(c.localSize!==void 0||c.localMtime!==void 0)){let O=U(e.app,c.relPath);if(O.size!==c.localSize||O.mtime!==c.localMtime){let ae=await Z(e.app,c.relPath);if(ae!==B){let we=await g(c.relPath,b,await e.hashText(ae),C);o.push({relPath:c.relPath,action:"conflict",ok:!0,message:"\u8BA1\u5212\u751F\u6210\u540E\u672C\u5730\u53C8\u6709\u65B0\u6539\u52A8\uFF0C\u5DF2\u6539\u4E3A\u4FDD\u7559\u53CC\u65B9\uFF0C\u672C\u5730\u4E0E\u8FDC\u7AEF\u90FD\u672A\u6539\u52A8",copyPath:we}),e.logger.warn(`\u62C9\u53D6\u524D\u53D1\u73B0\u672C\u5730\u5DF2\u6539\u52A8\uFF0C\u8F6C\u4E3A\u51B2\u7A81\uFF1A${c.relPath}`),l(`\u51B2\u7A81 ${c.relPath}`);return}r.docRecords[c.relPath]={documentId:m,nodeToken:c.nodeToken??p?.nodeToken,parentNodeToken:p?.parentNodeToken,documentTitle:p?.documentTitle??ie(c.relPath,i),baseLocalHash:await e.hashText(ae),baseRemoteHash:C,publishRulesFingerprint:K(e.rules),remoteModifiedTime:c.remoteModifiedTime??p?.remoteModifiedTime,localSize:O.size,localMtime:O.mtime,lastSyncedAt:Date.now()},delete r.conflicts[c.relPath],o.push({relPath:c.relPath,action:"link",ok:!0,message:"\u4E24\u8FB9\u5185\u5BB9\u4E00\u81F4\uFF0C\u53EA\u66F4\u65B0\u4E86\u57FA\u7EBF"}),l(`\u5EFA\u7ACB\u6620\u5C04 ${c.relPath}`);return}}if(y&&await t.isEditorDirty(c.relPath)){o.push({relPath:c.relPath,action:"dirty-editor",ok:!0,message:"\u6587\u4EF6\u6B63\u5728\u7F16\u8F91\u4E14\u672A\u4FDD\u5B58\uFF0C\u672A\u8986\u76D6"}),l(`\u8DF3\u8FC7\u7F16\u8F91\u4E2D\u7684 ${c.relPath}`);return}let q=J(e.app,c.relPath);if(q!==y||q&&(await t.isEditorDirty(c.relPath)||c.localHash!==void 0&&await e.hashText(await Z(e.app,c.relPath))!==c.localHash))throw new Error("\u4E0B\u8F7D\u671F\u95F4\u672C\u5730\u7B14\u8BB0\u5DF2\u6539\u53D8\uFF0C\u672A\u8986\u76D6\uFF0C\u8BF7\u91CD\u65B0\u540C\u6B65");if(y&&x!==B&&xn(x,B,{relPath:c.relPath,documentTitle:p?.documentTitle??ie(c.relPath,i),localContent:x},e.rules)){let O=_n(x,e.rules),Q=O!==x;Q&&await ve(e.app,c.relPath,Zn(O));let ae=U(e.app,c.relPath);r.docRecords[c.relPath]={documentId:m,nodeToken:c.nodeToken??p?.nodeToken,parentNodeToken:p?.parentNodeToken,documentTitle:p?.documentTitle??ie(c.relPath,i),baseLocalHash:await e.hashText(O),baseRemoteHash:C,publishRulesFingerprint:K(e.rules),remoteModifiedTime:c.remoteModifiedTime??p?.remoteModifiedTime,localSize:ae.size,localMtime:ae.mtime,lastSyncedAt:Date.now()},delete r.conflicts[c.relPath],o.push({relPath:c.relPath,action:Q?"pull":"link",ok:!0,message:Q?"\u5DF2\u4FEE\u590D Obsidian \u516C\u5F0F\u5B9A\u754C\u7B26\u5185\u4FA7\u7A7A\u767D\u6216\u8F6C\u4E49\uFF0C\u4FDD\u7559\u672C\u5730\u6BB5\u843D\u6392\u7248":"\u8FDC\u7AEF\u5DEE\u5F02\u53EA\u662F\u6392\u7248\u5F52\u4E00\u5316\uFF0C\u672C\u5730\u672A\u6539\u52A8"}),l(`${Q?"\u4FEE\u590D\u516C\u5F0F":"\u8DF3\u8FC7"} ${c.relPath}`);return}if(c.action==="create-local"&&y){let O=await Z(e.app,c.relPath);if(O!==B){let Q=await g(c.relPath,b,await e.hashText(O),C);o.push({relPath:c.relPath,action:"conflict",ok:!0,message:"\u672C\u5730\u5728\u8BA1\u5212\u751F\u6210\u540E\u51FA\u73B0\u4E86\u540C\u540D\u6587\u4EF6\u4E14\u5185\u5BB9\u4E0D\u540C\uFF0C\u5DF2\u4FDD\u7559\u53CC\u65B9",copyPath:Q}),l(`\u51B2\u7A81 ${c.relPath}`);return}}await ve(e.app,c.relPath,Zn(B));let se=U(e.app,c.relPath);r.docRecords[c.relPath]={documentId:m,nodeToken:c.nodeToken??p?.nodeToken,parentNodeToken:p?.parentNodeToken,documentTitle:p?.documentTitle??ie(c.relPath,i),baseLocalHash:await e.hashText(B),baseRemoteHash:C,publishRulesFingerprint:K(e.rules),remoteModifiedTime:c.remoteModifiedTime??p?.remoteModifiedTime,localSize:se.size,localMtime:se.mtime,lastSyncedAt:Date.now()},delete r.conflicts[c.relPath],o.push({relPath:c.relPath,action:c.action,ok:!0,message:_.length>0?_.join("\uFF1B"):void 0}),l(`\u4E0B\u8F7D ${c.relPath}`)}catch(y){e.logger.error(`\u4E0B\u8F7D ${c.relPath} \u5931\u8D25\uFF1A${I(y)}`),o.push({relPath:c.relPath,action:c.action,ok:!1,message:I(y)}),l(`\u4E0B\u8F7D\u5931\u8D25 ${c.relPath}`)}});for(let c of P)E.push(async()=>{try{let p=U(e.app,c.relPath),m=await Z(e.app,c.relPath),y=U(e.app,c.relPath),b=y.size===p.size&&y.mtime===p.mtime,x=r.docRecords[c.relPath],_=c.documentId??x?.documentId??"";if(await t.isEditorDirty(c.relPath)||await e.hashText(m)!==c.localHash||await e.hashFetched(await h(_))!==c.remoteHash)throw new Error("\u9884\u89C8\u540E\u5185\u5BB9\u5DF2\u6539\u53D8\uFF0C\u672A\u66F4\u65B0\u6620\u5C04\uFF0C\u8BF7\u91CD\u65B0\u540C\u6B65");r.docRecords[c.relPath]={documentId:_,nodeToken:c.nodeToken??x?.nodeToken,parentNodeToken:x?.parentNodeToken,documentTitle:x?.documentTitle??ie(c.relPath,i),baseLocalHash:c.localHash??await e.hashText(m),baseRemoteHash:c.remoteHash??x?.baseRemoteHash??"",publishRulesFingerprint:K(e.rules),remoteModifiedTime:c.remoteModifiedTime??x?.remoteModifiedTime,localSize:b?y.size:-1,localMtime:b?y.mtime:-1,lastSyncedAt:Date.now()},delete r.conflicts[c.relPath],o.push({relPath:c.relPath,action:c.action,ok:!0,message:c.reason}),l(`\u5EFA\u7ACB\u6620\u5C04 ${c.relPath}`)}catch(p){o.push({relPath:c.relPath,action:c.action,ok:!1,message:I(p)}),l(`\u5EFA\u7ACB\u6620\u5C04\u5931\u8D25 ${c.relPath}`)}});for(let c of k)E.push(async()=>{let p=r.docRecords[c.relPath],m=c.documentId??p?.documentId,y=r.conflicts[c.relPath];if(c.duplicateConflict&&y){o.push({relPath:c.relPath,action:"conflict",ok:!0,message:"\u4ECD\u662F\u4E0A\u6B21\u672A\u5904\u7406\u7684\u51B2\u7A81\uFF0C\u672A\u91CD\u590D\u751F\u6210\u526F\u672C",copyPath:y.copyPath}),l(`\u51B2\u7A81 ${c.relPath}`);return}if(!m){o.push({relPath:c.relPath,action:"conflict",ok:!1,message:"\u7F3A\u5C11\u8FDC\u7AEF document_id\uFF0C\u65E0\u6CD5\u53D6\u51FA\u51B2\u7A81\u7248\u672C"}),l(`\u51B2\u7A81 ${c.relPath}`);return}try{let b=await f(m),x=await e.hashFetched(b),_=J(e.app,c.relPath),W=_?await Z(e.app,c.relPath):"",B=_?await e.hashText(W):"";if(y&&y.remoteHash===x&&y.localHash===B){o.push({relPath:c.relPath,action:"conflict",ok:!0,message:"\u4ECD\u662F\u4E0A\u6B21\u672A\u5904\u7406\u7684\u51B2\u7A81\uFF0C\u672A\u91CD\u590D\u751F\u6210\u526F\u672C",copyPath:y.copyPath}),l(`\u51B2\u7A81 ${c.relPath}`);return}let C=await g(c.relPath,b,B,x);p&&(p.conflict=!0),o.push({relPath:c.relPath,action:"conflict",ok:!0,message:"\u8FDC\u7AEF\u7248\u672C\u5DF2\u53E6\u5B58\u4E3A\u526F\u672C\uFF0C\u672C\u5730\u4E0E\u8FDC\u7AEF\u90FD\u672A\u6539\u52A8",copyPath:C}),e.logger.warn(`\u51B2\u7A81\uFF1A${c.relPath} -> ${C}`),l(`\u51B2\u7A81 ${c.relPath}`)}catch(b){o.push({relPath:c.relPath,action:"conflict",ok:!1,message:I(b)}),l(`\u51B2\u7A81\u5904\u7406\u5931\u8D25 ${c.relPath}`)}});for(let c of E)await c();if(t.allowPush)for(let c of M){let p=r.docRecords[c.relPath],m=c.documentId??p?.documentId,y=c.remoteTitle??p?.documentTitle??c.relPath;if(!m){o.push({relPath:c.relPath,action:"delete-remote",ok:!1,message:"\u7F3A\u5C11\u8FDC\u7AEF document_id\uFF0C\u672A\u5220\u9664"}),l(`\u8DF3\u8FC7\u5220\u9664 ${c.relPath}`);continue}try{if(J(e.app,c.relPath)||await t.isEditorDirty(c.relPath))throw new Error("\u672C\u5730\u7B14\u8BB0\u5DF2\u6062\u590D\u6216\u6B63\u5728\u7F16\u8F91\uFF0C\u672A\u5220\u9664\u8FDC\u7AEF\uFF0C\u8BF7\u91CD\u65B0\u9884\u89C8");let b=await e.hashFetched(await h(m));if(!p||b!==p.baseRemoteHash)throw new Error("\u98DE\u4E66\u5185\u5BB9\u5728\u9884\u89C8\u540E\u5DF2\u6539\u53D8\uFF0C\u672A\u5220\u9664\uFF0C\u8BF7\u91CD\u65B0\u540C\u6B65");if(J(e.app,c.relPath)||await t.isEditorDirty(c.relPath))throw new Error("\u68C0\u67E5\u671F\u95F4\u672C\u5730\u7B14\u8BB0\u5DF2\u6062\u590D\uFF0C\u672A\u5220\u9664\u8FDC\u7AEF");await ut(e.client,m,"docx"),delete r.docRecords[c.relPath],delete r.conflicts[c.relPath],e.logger.info(`\u5DF2\u5220\u9664\u8FDC\u7AEF\u6587\u6863 ${y}\uFF08${m}\uFF09\uFF0C\u8FDB\u98DE\u4E66\u56DE\u6536\u7AD9\u53EF\u6062\u590D`),o.push({relPath:c.relPath,action:"delete-remote",ok:!0,message:`\u5DF2\u5220\u9664\u8FDC\u7AEF\u6587\u6863\u300C${y}\u300D\uFF08\u8FDB\u98DE\u4E66\u56DE\u6536\u7AD9\uFF0C\u53EF\u6062\u590D\uFF09`}),l(`\u5220\u9664\u8FDC\u7AEF ${c.relPath}`)}catch(b){e.logger.error(`\u5220\u9664\u8FDC\u7AEF ${c.relPath} \u5931\u8D25\uFF1A${I(b)}`),o.push({relPath:c.relPath,action:"delete-remote",ok:!1,message:I(b)}),l(`\u5220\u9664\u8FDC\u7AEF\u5931\u8D25 ${c.relPath}`)}}if(t.allowPull)for(let c of A)try{let p=J(e.app,c.relPath)?e.app.vault.getAbstractFileByPath(c.relPath):null;if(p){if(await it(e.client,e.spaceId,e.rootNodeToken,r.docRecords[c.relPath]?.documentId),await t.isEditorDirty(c.relPath)||!c.localHash||await e.hashText(await Z(e.app,c.relPath))!==c.localHash)throw new Error("\u672C\u5730\u7B14\u8BB0\u5728\u9884\u89C8\u540E\u5DF2\u6539\u53D8\uFF0C\u672A\u5220\u9664\uFF0C\u8BF7\u91CD\u65B0\u540C\u6B65");await e.app.vault.trash(p,!1)}delete r.docRecords[c.relPath],delete r.conflicts[c.relPath],o.push({relPath:c.relPath,action:"delete-local",ok:!0,message:p?"\u8FDC\u7AEF\u5DF2\u5220\u9664\uFF0C\u672C\u5730\u7B14\u8BB0\u5DF2\u79FB\u5165 .trash":"\u8FDC\u7AEF\u5DF2\u5220\u9664\uFF0C\u672C\u5730\u6587\u4EF6\u5DF2\u4E0D\u5B58\u5728\uFF0C\u53EA\u6E05\u7406\u4E86\u6620\u5C04"}),l(`\u5220\u9664\u672C\u5730 ${c.relPath}`)}catch(p){e.logger.error(`\u5220\u9664\u672C\u5730 ${c.relPath} \u5931\u8D25\uFF1A${I(p)}`),o.push({relPath:c.relPath,action:"delete-local",ok:!1,message:I(p)}),l(`\u5220\u9664\u672C\u5730\u5931\u8D25 ${c.relPath}`)}for(let c of S)c.action==="forget"&&(delete r.docRecords[c.relPath],delete r.conflicts[c.relPath]),o.push({relPath:c.relPath,action:c.action,ok:!0,message:c.reason});r.lastSyncAt=Date.now();for(let c of n.items){let p=r.docRecords[c.relPath];c.action==="skip"&&p&&c.remoteModifiedTime&&c.remoteHash===p.baseRemoteHash&&(p.remoteModifiedTime=c.remoteModifiedTime)}return o}var Tr=20*1024*1024,eo={"image/png":".png","image/jpeg":".jpg","image/jpg":".jpg","image/gif":".gif","image/bmp":".bmp","image/webp":".webp","image/tiff":".tiff","image/svg+xml":".svg"};async function br(n,e){let t={uploaded:0,reused:0,failures:[],cleaned:0};if(e.uploads.length===0)return t;let o=fn(e.newBlocks,e.uploads.map(i=>i.marker)),r=[];for(let i of e.uploads){let s=o.get(i.marker);if(!s){t.failures.push(`${i.fileName}\uFF1A\u670D\u52A1\u7AEF\u6CA1\u6709\u8FD4\u56DE\u5BF9\u5E94\u7684\u56FE\u7247\u5360\u4F4D\u5757`);continue}try{let d=await n.readBinary(i.vaultPath),a=await n.hashBytes(d),u=`${a}:${e.documentId}`,h=n.state.imageUploads[u];if(h?.fileToken){try{if(await Nt(n.client,e.documentId,[{blockId:s,fileToken:h.fileToken}]),await yn(n.client,e.documentId,s)===h.fileToken){t.reused+=1;continue}n.logger.warn(`\u56FE\u7247 ${i.fileName} \u590D\u7528\u5DF2\u4E0A\u4F20\u7D20\u6750\u5931\u8D25\uFF08\u56DE\u8BFB\u5230\u7684 token \u4E0D\u4E00\u81F4\uFF09\uFF0C\u6539\u4E3A\u91CD\u65B0\u4E0A\u4F20`)}catch(g){n.logger.warn(`\u56FE\u7247 ${i.fileName} \u590D\u7528\u5DF2\u4E0A\u4F20\u7D20\u6750\u62A5\u9519\uFF0C\u6539\u4E3A\u91CD\u65B0\u4E0A\u4F20\uFF1A${I(g)}`)}delete n.state.imageUploads[u]}let f=await mn(n.client,{documentId:e.documentId,blockId:s,fileName:i.fileName,bytes:d});await Nt(n.client,e.documentId,[{blockId:s,fileToken:f}]),n.state.imageUploads[u]={fileToken:f,documentId:e.documentId,hash:a,path:i.vaultPath,at:Date.now()},n.state.images[f]={path:i.vaultPath,token:f,hash:a,at:Date.now()},t.uploaded+=1}catch(d){n.logger.error(`\u56FE\u7247 ${i.fileName} \u4E0A\u4F20/\u7ED1\u5B9A\u5931\u8D25\uFF1A${I(d)}`),t.failures.push(`${i.fileName}\uFF1A${I(d)}`),r.push(s)}}if(r.length>0)try{await wn(n.client,e.documentId,r,e.revisionId),t.cleaned=r.length,n.logger.warn(`\u5DF2\u6E05\u7406 ${r.length} \u4E2A\u56FE\u7247\u5360\u4F4D\u5757\uFF08\u5BF9\u5E94\u56FE\u7247\u6CA1\u4E0A\u4F20\u6210\u529F\uFF0C\u672C\u5730\u5F15\u7528\u4E0D\u53D7\u5F71\u54CD\uFF09`)}catch(i){n.logger.warn(`\u6E05\u7406\u56FE\u7247\u5360\u4F4D\u5757\u5931\u8D25\uFF0C\u6587\u6863\u91CC\u53EF\u80FD\u6B8B\u7559\u5360\u4F4D\uFF1A${I(i)}`)}return t}function Sr(n,e,t){let o=[];return n.length===0&&o.push("\u7A7A\u7B14\u8BB0\u5728\u6587\u6863\u6A21\u5F0F\u4E5F\u4F1A\u540C\u6B65\uFF1A\u6B63\u6587\u4E3A\u7A7A\uFF0C\u98DE\u4E66\u4FA7\u53EA\u6709\u6807\u9898\uFF08md \u6A21\u5F0F\u4F1A\u8DF3\u8FC7\u7A7A\u6587\u4EF6\uFF09"),(e.uploaded>0||e.reused>0)&&o.push(`\u56FE\u7247\uFF1A\u65B0\u4E0A\u4F20 ${e.uploaded} \u5F20\u3001\u590D\u7528\u5DF2\u4E0A\u4F20 ${e.reused} \u5F20`),e.failures.length>0&&o.push(`\u56FE\u7247\u5931\u8D25 ${e.failures.length} \u5F20\uFF08\u5DF2\u6E05\u7406\u5360\u4F4D\u5757 ${e.cleaned} \u4E2A\uFF09\uFF1A${e.failures.join("\uFF1B")}`),t.length>0&&o.push(t.join("\uFF1B")),o.length>0?o.join(" \xB7 "):void 0}function vr(n,e,t){let o=(n??"").split(";")[0].trim().toLowerCase();if(eo[o])return eo[o];for(let r of[e,t]){let i=/\.(png|jpe?g|gif|bmp|webp|tiff?|svg)(?:[?#]|$)/i.exec(r);if(i)return`.${i[1].toLowerCase().replace(/^jpeg$/,"jpg")}`}return".png"}function $r(n,e){if(n.byteLength!==e.byteLength)return!1;let t=new Uint8Array(n),o=new Uint8Array(e);for(let r=0;r<t.length;r+=1)if(t[r]!==o[r])return!1;return!0}function Rr(n,e,t){let o=e.trim();return o&&!/[\\/:\x00-\x1f\[\]|]/.test(o)&&/\.(png|jpe?g|gif|bmp|webp|tiff?|svg)$/i.test(o)?o:`image-${n.slice(-8)}${t}`}function xr(n,e){let t=/^(.*?)(\.[^.]*)?$/.exec(n),o=t?.[1]??n,r=t?.[2]??"";return`${o}-${e}${r}`}async function _r(n,e,t,o){let r=s=>e?`${e}/${s}`:s,i=r(t);if(!J(n.app,i))return i;try{if($r(await n.readBinary(i),o))return i}catch(s){n.logger.warn(`\u8BFB\u53D6\u5DF2\u6709\u9644\u4EF6 ${i} \u5931\u8D25\uFF0C\u6309\u65B0\u6587\u4EF6\u5904\u7406\uFF1A${I(s)}`)}for(let s=1;s<100;s+=1){let d=r(xr(t,s));if(!J(n.app,d))return d}}async function Ir(n,e){for(let t of[...Object.values(n.state.images),...Object.values(n.state.imageUploads)])if(t.hash===e&&t.path&&J(n.app,t.path)&&await n.hashBytes(await n.readBinary(t.path))===e)return t.path}async function Er(n,e){try{let t=await Pn(n.client,e.token);if(t.bytes.byteLength>Tr){e.warnings.push(`\u7D20\u6750 ${e.token} \u8D85\u8FC7 20MB\uFF0C\u5DF2\u8DF3\u8FC7\uFF08\u5F15\u7528\u4FDD\u6301\u539F\u6837\uFF09`);return}let o=await n.hashBytes(t.bytes),r=await Ir(n,o);if(r)return n.state.images[e.token]={path:r,token:e.token,hash:o,at:Date.now()},n.logger.debug(`\u8FDC\u7AEF\u56FE\u7247 ${e.token} \u4E0E\u672C\u5730\u5DF2\u6709\u6587\u4EF6\u5185\u5BB9\u4E00\u81F4\uFF0C\u590D\u7528 ${r}`),r;let i=n.settings.attachmentFolder.replace(/\\/g,"/").replace(/^\/+|\/+$/g,""),s=vr(t.contentType,e.url,e.alt),d=Rr(e.token,e.alt,s),a=await _r(n,i,d,t.bytes);if(!a){e.warnings.push(`\u9644\u4EF6 ${d} \u540C\u540D\u6587\u4EF6\u8FC7\u591A\uFF0C\u672A\u843D\u76D8\uFF08\u5F15\u7528\u4FDD\u6301\u539F\u6837\uFF09`);return}return J(n.app,a)||await ve(n.app,a,t.bytes),n.state.images[e.token]={path:a,token:e.token,hash:o,at:Date.now()},n.logger.info(`\u5DF2\u4E0B\u8F7D\u8FDC\u7AEF\u56FE\u7247 ${e.token} \u2192 ${a}`),a}catch(t){n.logger.warn(`\u4E0B\u8F7D\u7D20\u6750 ${e.token} \u5931\u8D25\uFF1A${I(t)}`),e.warnings.push(`\u7B2C ${e.token} \u5F20\u56FE\u4E0B\u8F7D\u5931\u8D25\uFF08${I(t)}\uFF09\uFF0C\u5F15\u7528\u4FDD\u6301\u539F\u6837`);return}}async function Mr(n,e,t){let o=new Map;if(!Ce(n.rules,"toObsidian","image-download"))return o;let r=Gt(e);if(r.length===0)return o;let i;if(r.some(d=>!d.token))try{let d=await kn(n.client,t.documentId);d.length===r.length?i=d:t.warnings.push(`\u53D6\u56DE\u5185\u5BB9\u91CC\u6709 ${r.length} \u5F20\u56FE\uFF0C\u4F46\u6587\u6863\u91CC\u8BFB\u5230 ${d.length} \u4E2A\u56FE\u7247\u5757\uFF0C\u6570\u91CF\u4E0D\u4E00\u81F4\uFF0C\u672A\u6309\u987A\u5E8F\u5339\u914D\uFF08\u8FD9\u4E9B\u56FE\u7247\u4FDD\u6301\u539F\u6837\uFF09`)}catch(d){t.warnings.push(`\u8BFB\u53D6\u6587\u6863\u56FE\u7247\u5757\u5931\u8D25\uFF0C\u65E0\u6CD5\u89E3\u6790\u56FE\u7247\u7D20\u6750\uFF1A${I(d)}`)}let s=new Map;for(let d of r){let a=d.token??i?.[d.index]?.fileToken;if(!a){t.warnings.push(`\u7B2C ${d.index+1} \u5F20\u56FE\u62FF\u4E0D\u5230\u7D20\u6750 token\uFF0C\u5F15\u7528\u4FDD\u6301\u539F\u6837`);continue}let u=s.get(a);if(!u){let h=n.state.images[a];h?.hash&&J(n.app,h.path)&&await n.hashBytes(await n.readBinary(h.path))===h.hash?u=h.path:u=await Er(n,{token:a,alt:d.alt,url:d.url,warnings:t.warnings}),u&&s.set(a,u)}u&&o.set(d.raw,u)}return o}var yt=class{constructor(e){this.deps=e;this.syncing=!1}isSyncing(){return this.syncing}createClient(){return new ke(e=>this.deps.auth.getToken(e),this.deps.logger)}async listSpaces(){return nt(this.createClient())}async run(e){if(this.syncing)throw new Error("\u5DF2\u6709\u540C\u6B65\u4EFB\u52A1\u5728\u6267\u884C\u4E2D");this.syncing=!0;try{return await this.runInternal(e)}finally{this.syncing=!1}}async runInternal(e){let t=this.deps.getSettings(),o=this.deps.logger;st(t);let r=He(t.spaceId),i=He(t.rootNodeToken)||void 0;if(!r)throw new Error("\u8BF7\u5148\u5728\u63D2\u4EF6\u8BBE\u7F6E\u91CC\u586B\u5199\u77E5\u8BC6\u5E93 space_id");let s=this.createClient(),d=new Se(t.excludePatterns);e.preApprovedPlan&&xe(e.preApprovedPlan,t),ct(t,r,i??"","doc")&&o.warn("\u540C\u6B65\u76EE\u6807\u6216\u6A21\u5F0F\u5DF2\u53D8\u66F4\uFF0C\u5DF2\u6E05\u7A7A\u65E7\u6620\u5C04\uFF0C\u672C\u8F6E\u6309\u9996\u6B21\u5BF9\u63A5\u5224\u5B9A");try{let a=await this.rules();if(e.preApprovedPlan){if(e.preApprovedPlan.publishRulesFingerprint!==K(a)||e.preApprovedPlan.pullRulesFingerprint!==Ze(a))throw new Error("\u9884\u89C8\u540E\u8F6C\u6362\u89C4\u5219\u53D1\u751F\u53D8\u5316\uFF0C\u8BF7\u91CD\u65B0\u9884\u89C8\u540C\u6B65\u8BA1\u5212");let k=fe(e.preApprovedPlan,e.mode);return await this.execute(k,e,{settings:t,client:s,spaceId:r,rootNodeToken:i,filter:d,rules:a})}if(!i&&!t.state.folders[""]?.nodeToken){let k=t.rootPageTitle.trim()||this.deps.app.vault.getName();try{let A=(await oe(s,r)).find(S=>S.title===k&&S.obj_type!=="file");A?.node_token&&(t.state.folders[""]={nodeToken:A.node_token},o.info(`\u8BC6\u522B\u5230\u5DF2\u6709\u7684\u77E5\u8BC6\u5E93\u9876\u5C42\u9875\u9762\u300C${k}\u300D\uFF0C\u590D\u7528\u5B83\u5B58\u653E vault \u6839\u76EE\u5F55\u4E0B\u7684\u7B14\u8BB0`))}catch(M){throw new Error(`\u8BFB\u53D6\u77E5\u8BC6\u5E93\u9876\u5C42\u9875\u9762\u5931\u8D25\uFF0C\u5DF2\u505C\u6B62\u540C\u6B65\u4EE5\u907F\u514D\u91CD\u590D\u521B\u5EFA\uFF1A${String(M)}`)}}e.onProgress?.("\u626B\u63CF\u672C\u5730\u7B14\u8BB0\u2026");let u=Ne(this.deps.app,d);at(u.keys(),t),e.onProgress?.("\u8BFB\u53D6\u98DE\u4E66\u77E5\u8BC6\u5E93\u8282\u70B9\u6811\u2026");let h=await $e(s,r,i,{rootContainerNode:t.state.folders[""]?.nodeToken,onProgress:k=>{k%50===0&&e.onProgress?.(`\u8BFB\u53D6\u98DE\u4E66\u77E5\u8BC6\u5E93\u8282\u70B9\u6811\u2026\uFF08\u5DF2\u89C1 ${k} \u4E2A\u8282\u70B9\uFF09`)}}),f=Qn({entries:h,state:t.state,folderMode:t.folderMode,flatSeparator:t.flatSeparator,rootContainerNode:t.state.folders[""]?.nodeToken,isExcluded:k=>d.isExcluded(k)});if(f.warnings.length)throw new Error(`\u8FDC\u7AEF\u8DEF\u5F84\u5B58\u5728\u6B67\u4E49\uFF0C\u8BF7\u5148\u5904\u7406\u518D\u540C\u6B65\uFF1A${f.warnings.join("\uFF1B")}`);if(t.folderMode==="nodes")for(let[k,M]of f.containers){let A=t.state.folders[k];(!A||A.nodeToken!==M.nodeToken)&&(t.state.folders[k]={nodeToken:M.nodeToken,parentNodeToken:M.parentNodeToken})}o.info(`\u6587\u6863\u6A21\u5F0F\uFF1A\u8FDC\u7AEF\u8BC6\u522B\u5230 ${f.notes.size} \u7BC7\u6587\u6863\u3001${f.containers.size} \u4E2A\u76EE\u5F55\u8282\u70B9\uFF1B\u672C\u5730 ${u.size} \u7BC7\u7B14\u8BB0`),e.onProgress?.("\u8BFB\u53D6\u8FDC\u7AEF\u6587\u6863\u5143\u6570\u636E\u2026");let g=t.docVerifyRemoteByContent?new Map:await this.batchDocumentModifyTimes(s,t.state);g.size===0&&Object.keys(t.state.docRecords).length>0&&o.debug("\u6587\u6863\u6A21\u5F0F\uFF1A\u6CA1\u62FF\u5230\u53EF\u7528\u7684\u8FDC\u7AEF\u4FEE\u6539\u65F6\u95F4\uFF0C\u672C\u8F6E\u9000\u56DE\u9010\u7BC7\u53D6\u56DE\u6821\u9A8C"),t.docVerifyRemoteByContent&&o.debug("\u6587\u6863\u6A21\u5F0F\uFF1A\u5DF2\u6253\u5F00\u300C\u6BCF\u8F6E\u53D6\u56DE\u5168\u6587\u6821\u9A8C\u300D\uFF0C\u672C\u8F6E\u5FFD\u7565\u4FEE\u6539\u65F6\u95F4\u6233");let $=Zt(),w=await Kn({state:t.state,local:u,remote:f,settings:t,rules:a,isExcluded:k=>d.isExcluded(k),recreateRemoteIfDeleted:t.recreateRemoteIfDeleted,propagateLocalDelete:t.propagateLocalDelete,propagateRemoteDelete:t.propagateRemoteDelete,cache:$,forcePush:e.forcePush===!0,remoteModifiedTimes:g,verifyRemoteByContent:t.docVerifyRemoteByContent,readLocal:k=>Z(this.deps.app,k),hashText:k=>this.hashText(k),hashFetched:k=>this.hashFetched(k),fetchMarkdown:k=>this.fetchMarkdown(s,k)});o.debug(`\u6587\u6863\u6A21\u5F0F\uFF1A\u672C\u8F6E fetch \u6587\u6863 ${$.fetchCount} \u6B21\u3001\u6279\u91CF\u5143\u6570\u636E ${g.size>0?"\u547D\u4E2D":"\u672A\u547D\u4E2D"}\uFF08${t.docVerifyRemoteByContent?"\u5B89\u5168\u9600\u6253\u5F00\uFF1A\u6BCF\u8F6E\u5168\u6587\u6821\u9A8C":"\u65F6\u95F4\u6233\u5FEB\u8DEF\u5F84"}\uFF09`);let P=dt(fe(w,e.mode),e.allowDeletes);return P.settingsFingerprint=Fe(t),e.dryRun?{plan:P,report:[],executed:!1}:await this.execute(P,e,{settings:t,client:s,spaceId:r,rootNodeToken:i,filter:d,rules:a,cache:$,index:f})}catch(a){throw await this.deps.saveSettings(),a}}async rules(){return Ke(this.deps.app.vault.adapter,this.deps.logger)}async hashText(e){return H(new TextEncoder().encode(e).buffer)}async hashFetched(e){return this.hashText(Rn(e))}async hashBytes(e){return H(e)}imageResolver(){return(e,t)=>{let r=this.deps.app.metadataCache?.getFirstLinkpathDest?.(e,t);if(r)return{path:r.path,size:r.stat?.size??0}}}async fetchMarkdown(e,t){return gt(e,t)}async execute(e,t,o){let r=t.mode!=="pull",i=t.mode!=="push",s=e;if(t.confirm){let f=await t.confirm(e);if(f==="cancel")return{plan:e,report:[],executed:!1};f==="pull-only"&&(r=!1,s=fe(e,"pull"))}xe(e,o.settings);let d=o.cache??Zt(),a=Ne(this.deps.app,o.filter),u=new Set(o.index?.containerTitles??[]);for(let f of Object.keys(o.settings.state.folders))f&&u.add(te(f));for(let f of a.keys())for(let g of G(f).split("/").filter(Boolean))u.add(g);let h={app:this.deps.app,client:o.client,settings:o.settings,state:o.settings.state,logger:this.deps.logger,spaceId:o.spaceId,rootNodeToken:o.rootNodeToken,rules:o.rules,cache:d,containerTitles:u,hashText:f=>this.hashText(f),hashFetched:f=>this.hashFetched(f),hashBytes:f=>this.hashBytes(f),resolveImage:this.imageResolver(),readBinary:f=>he(this.deps.app,f)};try{let f=await to(s,h,{allowPush:r,allowPull:i,isEditorDirty:$=>lt(this.deps.app,$),onProgress:($,w,P)=>t.onProgress?.(`${$}\uFF08${w}/${P}\uFF09`)}),g=Dr(f);return g.size>0&&await this.refreshDocumentModifyTimes(o.client,o.settings.state,g),{plan:s,report:f,executed:!0}}finally{await this.deps.saveSettings()}}async batchDocumentModifyTimes(e,t){let o=Array.from(new Set(Object.values(t.docRecords).map(r=>r.documentId))).filter(Boolean);if(o.length===0)return new Map;try{let r=await ye(e,o,"docx"),i=new Map;for(let[s,d]of r)d.modifiedTime&&i.set(s,d.modifiedTime);return i}catch(r){return this.deps.logger.warn(`\u6279\u91CF\u8BFB\u53D6\u8FDC\u7AEF\u6587\u6863\u5143\u6570\u636E\u5931\u8D25\uFF0C\u672C\u8F6E\u9000\u56DE\u9010\u7BC7\u53D6\u56DE\u6821\u9A8C\uFF1A${String(r)}`),new Map}}async refreshDocumentModifyTimes(e,t,o){let r=Array.from(new Set([...o].map(i=>t.docRecords[i]?.documentId).filter(i=>!!i)));if(r.length!==0)try{let i=await ye(e,r,"docx");for(let s of Object.values(t.docRecords)){let d=i.get(s.documentId);d?.modifiedTime&&(s.remoteModifiedTime=d.modifiedTime)}}catch(i){this.deps.logger.warn(`\u5237\u65B0\u8FDC\u7AEF\u6587\u6863\u4FEE\u6539\u65F6\u95F4\u5931\u8D25\uFF08\u4E0B\u4E00\u8F6E\u4F1A\u9000\u56DE\u9010\u7BC7\u53D6\u56DE\uFF09\uFF1A${String(i)}`)}}};function Dr(n){let e=new Set;for(let t of n)t.ok&&["push","create-remote","pull","create-local","link"].includes(t.action)&&e.add(t.relPath);return e}var Ue=require("obsidian"),wt=class extends Ue.Modal{constructor(t,o,r,i){super(t);this.authorizeUrl=o;this.onSubmit=r;this.onCancel=i;this.value="";this.submitted=!1}onOpen(){let{contentEl:t}=this;t.empty(),t.createEl("h2",{text:"\u624B\u52A8\u5B8C\u6210\u98DE\u4E66\u6388\u6743"}),t.createEl("p",{text:"\u5982\u679C\u672C\u5730\u56DE\u8C03\u670D\u52A1\u4E0D\u53EF\u7528\uFF0C\u53EF\u4EE5\u624B\u52A8\u5B8C\u6210\u6388\u6743\uFF1A\u5728\u6D4F\u89C8\u5668\u91CC\u6253\u5F00\u4E0B\u9762\u7684\u94FE\u63A5\u5E76\u540C\u610F\u6388\u6743\uFF0C\u9875\u9762\u53EF\u80FD\u663E\u793A\u65E0\u6CD5\u8BBF\u95EE\uFF0C\u4F46\u5730\u5740\u680F\u91CC\u5E26\u6709 code \u53C2\u6570\uFF0C\u628A\u6574\u6761\u5730\u5740\u6216 code \u7C98\u8D34\u5230\u4E0B\u9762\u5373\u53EF\u3002"}),t.createEl("div",{cls:"feishu-sync-path"}).createEl("a",{text:this.authorizeUrl,href:this.authorizeUrl}),new Ue.Setting(t).setName("\u6388\u6743\u7801\u6216\u56DE\u8C03\u5730\u5740").setDesc("\u7C98\u8D34 code \u53C2\u6570\uFF0C\u6216\u76F4\u63A5\u7C98\u8D34\u6D4F\u89C8\u5668\u5730\u5740\u680F\u91CC\u7684\u5B8C\u6574\u56DE\u8C03\u5730\u5740").addText(r=>r.onChange(i=>{this.value=i})),new Ue.Setting(t).addButton(r=>r.setButtonText("\u53D6\u6D88").onClick(()=>{this.close()})).addButton(r=>r.setButtonText("\u63D0\u4EA4\u6388\u6743\u7801").setCta().onClick(async()=>{let i=this.value.trim();if(!i||this.submitted)return;this.submitted=!0;let s=Ar(i);await this.onSubmit(s),this.close()}))}onClose(){this.submitted||this.onCancel(),this.contentEl.empty()}};function Ar(n){let e=n.trim();if(!/^https?:\/\//i.test(e))return e;try{return new URL(e).searchParams.get("code")??e}catch{return e}}var Tt=require("obsidian");function kt(n,e){if(!e.warnings?.length)return;let t=n.createEl("div",{cls:"feishu-sync-section"});t.createEl("h4",{text:`\u539F\u7A3F\u683C\u5F0F\u63D0\u793A\uFF08${e.warnings.length}\uFF09`});for(let o of e.warnings.slice(0,100))t.createEl("div",{cls:"feishu-sync-reason",text:`${o.relPath}\uFF1A${o.message}`});e.warnings.length>100&&t.createEl("div",{text:"\u4EC5\u663E\u793A\u524D 100 \u6761\u683C\u5F0F\u63D0\u793A"})}var Cr=[{key:"push",title:"\u4F1A\u4E0A\u4F20\u5230\u98DE\u4E66",actions:["push","create-remote"]},{key:"pull",title:"\u4F1A\u62C9\u53D6\u5230\u672C\u5730",actions:["pull","create-local"]},{key:"delete-remote",title:"\u4F1A\u5220\u9664\u8FDC\u7AEF\uFF08\u8FDB\u98DE\u4E66\u56DE\u6536\u7AD9\uFF0C\u53EF\u6062\u590D\uFF09",actions:["delete-remote"]},{key:"delete-local",title:"\u4F1A\u5220\u9664\u672C\u5730\u6587\u4EF6\uFF08\u79FB\u5165 .trash\uFF09",actions:["delete-local"]},{key:"conflict",title:"\u51B2\u7A81\uFF08\u4FDD\u7559\u53CC\u65B9\uFF0C\u4E0D\u81EA\u52A8\u8986\u76D6\uFF09",actions:["conflict"]},{key:"link",title:"\u53EA\u5EFA\u7ACB\u6620\u5C04",actions:["link"]},{key:"observe",title:"\u4EC5\u63D0\u793A\uFF0C\u4E0D\u4F1A\u6539\u52A8\u4EFB\u4F55\u4E00\u8FB9",actions:["local-deleted","remote-deleted","empty-local","dirty-editor","forget"]}],Pt=class extends Tt.Modal{constructor(t,o,r){super(t);this.plan=o;this.resolve=r;this.decided=!1}onOpen(){let{contentEl:t}=this;t.empty(),t.createEl("h2",{text:"\u98DE\u4E66\u540C\u6B65\u8BA1\u5212"});let o=t.createEl("div",{cls:"feishu-sync-summary"}),r=Object.entries(this.plan.counts).filter(([s])=>s!=="skip").map(([s,d])=>`${Pe[s]??s} ${d}`).join(" \xB7 ");o.createEl("div",{text:`\u672C\u5730 ${this.plan.localNoteCount} \u7BC7 \xB7 \u8FDC\u7AEF ${this.plan.remoteNoteCount} \u7BC7${r?` \xB7 ${r}`:" \xB7 \u65E0\u5F85\u5904\u7406\u6539\u52A8"}`});let i=this.plan.counts.skip??0;i>0&&o.createEl("div",{text:`\u5DF2\u540C\u6B65\u4E14\u65E0\u53D8\u5316\uFF1A${i} \u7BC7`,cls:"feishu-sync-reason"}),kt(t,this.plan);for(let s of Cr){let d=this.plan.items.filter(h=>s.actions.includes(h.action));if(d.length===0)continue;let a=t.createEl("div",{cls:"feishu-sync-section"});a.createEl("h4",{text:`${s.title}\uFF08${d.length}\uFF09`});let u=a.createEl("div",{cls:"feishu-sync-list"});for(let h of d.slice(0,200))Nr(u,h);d.length>200&&u.createEl("div",{text:`\u2026\u8FD8\u6709 ${d.length-200} \u9879`,cls:"feishu-sync-reason"})}new Tt.Setting(t).addButton(s=>s.setButtonText("\u53D6\u6D88").onClick(()=>{this.decide("cancel"),this.close()})).addButton(s=>s.setButtonText("\u4EC5\u62C9\u53D6\uFF08\u4E0D\u63A8\u9001\uFF09").onClick(()=>{this.decide("pull-only"),this.close()})).addButton(s=>s.setButtonText("\u6267\u884C\u5168\u90E8").setCta().onClick(()=>{this.decide("all"),this.close()}))}onClose(){this.contentEl.empty(),this.decide("cancel")}decide(t){this.decided||(this.decided=!0,this.resolve(t))}};function Nr(n,e){let t=n.createEl("div",{cls:"feishu-sync-plan-item"});t.createEl("span",{cls:`feishu-sync-badge is-${Fr(e.action)}`,text:Pe[e.action]??e.action}).setAttr("title",e.action),t.createEl("span",{cls:"feishu-sync-path",text:e.relPath}),e.reason&&t.createEl("span",{cls:"feishu-sync-reason",text:e.reason})}function Fr(n){return n==="push"||n==="create-remote"?"push":n==="pull"||n==="create-local"?"pull":n==="conflict"?"conflict":n==="delete-remote"||n==="delete-local"?"delete":"other"}var St=require("obsidian");var je=class extends St.Modal{constructor(t,o,r,i){super(t);this.plan=o;this.report=r;this.executed=i}onOpen(){let{contentEl:t}=this;t.empty(),t.createEl("h2",{text:this.executed?"\u98DE\u4E66\u540C\u6B65\u7ED3\u679C":"\u98DE\u4E66\u540C\u6B65\u8BA1\u5212\uFF08\u672A\u6267\u884C\uFF09"});let o=this.report.filter(a=>!a.ok),r=this.report.filter(a=>a.action==="conflict"),i=this.report.filter(a=>a.ok&&no(a.action)),s=t.createEl("div",{cls:"feishu-sync-summary"});s.createEl("div",{text:`\u53D8\u66F4 ${i.length} \u9879 \xB7 \u51B2\u7A81 ${r.length} \u9879 \xB7 \u5931\u8D25 ${o.length} \u9879`});let d=Object.entries(this.plan.counts).filter(([a,u])=>a!=="skip"&&u>0).map(([a,u])=>`${Pe[a]??a} ${u}`).join(" \xB7 ");d&&s.createEl("div",{cls:"feishu-sync-reason",text:`\u672C\u6B21\u8BA1\u5212\uFF1A${d}`}),kt(t,this.plan),bt(t,"\u51B2\u7A81\u526F\u672C\uFF08\u672C\u5730\u4E0E\u8FDC\u7AEF\u5747\u672A\u6539\u52A8\uFF0C\u526F\u672C\u5728 .obsidian/feishu-sync/conflicts/\uFF09",r,!0),bt(t,"\u5DF2\u6267\u884C",i,!1),bt(t,"\u9700\u8981\u6CE8\u610F\uFF08\u672A\u81EA\u52A8\u5904\u7406\uFF09",this.report.filter(a=>!no(a.action)&&a.action!=="conflict"),!1),bt(t,"\u5931\u8D25",o,!1),new St.Setting(t).addButton(a=>a.setButtonText("\u5173\u95ED").setCta().onClick(()=>this.close()))}onClose(){this.contentEl.empty()}};function no(n){return["push","create-remote","pull","create-local","link","delete-remote","delete-local"].includes(n)}function bt(n,e,t,o){if(t.length===0)return;let r=n.createEl("div",{cls:"feishu-sync-section"});r.createEl("h4",{text:`${e}\uFF08${t.length}\uFF09`});let i=r.createEl("div",{cls:"feishu-sync-list"});for(let s of t.slice(0,300)){let d=i.createEl("div",{cls:"feishu-sync-plan-item"});d.createEl("span",{cls:`feishu-sync-badge is-${o?"conflict":s.ok?"push":"conflict"}`,text:s.ok?Pe[s.action]??s.action:"\u5931\u8D25"}).setAttr("title",s.action),d.createEl("span",{cls:"feishu-sync-path",text:s.relPath}),s.copyPath&&d.createEl("span",{cls:"feishu-sync-reason",text:`\u526F\u672C\uFF1A${s.copyPath}`}),s.message&&d.createEl("span",{cls:"feishu-sync-reason",text:s.message})}t.length>300&&i.createEl("div",{text:`\u2026\u8FD8\u6709 ${t.length-300} \u9879`,cls:"feishu-sync-reason"})}var Br=new Set(["push","create-remote","pull","create-local","link","delete-remote","delete-local"]);function oo(n,e){let t=n;typeof t.setMessage=="function"&&t.setMessage(e)}var vt=class extends j.Plugin{constructor(){super(...arguments);this.settings=Dt;this.statusBar=null;this.autoSyncHandle=null;this.syncInFlight=!1}get engine(){return this.settings.syncMode==="doc"?this.docEngine:this.mdEngine}async onload(){await this.loadSettings(),this.logger=new Xe(()=>this.app,()=>this.settings.debugLog),this.auth=new Ge(()=>({mode:this.settings.authMode,appId:this.settings.appId,appSecret:this.settings.appSecret,oauthScope:this.settings.oauthScope,redirectUri:this.settings.redirectUri}),()=>this.settings.userTokens,async t=>{this.settings.userTokens=t,await this.saveSettings()},this.logger),this.mdEngine=new ht({app:this.app,getSettings:()=>this.settings,saveSettings:()=>this.saveSettings(),auth:this.auth,logger:this.logger}),this.docEngine=new yt({app:this.app,getSettings:()=>this.settings,saveSettings:()=>this.saveSettings(),auth:this.auth,logger:this.logger}),this.statusBar=this.addStatusBarItem(),this.statusBar.addClass("mod-clickable"),this.statusBar.onClickEvent(()=>void this.runSync("both")),this.updateStatusBar(),this.addSettingTab(new et(this.app,this)),this.addCommand({id:"preview-plan",name:"\u9884\u89C8\u540C\u6B65\u8BA1\u5212",callback:()=>void this.runSync("both",{preview:!0})}),this.addCommand({id:"sync-both",name:"\u53CC\u5411\u540C\u6B65",callback:()=>void this.runSync("both")}),this.addCommand({id:"sync-pull",name:"\u4ECE\u98DE\u4E66\u62C9\u53D6\u5230\u672C\u5730",callback:()=>void this.runSync("pull")}),this.addCommand({id:"sync-push",name:"\u628A\u672C\u5730\u63A8\u9001\u5230\u98DE\u4E66",callback:()=>void this.runSync("push")}),this.addCommand({id:"force-push",name:"\u5F3A\u5236\u91CD\u63A8\uFF08\u5FFD\u7565\u57FA\u7EBF\uFF0C\u5237\u65B0\u6240\u6709\u672C\u5730\u7B14\u8BB0\uFF09",callback:()=>void this.runSync("push",{forcePush:!0})}),this.addRibbonIcon("refresh-cw","Feishu Wiki Sync\uFF1A\u53CC\u5411\u540C\u6B65",()=>void this.runSync("both")),this.refreshAutoSync(),this.app.workspace.onLayoutReady(()=>this.updateStatusBar())}onunload(){this.autoSyncHandle!==null&&window.clearInterval(this.autoSyncHandle),this.auth?.cancelAuthorization()}async loadSettings(){let t=await this.loadData(),o=t?.state??{};this.settings={...Dt,...t??{},state:{records:o.records??{},folders:o.folders??{},conflicts:o.conflicts??{},docRecords:o.docRecords??{},images:o.images??{},imageUploads:o.imageUploads??{},target:o.target,lastSyncAt:o.lastSyncAt}}}isSyncBusy(){return this.syncInFlight||this.mdEngine?.isSyncing()||this.docEngine?.isSyncing()}async saveSettings(){await this.saveData(this.settings)}refreshAutoSync(){this.autoSyncHandle!==null&&(window.clearInterval(this.autoSyncHandle),this.autoSyncHandle=null);let t=this.settings.autoSyncMinutes;!t||t<=0||(this.autoSyncHandle=window.setInterval(()=>{this.isSyncBusy()||this.settings.authMode==="user"&&!this.auth.hasValidUserGrant()||this.runSync("both",{quiet:!0})},t*6e4))}async startAuthorization(){let t=(0,tn.randomBytes)(24).toString("hex"),o=this.auth.startCallbackServer(t),r=this.auth.buildAuthorizeUrl(t);Et(r),new j.Notice("\u5DF2\u6253\u5F00\u6D4F\u89C8\u5668\uFF0C\u8BF7\u5728\u98DE\u4E66\u91CC\u5B8C\u6210\u6388\u6743");try{let i=await o.waitForCode();await this.auth.exchangeCode(i),new j.Notice("\u98DE\u4E66\u6388\u6743\u6210\u529F")}catch(i){throw o.close(),i}}async startManualAuthorization(){let t=(0,tn.randomBytes)(24).toString("hex"),o=this.auth.buildAuthorizeUrl(t);Et(o),await new Promise(r=>{new wt(this.app,o,async i=>{try{await this.auth.exchangeCode(i),new j.Notice("\u98DE\u4E66\u6388\u6743\u6210\u529F")}catch(s){new j.Notice(`\u6388\u6743\u5931\u8D25\uFF1A${I(s)}`,1e4)}r()},()=>r()).open()})}async revokeAuthorization(){this.settings.userTokens=void 0,await this.saveSettings(),new j.Notice("\u5DF2\u6E05\u9664\u672C\u5730\u4FDD\u5B58\u7684\u98DE\u4E66\u6388\u6743")}async runSync(t,o={}){if(this.engine.isSyncing()||this.syncInFlight){new j.Notice("\u98DE\u4E66\u540C\u6B65\uFF1A\u5DF2\u6709\u4EFB\u52A1\u5728\u6267\u884C\u4E2D");return}if(!this.settings.appId||!this.settings.appSecret){new j.Notice("\u8BF7\u5148\u5728\u63D2\u4EF6\u8BBE\u7F6E\u91CC\u586B\u5199\u98DE\u4E66\u5E94\u7528\u7684 App ID \u4E0E App Secret");return}if(o.forcePush&&this.settings.syncMode!=="doc"){new j.Notice("\u5F3A\u5236\u91CD\u63A8\u4EC5\u7528\u4E8E\u6587\u6863\u6A21\u5F0F\uFF1B\u6587\u4EF6\u955C\u50CF\u6A21\u5F0F\u8BF7\u4F7F\u7528\u666E\u901A\u540C\u6B65");return}this.syncInFlight=!0;let r=this.engine,i=this.settings.syncMode==="doc"?"\u98DE\u4E66\u6587\u6863\u540C\u6B65":"\u98DE\u4E66\u6587\u4EF6\u540C\u6B65",s=!o.quiet&&(this.settings.propagateLocalDelete||this.settings.propagateRemoteDelete||o.forcePush===!0||(o.preview??this.settings.showPlanBeforeSync)),d=o.forcePush===!0,a=new j.Notice(`${i}\uFF1A\u51C6\u5907\u4E2D\u2026`,0),u,h=f=>oo(a,`${i}\uFF1A${f}`);try{if(s){let k=await r.run({mode:t,dryRun:!0,forcePush:d,onProgress:h});a.hide();let M=await new Promise(S=>new Pt(this.app,k.plan,S).open());if(M==="cancel")return;u=new j.Notice(`${i}\uFF1A\u6267\u884C\u4E2D\u2026`,0);let A=await r.run({mode:t,preApprovedPlan:k.plan,onProgress:S=>oo(u,`${i}\uFF1A${S}`),confirm:async()=>M});u.hide(),new je(this.app,A.plan,A.report,A.executed).open();return}let f=await r.run({mode:t,forcePush:d,allowDeletes:!o.quiet,onProgress:h,confirm:async()=>"all"});a.hide();let g=f.report.filter(k=>!k.ok).length,$=f.report.filter(k=>k.action==="conflict").length,w=f.report.filter(k=>k.ok&&Br.has(k.action)).length,P=f.report.some(k=>k.action==="local-deleted"||k.action==="remote-deleted");o.quiet&&g===0&&$===0&&!P&&!f.plan.warnings?.length?w>0&&new j.Notice(`${i}\u5B8C\u6210\uFF1A${w} \u9879\u53D8\u66F4`):new je(this.app,f.plan,f.report,f.executed).open()}catch(f){a.hide(),this.logger.error(`\u540C\u6B65\u5931\u8D25\uFF1A${I(f)}`),new j.Notice(`${i}\u5931\u8D25\uFF1A${I(f)}`,12e3)}finally{u?.hide(),a.hide(),this.syncInFlight=!1,await this.logger.flush(),this.updateStatusBar()}}updateStatusBar(){if(!this.statusBar)return;let t=this.settings.state.lastSyncAt,o=this.settings.syncMode==="doc",r=Object.keys(o?this.settings.state.docRecords:this.settings.state.records).length,i=t?new Date(t).toLocaleString(void 0,{month:"2-digit",day:"2-digit",hour:"2-digit",minute:"2-digit"}):"\u672A\u540C\u6B65";this.statusBar.setText(`\u98DE\u4E66${o?"\u6587\u6863":""} ${i} \xB7 ${r} \u7BC7`),this.statusBar.setAttr("aria-label",o?"\u70B9\u51FB\u6267\u884C\u6587\u6863\u6A21\u5F0F\u53CC\u5411\u540C\u6B65":"\u70B9\u51FB\u6267\u884C\u98DE\u4E66\u53CC\u5411\u540C\u6B65")}};
+// src/convert/rules.ts
+var import_obsidian3 = require("obsidian");
+
+// src/feishu/docImages.ts
+var IMAGE_BLOCK_TYPE = 27;
+var MAX_SINGLE_PART_UPLOAD_BYTES = 20 * 1024 * 1024;
+function asRecord(value) {
+  return value && typeof value === "object" ? value : void 0;
+}
+function readString(source, key) {
+  const value = source?.[key];
+  if (typeof value === "string" && value)
+    return value;
+  if (typeof value === "number")
+    return String(value);
+  return void 0;
+}
+function readNewBlocks(data) {
+  const document = asRecord(asRecord(data)?.document);
+  const blocks = document?.new_blocks;
+  if (!Array.isArray(blocks))
+    return [];
+  const out = [];
+  for (const raw of blocks) {
+    const block = asRecord(raw);
+    const blockId = readString(block, "block_id");
+    if (!blockId)
+      continue;
+    out.push({ blockId, blockToken: readString(block, "block_token"), blockType: block?.block_type });
+  }
+  return out;
+}
+function readRevisionId(data) {
+  const document = asRecord(asRecord(data)?.document);
+  const value = document?.revision_id;
+  if (typeof value === "number")
+    return value;
+  if (typeof value === "string" && /^\d+$/.test(value))
+    return Number(value);
+  return void 0;
+}
+function isImageBlock(blockType) {
+  if (typeof blockType === "number")
+    return blockType === IMAGE_BLOCK_TYPE;
+  if (typeof blockType === "string") {
+    const trimmed = blockType.trim();
+    if (/^\d+$/.test(trimmed))
+      return Number(trimmed) === IMAGE_BLOCK_TYPE;
+    return trimmed.toLowerCase() === "image";
+  }
+  return false;
+}
+function correlateImageBlocks(blocks, markers) {
+  const wanted = new Set(markers);
+  const byMarker = /* @__PURE__ */ new Map();
+  for (const block of blocks) {
+    if (!block.blockToken || !wanted.has(block.blockToken))
+      continue;
+    const list = byMarker.get(block.blockToken) ?? [];
+    list.push(block);
+    byMarker.set(block.blockToken, list);
+  }
+  const result = /* @__PURE__ */ new Map();
+  for (const marker of markers) {
+    const matches = (byMarker.get(marker) ?? []).filter((block) => isImageBlock(block.blockType));
+    if (matches.length === 1)
+      result.set(marker, matches[0].blockId);
+  }
+  return result;
+}
+function randomHex(bytes) {
+  const buffer = new Uint8Array(bytes);
+  const cryptoObj = globalThis.crypto;
+  if (cryptoObj?.getRandomValues) {
+    cryptoObj.getRandomValues(buffer);
+  } else {
+    for (let index = 0; index < buffer.length; index += 1)
+      buffer[index] = Math.floor(Math.random() * 256);
+  }
+  return Array.from(buffer, (byte) => byte.toString(16).padStart(2, "0")).join("");
+}
+function newImageMarker() {
+  return `@lcli_img_${randomHex(16)}`;
+}
+function newClientToken() {
+  const hex = randomHex(16);
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
+}
+async function uploadDocImage(client, options) {
+  if (options.bytes.byteLength > MAX_SINGLE_PART_UPLOAD_BYTES) {
+    throw new Error(`\u56FE\u7247 ${options.fileName} \u8D85\u8FC7 20MB\uFF0C\u5355\u6B21\u4E0A\u4F20\u63A5\u53E3\u4E0D\u652F\u6301\uFF08\u5B98\u65B9 CLI \u8D70\u5206\u7247\u4E0A\u4F20\uFF0C\u672C\u63D2\u4EF6\u6682\u672A\u5B9E\u73B0\uFF09`);
+  }
+  const data = await client.json("POST", "/open-apis/drive/v1/medias/upload_all", {
+    multipart: {
+      fields: {
+        file_name: options.fileName,
+        parent_type: "docx_image",
+        parent_node: options.blockId,
+        size: String(options.bytes.byteLength),
+        extra: JSON.stringify({ drive_route_token: options.documentId })
+      },
+      file: { name: options.fileName, data: options.bytes }
+    }
+  });
+  const fileToken = readString(data, "file_token");
+  if (!fileToken)
+    throw new Error(`\u4E0A\u4F20\u56FE\u7247 ${options.fileName} \u540E\u6CA1\u6709\u62FF\u5230 file_token`);
+  return fileToken;
+}
+async function bindDocImages(client, documentId, requests) {
+  if (requests.length === 0)
+    return;
+  await client.json(
+    "PATCH",
+    `/open-apis/docx/v1/documents/${pathSegment(documentId)}/blocks/batch_update`,
+    {
+      query: { client_token: newClientToken() },
+      body: { requests: requests.map((item3) => ({ block_id: item3.blockId, replace_image: { token: item3.fileToken } })) }
+    }
+  );
+}
+async function getDocBlockToken(client, documentId, blockId) {
+  const data = await client.json(
+    "GET",
+    `/open-apis/docx/v1/documents/${pathSegment(documentId)}/blocks/${pathSegment(blockId)}`
+  );
+  const block = asRecord(data?.block);
+  if (!block)
+    return void 0;
+  const image = asRecord(block.image);
+  return readString(image, "token") ?? readString(block, "token");
+}
+async function deleteDocBlocks(client, documentId, blockIds, revisionId) {
+  if (blockIds.length === 0)
+    return;
+  await client.json("PUT", `/open-apis/docs_ai/v1/documents/${pathSegment(documentId)}`, {
+    body: {
+      format: "xml",
+      command: "block_delete",
+      block_id: blockIds.join(","),
+      revision_id: revisionId ?? -1
+    }
+  });
+}
+async function listDocImageBlocks(client, documentId) {
+  const blocks = [];
+  let pageToken;
+  do {
+    const data = await client.json(
+      "GET",
+      `/open-apis/docx/v1/documents/${pathSegment(documentId)}/blocks`,
+      { query: { page_size: 500, document_revision_id: -1, page_token: pageToken } }
+    );
+    for (const raw of data?.items ?? []) {
+      const block = asRecord(raw);
+      if (!block || !isImageBlock(block.block_type))
+        continue;
+      const image = asRecord(block.image);
+      blocks.push({
+        blockId: readString(block, "block_id") ?? "",
+        fileToken: readString(image, "token"),
+        marker: readString(block, "block_token")
+      });
+    }
+    pageToken = data?.has_more ? data.page_token : void 0;
+  } while (pageToken);
+  return blocks;
+}
+async function downloadDocMedia(client, fileToken) {
+  const response = await client.binaryResponse(`/open-apis/drive/v1/medias/${pathSegment(fileToken)}/download`);
+  if (response.data.byteLength === 0) {
+    throw new FeishuError(`\u7D20\u6750 ${fileToken} \u4E0B\u8F7D\u5F97\u5230 0 \u5B57\u8282\uFF0C\u5DF2\u653E\u5F03`, { endpoint: `/open-apis/drive/v1/medias/${fileToken}/download` });
+  }
+  return { bytes: response.data, contentType: response.contentType };
+}
+
+// src/convert/markdown.ts
+function escapedAt(text, pos) {
+  let count = 0;
+  for (let i = pos - 1; i >= 0 && text[i] === "\\"; i -= 1)
+    count += 1;
+  return count % 2 === 1;
+}
+function codeLineMask(lines, includeIndentedCode = true) {
+  let fence;
+  let frontmatter = lines[0]?.replace(/\r$/, "") === "---";
+  return lines.map((line, index) => {
+    if (frontmatter) {
+      if (index > 0 && /^(---|\.\.\.)\r?$/.test(line))
+        frontmatter = false;
+      return true;
+    }
+    const unquoted = line.replace(/^(?:[\t ]*>[\t ]?)+/, "");
+    const match = /^[\t ]*(`{3,}|~{3,})(.*)$/.exec(unquoted.replace(/\r$/, ""));
+    if (fence) {
+      if (match && match[1][0] === fence[0] && match[1].length >= fence.length && !match[2].trim())
+        fence = void 0;
+      return true;
+    }
+    if (match) {
+      fence = match[1];
+      return true;
+    }
+    return includeIndentedCode && /^(?: {4}|\t)/.test(unquoted);
+  });
+}
+function mathSpans(text) {
+  const lines = text.split("\n");
+  const code = codeLineMask(lines);
+  const spans = [];
+  let offset = 0;
+  let blockStart;
+  let xmlUntil = 0;
+  for (let row = 0; row < lines.length; row += 1) {
+    const line = lines[row];
+    if (code[row] && blockStart === void 0) {
+      offset += line.length + 1;
+      continue;
+    }
+    if (blockStart !== void 0 && /^[\t ]*(`{3,}|~{3,})/.test(line)) {
+      blockStart = void 0;
+      offset += line.length + 1;
+      continue;
+    }
+    for (let i = 0; i < line.length; ) {
+      if (offset + i < xmlUntil) {
+        i = Math.min(line.length, xmlUntil - offset);
+        continue;
+      }
+      if (blockStart === void 0 && line.startsWith("<latex>", i) && !escapedAt(line, i)) {
+        const close2 = text.indexOf("</latex>", offset + i + 7);
+        if (close2 !== -1) {
+          xmlUntil = close2 + 8;
+          continue;
+        }
+      }
+      if (blockStart === void 0 && line[i] === "`" && !escapedAt(line, i)) {
+        const ticks = /^`+/.exec(line.slice(i))[0];
+        let close2 = text.indexOf(ticks, offset + i + ticks.length);
+        while (close2 !== -1 && (text[close2 - 1] === "`" || text[close2 + ticks.length] === "`"))
+          close2 = text.indexOf(ticks, close2 + ticks.length);
+        if (close2 !== -1)
+          xmlUntil = close2 + ticks.length;
+        i += ticks.length;
+        continue;
+      }
+      if (blockStart === void 0 && line.startsWith("](", i)) {
+        let depth = 1;
+        let end = i + 2;
+        for (; end < line.length && depth > 0; end += 1) {
+          if (escapedAt(line, end))
+            continue;
+          if (line[end] === "(")
+            depth += 1;
+          if (line[end] === ")")
+            depth -= 1;
+        }
+        if (depth === 0) {
+          i = end;
+          continue;
+        }
+      }
+      if (blockStart === void 0 && line.startsWith("[[", i)) {
+        const end = line.indexOf("]]", i + 2);
+        if (end !== -1) {
+          i = end + 2;
+          continue;
+        }
+      }
+      if (line[i] !== "$" || escapedAt(line, i)) {
+        i += 1;
+        continue;
+      }
+      const dollarRun = /^\$+/.exec(line.slice(i))[0].length;
+      if (dollarRun > 2) {
+        i += dollarRun;
+        continue;
+      }
+      if (line.startsWith("$$", i)) {
+        if (blockStart === void 0)
+          blockStart = offset + i;
+        else {
+          spans.push({ start: blockStart, end: offset + i + 2, body: text.slice(blockStart + 2, offset + i), block: true });
+          blockStart = void 0;
+        }
+        i += 2;
+        continue;
+      }
+      if (blockStart !== void 0) {
+        i += 1;
+        continue;
+      }
+      let close = i + 1;
+      while (close < line.length && (line[close] !== "$" || escapedAt(line, close)))
+        close += 1;
+      const body = line.slice(i + 1, close);
+      const amount = /^-?\d[\d,.]*(.*)$/.exec(body);
+      if (amount && /[\p{L};；]/u.test(amount[1]) && !/[\\^_=<>+*/{}()-]/.test(amount[1])) {
+        i += 1;
+        continue;
+      }
+      if (close < line.length && close > i + 1 && line[close + 1] !== "$" && !/\d/.test(line[close + 1] ?? "")) {
+        spans.push({ start: offset + i, end: offset + close + 1, body, block: false });
+        i = close + 1;
+      } else
+        i += 1;
+    }
+    offset += line.length + 1;
+  }
+  return spans;
+}
+function trimInlineMathBody(body) {
+  let end = body.length;
+  while (end > 0 && /\s/.test(body[end - 1])) {
+    if (body[end - 1] === " " && escapedAt(body, end - 1)) {
+      return body.slice(0, end - 2).trimStart() + "\\space{}";
+    }
+    end -= 1;
+  }
+  return body.slice(0, end).trimStart();
+}
+function mapMath(text, rewrite) {
+  const out = [];
+  let from = 0;
+  for (const span of mathSpans(text)) {
+    out.push(text.slice(from, span.start), rewrite(span));
+    from = span.end;
+  }
+  out.push(text.slice(from));
+  return out.join("");
+}
+function mapNativeMath(text, rewrite) {
+  const lines = text.split("\n");
+  const code = codeLineMask(lines);
+  const protectedRanges = [];
+  let offset = 0;
+  for (let row = 0; row < lines.length; row += 1) {
+    if (code[row])
+      protectedRanges.push({ start: offset, end: offset + lines[row].length });
+    offset += lines[row].length + 1;
+  }
+  const ticks = /`+/g;
+  let tick;
+  while (tick = ticks.exec(text)) {
+    if (escapedAt(text, tick.index) || protectedRanges.some((r) => tick.index >= r.start && tick.index < r.end))
+      continue;
+    let close = text.indexOf(tick[0], ticks.lastIndex);
+    while (close !== -1 && (text[close - 1] === "`" || text[close + tick[0].length] === "`"))
+      close = text.indexOf(tick[0], close + tick[0].length);
+    if (close !== -1) {
+      protectedRanges.push({ start: tick.index, end: close + tick[0].length });
+      ticks.lastIndex = close + tick[0].length;
+    }
+  }
+  return text.replace(
+    /<p align="center">\s*<latex>([\s\S]*?)<\/latex>\s*<\/p>|<latex>([\s\S]*?)<\/latex>/g,
+    (raw, blockBody, inlineBody, start) => {
+      if (escapedAt(text, start) || protectedRanges.some((r) => start < r.end && start + raw.length > r.start))
+        return raw;
+      return rewrite(blockBody ?? inlineBody ?? "", blockBody !== void 0);
+    }
+  );
+}
+function decodeXmlText(text) {
+  return text.replace(/&(?:amp|lt|gt|quot|apos|#\d+|#x[\da-f]+);/gi, (entity) => {
+    const named = { "&amp;": "&", "&lt;": "<", "&gt;": ">", "&quot;": '"', "&apos;": "'" };
+    if (entity[1] !== "#")
+      return named[entity.toLowerCase()] ?? entity;
+    const value = entity[2].toLowerCase() === "x" ? parseInt(entity.slice(3, -1), 16) : parseInt(entity.slice(2, -1), 10);
+    return value > 0 && value <= 1114111 && !(value >= 55296 && value <= 57343) ? String.fromCodePoint(value) : entity;
+  });
+}
+function encodeFeishuMath(markdown) {
+  const compensate = (body) => body.replace(/\\(?=[#$*_~\[\]&:<>+=`-])/g, "\\\\");
+  const native = mapNativeMath(markdown, (body, block) => {
+    const value = compensate(decodeXmlText(body));
+    const escaped = block ? value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;") : value;
+    const latex = `<latex>${escaped}</latex>`;
+    return block ? `<p align="center">${latex}</p>` : latex;
+  });
+  return mapMath(native, (span) => {
+    const delimiter = span.block ? "$$" : "$";
+    return `${delimiter}${compensate(span.body)}${delimiter}`;
+  });
+}
+
+// src/convert/rules.ts
+var RULES_PATH = ".obsidian/feishu-sync/rules.json";
+var RULES_VERSION = 3;
+var PUBLISH_RULES_REVISION = 3;
+var IMAGE_LINK = /!\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
+var FENCE = /^\s*(```|~~~)/;
+var WIKI_IMAGE = /!\[\[([^\]|]+?)(?:\|([^\]]*))?\]\]/g;
+var MARKDOWN_IMAGE = /!\[([^\]]*)\]\(\s*<?([^)\s>]+)>?(?:\s+"[^"]*")?\s*\)/g;
+var XML_IMAGE = /<img\b[^>]*\/?>/gi;
+var HAS_SCHEME = /^[a-z][a-z0-9+.-]*:/i;
+function mapOutsideFences(text, transform) {
+  const lines = text.split("\n");
+  const code = codeLineMask(lines, false);
+  return lines.map((line, index) => code[index] ? line : transform(line)).join("\n");
+}
+var imageRefNormalize = {
+  id: "image-ref-normalize",
+  description: "\u4E0A\u884C\uFF1A\u628A\u6807\u51C6 Markdown \u56FE\u7247 ![alt](\u76F8\u5BF9\u8DEF\u5F84) \u6362\u6210 Obsidian \u7684 ![[\u76F8\u5BF9\u8DEF\u5F84]]\u3002\u5B9E\u6D4B\u6807\u51C6\u56FE\u7247\u5F15\u7528\u4F1A\u88AB\u98DE\u4E66\u6574\u884C\u4E22\u5F03\uFF0C![[...]] \u80FD\u539F\u6837\u4FDD\u7559\u3002http(s) \u56FE\u7247\u5730\u5740\u4E0D\u6539\u3002",
+  defaultEnabled: true,
+  apply: (input) => mapOutsideFences(
+    input,
+    (line) => line.replace(IMAGE_LINK, (raw, target) => /^[a-z][a-z0-9+.-]*:\/\//i.test(target) ? raw : `![[${target}]]`)
+  )
+};
+var tabIndentToSpaces = {
+  id: "tab-indent-to-spaces",
+  description: "\u4E0A\u884C\uFF1A\u884C\u9996 Tab \u6309 2 \u7A7A\u683C\u6362\u7B97\u3002\u5B9E\u6D4B\u98DE\u4E66\u4F1A\u628A Tab \u7F29\u8FDB\u89C4\u8303\u6210\u7A7A\u683C\uFF0C\u5148\u8F6C\u8FC7\u6765\u80FD\u51CF\u5C11\u300C\u53D1\u51FA vs \u53D6\u56DE\u300D\u7684\u65E0\u8C13\u5DEE\u5F02\u3002\u56F4\u680F\u4EE3\u7801\u5757\u5185\u90E8\u4E0D\u52A8\u3002",
+  defaultEnabled: true,
+  apply: (input) => mapOutsideFences(input, (line) => {
+    const match = /^[\t ]+/.exec(line);
+    if (!match || !match[0].includes("	"))
+      return line;
+    return match[0].replace(/\t/g, "  ") + line.slice(match[0].length);
+  })
+};
+var MATH_LIST_ITEM = /^\s*(?:[-*+]|\d+[.)])\s/;
+var MATH_TABLE_ROW = /^\s*\|/;
+var MATH_STRUCTURED_LINE = /^(?:[\t ]|>|#{1,6}\s)/;
+function rewriteMathBodies(input, rewrite) {
+  return mapMath(input, (span) => {
+    const delimiter = span.block ? "$$" : "$";
+    return `${delimiter}${rewrite(span.body, span.block)}${delimiter}`;
+  });
+}
+var mathEscapeHash = {
+  id: "math-escape-hash",
+  description: "\u53CC\u5411\uFF1A\u6570\u5B66\u73AF\u5883\u91CC\u7684\u88F8 # \u5199\u6210 \\#\uFF0C\u907F\u514D\u516C\u5F0F\u6E32\u67D3\u5931\u8D25\uFF1B\u5DF2\u8F6C\u4E49\u7684 # \u4E0D\u91CD\u590D\u8F6C\u4E49\uFF0C\u4EE3\u7801\u793A\u4F8B\u4E0D\u52A8\uFF0C\u8DE8\u884C\u7684 $$ \u516C\u5F0F\u540C\u6837\u5904\u7406\u3002",
+  defaultEnabled: true,
+  apply: (input) => rewriteMathBodies(input, (body) => body.replace(/#/g, (_char, index) => escapedAt(body, index) ? "#" : "\\#"))
+};
+var mathTrimInlineSpaces = {
+  id: "math-trim-inline-spaces",
+  description: "\u53CC\u5411\uFF1A\u53EA\u6E05\u7406\u884C\u5185\u516C\u5F0F\u5B9A\u754C\u7B26\u5185\u4FA7\u7684\u7A7A\u767D\uFF08$ x $ \u2192 $x$\uFF09\uFF0C\u786E\u4FDD Obsidian \u53EF\u8BC6\u522B\u3002\u4FDD\u7559\u516C\u5F0F\u6B63\u6587\u3001\\text{Agent Memory} \u5185\u7684\u7A7A\u683C\uFF0C\u4EE5\u53CA\u5757\u7EA7 $$...$$ \u7684\u7A7A\u683C\u548C\u6362\u884C\uFF1B\u4EE3\u7801\u3001\u4EF7\u683C\u4E0E\u8F6C\u4E49\u7F8E\u5143\u7B26\u53F7\u4E0D\u52A8\u3002",
+  defaultEnabled: true,
+  apply: (input) => rewriteMathBodies(input, (body, block) => block || !body.trim() ? body : trimInlineMathBody(body))
+};
+var FORMULA_TAIL_CONNECTOR = /^(?:和|与|及|以及|或者|或|还是|暨|and|or)[\s。，、；：！？.,;:!?]*$/i;
+var inlineFormulaToBlock = {
+  id: "inline-formula-to-block",
+  description: "\u4E0A\u884C\uFF1A\u666E\u901A\u6BB5\u843D\u4E2D\u72EC\u5360\u4E00\u884C\u7684\u884C\u5185\u516C\u5F0F\u6539\u6210\u5757\u7EA7\u516C\u5F0F\uFF1B\u5C3E\u968F\u8FDE\u63A5\u8BCD\u53E6\u8D77\u4E00\u6BB5\u3002\u4FDD\u7559\u6B63\u6587\u3001\u6807\u70B9\u548C\u5217\u8868/\u5F15\u7528/\u4EE3\u7801\u7ED3\u6784\u3002",
+  defaultEnabled: true,
+  apply: (input) => mapMath(input, (span) => {
+    if (span.block)
+      return input.slice(span.start, span.end);
+    const lineStart = input.lastIndexOf("\n", span.start - 1) + 1;
+    const newline = input.indexOf("\n", span.end);
+    const lineEnd = newline === -1 ? input.length : newline;
+    const prefix = input.slice(lineStart, span.start);
+    const tail = input.slice(span.end, lineEnd).trim();
+    if (prefix !== "" || tail && !FORMULA_TAIL_CONNECTOR.test(tail))
+      return input.slice(span.start, span.end);
+    return `$$
+${span.body.trim()}
+$$${tail ? "\n\n" : ""}`;
+  })
+};
+var blockFormulaOwnParagraph = {
+  id: "block-formula-own-paragraph",
+  description: "\u4E0A\u884C\uFF1A\u666E\u901A\u6B63\u6587\u91CC\u7684\u5757\u7EA7\u516C\u5F0F\u72EC\u5360\u6BB5\u843D\uFF0C\u524D\u540E\u7559\u7A7A\u884C\uFF1B\u5217\u8868\u3001\u8868\u683C\u3001\u5F15\u7528\u548C\u7F29\u8FDB\u7ED3\u6784\u91CC\u7684\u516C\u5F0F\u4FDD\u7559\u4F4D\u7F6E\u5E76\u63D0\u793A\u3002",
+  defaultEnabled: true,
+  apply: (input, ctx) => {
+    const out = [];
+    let from = 0;
+    for (const span of mathSpans(input)) {
+      if (!span.block)
+        continue;
+      const lineStart = input.lastIndexOf("\n", span.start - 1) + 1;
+      const prefix = input.slice(lineStart, span.start);
+      if (MATH_STRUCTURED_LINE.test(prefix) || MATH_LIST_ITEM.test(prefix) || MATH_TABLE_ROW.test(prefix)) {
+        ctx.warnings?.push(`\u7B2C ${input.slice(0, span.start).split("\n").length} \u884C\u7684\u5757\u7EA7\u516C\u5F0F\u5728\u7F29\u8FDB/\u5217\u8868\u9879/\u8868\u683C/\u5F15\u7528/\u6807\u9898\u91CC\uFF0C\u672A\u62C6\u6210\u72EC\u7ACB\u6BB5\u843D`);
+        continue;
+      }
+      const before = input.slice(from, span.start).replace(/[ \t]+$/, "");
+      out.push(before);
+      const joined = out.join("");
+      if (joined && !joined.endsWith("\n\n"))
+        out.push(joined.endsWith("\n") ? "\n" : "\n\n");
+      out.push(input.slice(span.start, span.end));
+      from = span.end;
+      while (input[from] === " " || input[from] === "	")
+        from += 1;
+      if (from < input.length && !input.slice(from).startsWith("\n\n"))
+        out.push(input[from] === "\n" ? "\n" : "\n\n");
+    }
+    out.push(input.slice(from));
+    return out.join("");
+  }
+};
+var nativeMath = {
+  id: "native-math",
+  description: "\u4E0A\u884C\uFF1A\u516C\u5F0F\u4F7F\u7528\u98DE\u4E66\u539F\u751F <latex> \u6807\u7B7E\uFF1B\u72EC\u7ACB\u5757\u7EA7\u516C\u5F0F\u653E\u5165\u5C45\u4E2D\u6BB5\u843D\uFF0C\u4FDD\u7559\u516C\u5F0F\u4E0E\u6B63\u6587\u7684\u8FB9\u754C\u3002",
+  defaultEnabled: true,
+  apply: (input) => mapMath(input, (span) => {
+    if (!span.body.trim())
+      return input.slice(span.start, span.end);
+    const body = span.body.trim().replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+    const latex = `<latex>${body}</latex>`;
+    if (!span.block)
+      return latex;
+    const before = input.slice(input.lastIndexOf("\n", span.start - 1) + 1, span.start);
+    const end = input.indexOf("\n", span.end);
+    const after = input.slice(span.end, end === -1 ? input.length : end);
+    return !before.trim() && !after.trim() ? `<p align="center">${latex}</p>` : latex;
+  })
+};
+var restoreNativeMath = {
+  id: "restore-native-math",
+  description: "\u4E0B\u884C\uFF1A\u628A\u98DE\u4E66\u6B8B\u7559\u7684\u539F\u751F\u516C\u5F0F\u6807\u7B7E\u8FD8\u539F\u4E3A Obsidian \u6570\u5B66\u8BED\u6CD5\uFF1B\u5C45\u4E2D\u516C\u5F0F\u7528 $$...$$\uFF0C\u884C\u5185\u516C\u5F0F\u7528 $...$\uFF0C\u4E0D\u628A XML \u6807\u7B7E\u5199\u5165\u7B14\u8BB0\u3002",
+  defaultEnabled: true,
+  apply: (input) => mapNativeMath(input, (body, block) => {
+    const decoded = decodeXmlText(body);
+    return block ? `$$
+${decoded}
+$$` : `$${trimInlineMathBody(decoded) || "{}"}$`;
+  })
+};
+var listExitAfterHardbreak = {
+  id: "list-exit-after-hardbreak",
+  description: "\u4E0A\u884C\uFF1A\u5217\u8868\u9879\u4EE5\u4E24\u4E2A\u7A7A\u683C\u786C\u6362\u884C\u7ED3\u675F\uFF0C\u4E0B\u4E00\u884C\u53C8\u662F\u65E0\u7F29\u8FDB\u6B63\u6587\u65F6\uFF0C\u8865\u7A7A\u884C\u7ED3\u675F\u5217\u8868\uFF1B\u7F29\u8FDB\u7684\u7EED\u884C\u3001\u5B50\u5217\u8868\u548C\u4EE3\u7801\u4FDD\u6301\u539F\u6837\u3002",
+  defaultEnabled: true,
+  apply: (input) => {
+    const lines = input.split("\n");
+    const code = codeLineMask(lines);
+    return lines.map((line, index) => {
+      if (!index || code[index] || code[index - 1])
+        return line;
+      const previous = lines[index - 1];
+      const list = /^[ \t]*(?:[-*+]|\d+[.)])\s/.test(previous);
+      const hardbreak = / {2,}\r?$/.test(previous);
+      const plain = /^[^\s>#|`~]/.test(line) && !/^(?:[-*+]|\d+[.)])\s/.test(line);
+      return list && hardbreak && plain ? `
+${line}` : line;
+    }).join("\n");
+  }
+};
+function sourceFormatWarnings(input) {
+  const lines = input.split("\n");
+  const code = codeLineMask(lines);
+  const masked = mapMath(input, (span) => input.slice(span.start, span.end).replace(/[^\n]/g, " ")).split("\n");
+  const warnings = [];
+  let previousHeading = 0;
+  for (let row = 0; row < lines.length; row += 1) {
+    if (!code[row]) {
+      const outside = masked[row];
+      const label = `\u539F\u7A3F\u7B2C ${row + 1} \u884C`;
+      if (/^\\\$\\\$/.test(outside.trim()))
+        warnings.push(`${label}\uFF1A\u5757\u7EA7\u516C\u5F0F\u5B9A\u754C\u7B26\u5DF2\u88AB\u8F6C\u4E49\uFF0C\u4F1A\u663E\u793A\u4E3A\u5B57\u9762 $$\uFF1B\u8BF7\u786E\u8BA4\u539F\u7A3F\uFF0C\u672A\u81EA\u52A8\u53CD\u8F6C\u4E49`);
+      if (/^(?:#{1,6}\s+)?(?:[A-Za-z]\\?_\{|\\(?:text|rightarrow|left|frac)\b)/.test(outside.trim()))
+        warnings.push(`${label}\uFF1ALaTeX \u7591\u4F3C\u843D\u5728\u516C\u5F0F\u73AF\u5883\u5916\uFF0C\u5C06\u663E\u793A\u6E90\u7801\uFF1B\u8BF7\u4FEE\u590D\u539F\u7A3F\u4E2D\u7684\u5B9A\u754C\u7B26`);
+      const heading = /^(#{1,6})\s/.exec(outside);
+      if (heading) {
+        const level = heading[1].length;
+        if (!previousHeading && level > 1 || level > previousHeading + 1)
+          warnings.push(`${label}\uFF1A\u6807\u9898\u5C42\u7EA7\u8DF3\u5230 H${level}\uFF1B\u4FDD\u7559\u539F\u7A3F\u5C42\u7EA7\uFF0C\u8BF7\u68C0\u67E5\u6587\u7AE0\u7ED3\u6784`);
+        if (level === 1 && previousHeading > 1)
+          warnings.push(`${label}\uFF1A\u6B63\u6587\u4E2D\u51FA\u73B0 H1 \u5927\u6807\u9898\uFF0C\u8BF7\u786E\u8BA4\u662F\u5426\u8BEF\u52A0\u4E86 #`);
+        previousHeading = level;
+      }
+      if (/(^|[^\\])\$\$/.test(outside))
+        warnings.push(`${label}\uFF1A\u516C\u5F0F\u5B9A\u754C\u7B26\u4E0D\u5B8C\u6574\uFF0C\u5DF2\u4FDD\u7559\u539F\u6587`);
+    }
+    if (warnings.length >= 30) {
+      warnings.push("\u539F\u7A3F\u683C\u5F0F\u63D0\u793A\u8FC7\u591A\uFF0C\u5DF2\u7701\u7565\u540E\u7EED\u63D0\u793A");
+      break;
+    }
+  }
+  return warnings;
+}
+var sourceDiagnostics = {
+  id: "source-format-diagnostics",
+  description: "\u4E0A\u884C\uFF1A\u53EF\u9009\u7684\u539F\u7A3F\u683C\u5F0F\u68C0\u67E5\uFF0C\u9ED8\u8BA4\u5173\u95ED\u3002\u5F00\u542F\u540E\u63D0\u793A\u8F6C\u4E49\u7684\u516C\u5F0F\u5B9A\u754C\u7B26\u3001\u7591\u4F3C\u88F8\u9732 LaTeX\u3001\u6807\u9898\u8DF3\u7EA7\u7B49\u95EE\u9898\uFF1B\u53EA\u63D0\u793A\uFF0C\u4E0D\u731C\u6D4B\u6216\u6539\u5199\u539F\u610F\u3002",
+  defaultEnabled: false,
+  apply: (input, ctx) => {
+    ctx.warnings?.push(...sourceFormatWarnings(input));
+    return input;
+  }
+};
+var footnoteDowngrade = {
+  id: "footnote-downgrade",
+  description: "\u4E0A\u884C\uFF1A\u811A\u6CE8\u964D\u7EA7\u6210\u666E\u901A\u6587\u672C\u2014\u2014\u5F15\u7528\u6807\u8BB0 [^x] \u5220\u6389\uFF0C\u5B9A\u4E49\u884C [^x]: \u6B63\u6587 \u53D8\u6210\u300C\u811A\u6CE8 x\uFF1A\u6B63\u6587\u300D\u3002\u5B9E\u6D4B\u98DE\u4E66\u4F1A\u4E22\u6389\u811A\u6CE8\uFF0C\u9ED8\u8BA4\u5173\u95ED\uFF1A\u5173\u7740\u65F6\u811A\u6CE8\u4F1A\u539F\u6837\u53D1\u51FA\u53BB\uFF08\u98DE\u4E66\u4FA7\u4ECD\u4F1A\u4E22\uFF09\uFF0C\u5F00\u7740\u5219\u81F3\u5C11\u6B63\u6587\u80FD\u7559\u5728\u98DE\u4E66\u91CC\uFF0C\u4F46\u56DE\u5199\u65F6\u65E0\u6CD5\u8FD8\u539F\u6210\u811A\u6CE8\u8BED\u6CD5\u3002",
+  defaultEnabled: false,
+  apply: (input) => {
+    const definitions = /* @__PURE__ */ new Set();
+    for (const line of input.split("\n")) {
+      const match = /^\[\^([^\]]+)\]:/.exec(line);
+      if (match)
+        definitions.add(match[1]);
+    }
+    return input.split("\n").map((line) => {
+      const definition = /^\[\^([^\]]+)\]:\s*(.*)$/.exec(line);
+      if (definition)
+        return `\u811A\u6CE8 ${definition[1]}\uFF1A${definition[2]}`;
+      return line.replace(/\[\^([^\]]+)\]/g, (raw, id) => definitions.has(id) ? "" : raw);
+    }).join("\n");
+  }
+};
+var dropTitleHeading = {
+  id: "drop-title-heading",
+  description: "\u4E0B\u884C\uFF1A\u53D6\u56DE\u5185\u5BB9\u9996\u884C\u82E5\u662F\u300C# \u6587\u6863\u6807\u9898\u300D\u5C31\u5220\u6389\u2014\u2014\u98DE\u4E66\u628A <title> \u53D6\u56DE\u6210\u4E86\u9996\u884C H1\uFF0C\u76F4\u63A5\u5199\u56DE\u4F1A\u628A\u6807\u9898\u5F53\u6B63\u6587\u590D\u5236\u8FDB\u7B14\u8BB0\u3002\u672C\u5730\u73B0\u6709\u5185\u5BB9\u672C\u6765\u5C31\u4EE5\u8FD9\u884C\u5F00\u5934\u65F6\u4FDD\u7559\uFF08\u8BF4\u660E\u6807\u9898\u672C\u6765\u5C31\u662F\u7B14\u8BB0\u6B63\u6587\u7684\u4E00\u90E8\u5206\uFF09\u3002",
+  defaultEnabled: true,
+  apply: (input, ctx) => {
+    const title = ctx.documentTitle.trim();
+    if (!title)
+      return input;
+    const heading = `# ${title}`;
+    const xmlTitle = /^<title>([\s\S]*?)<\/title>(?:\r?\n)?(?:\r?\n)?/.exec(input);
+    if (xmlTitle && decodeXmlText(xmlTitle[1]).trim() === title)
+      return input.slice(xmlTitle[0].length);
+    const lines = input.split("\n");
+    if ((lines[0] ?? "").trim() !== heading)
+      return input;
+    if ((ctx.localContent.split("\n")[0] ?? "").trim() === heading)
+      return input;
+    const rest = lines.slice(1);
+    if (rest.length > 0 && rest[0].trim() === "")
+      rest.shift();
+    return rest.join("\n");
+  }
+};
+var restoreImageRef = {
+  id: "restore-image-ref",
+  description: "\u4E0B\u884C\uFF1A\u628A\u98DE\u4E66\u4FA7\u7684\u56FE\u7247\u8FD8\u539F\u6210\u6807\u51C6 Markdown \u56FE\u7247\u5F15\u7528\u3002\u7B49\u56FE\u7247\u4E0A\u4F20\u94FE\u8DEF\uFF08medias/upload_all + reference_map\uFF09\u505A\u597D\u540E\u518D\u542F\u7528\uFF0C\u73B0\u5728\u6253\u5F00\u4E5F\u662F\u7A7A\u64CD\u4F5C\u3002",
+  defaultEnabled: false,
+  apply: (input) => input
+};
+function escapeXmlAttr(value) {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&#34;");
+}
+function isLocalImageTarget(target) {
+  const value = target.trim();
+  if (!value)
+    return false;
+  if (HAS_SCHEME.test(value))
+    return false;
+  return true;
+}
+function rewriteLocalImageLine(line, ctx) {
+  const resolve = ctx.resolveImage;
+  const uploads = ctx.imageUploads;
+  if (!resolve || !uploads)
+    return line;
+  const replaceWith = (raw, target, caption) => {
+    if (!isLocalImageTarget(target))
+      return raw;
+    const linkpath = target.trim().replace(/^<|>$/g, "");
+    const resolved = resolve(linkpath, ctx.relPath);
+    if (!resolved) {
+      ctx.warnings?.push(`\u56FE\u7247 ${linkpath} \u5728 vault \u91CC\u627E\u4E0D\u5230\uFF0C\u5DF2\u539F\u6837\u4FDD\u7559`);
+      return raw;
+    }
+    const marker = newImageMarker();
+    uploads.push({
+      raw,
+      marker,
+      vaultPath: resolved.path,
+      fileName: linkpath.split("/").filter(Boolean).pop() ?? "image",
+      size: resolved.size
+    });
+    const captionAttr = caption.trim() ? ` caption="${escapeXmlAttr(caption.trim())}"` : "";
+    return `<img path="${marker}"${captionAttr}/>`;
+  };
+  let out = line.replace(WIKI_IMAGE, (raw, linkpath) => replaceWith(raw, linkpath, "")).replace(MARKDOWN_IMAGE, (raw, alt, target) => replaceWith(raw, target, alt));
+  return out;
+}
+var imageUpload = {
+  id: "image-upload",
+  description: "\u4E0A\u884C\uFF1A\u628A vault \u5185\u7684\u672C\u5730\u56FE\u7247\uFF08![[x.png]] \u6216 ![alt](attachments/x.png)\uFF09\u6362\u6210\u5B98\u65B9\u7684\u5360\u4F4D\u6807\u8BB0\uFF0C\u5EFA/\u66F4\u65B0\u6587\u6863\u540E\u4E0A\u4F20\u7D20\u6750\u5E76\u7ED1\u5B9A\u6210\u771F\u6B63\u7684\u56FE\u7247\u5757\u3002\u9700\u8981 docs:document.media:upload \u6743\u9650\uFF1Bhttp(s) \u5916\u94FE\u4E0E vault \u91CC\u627E\u4E0D\u5230\u7684\u6587\u4EF6\u4FDD\u6301\u539F\u6837\uFF08\u4F1A\u5728\u62A5\u544A\u91CC\u5217\u51FA\uFF09\u3002",
+  defaultEnabled: true,
+  apply: (input, ctx) => mapOutsideFences(input, (line) => rewriteLocalImageLine(line, ctx))
+};
+function extractMediaToken(rawUrl) {
+  let url = rawUrl.trim();
+  try {
+    url = decodeURIComponent(url);
+  } catch {
+  }
+  const patterns = [
+    /\/file\/([A-Za-z0-9_-]+)/,
+    /\/medias\/([A-Za-z0-9_-]+)\/(?:download|preview_download)/,
+    /[?&]file_token=([A-Za-z0-9_-]+)/,
+    /\/medias\/([A-Za-z0-9_-]+)(?:[?#/]|$)/
+  ];
+  for (const pattern of patterns) {
+    const match = pattern.exec(url);
+    if (match?.[1])
+      return match[1];
+  }
+  return void 0;
+}
+function collectRemoteImages(content) {
+  const refs = [];
+  const lines = content.split("\n");
+  let fenced = false;
+  for (const line of lines) {
+    if (FENCE.test(line)) {
+      fenced = !fenced;
+      continue;
+    }
+    if (fenced)
+      continue;
+    MARKDOWN_IMAGE.lastIndex = 0;
+    let match = MARKDOWN_IMAGE.exec(line);
+    while (match) {
+      const url = match[2];
+      refs.push({ raw: match[0], url, token: extractMediaToken(url), alt: match[1], index: refs.length });
+      match = MARKDOWN_IMAGE.exec(line);
+    }
+    XML_IMAGE.lastIndex = 0;
+    let xml = XML_IMAGE.exec(line);
+    while (xml) {
+      const tag = xml[0];
+      const url = /(?:href|src|url)="([^"]*)"/.exec(tag)?.[1] ?? "";
+      const token = /token="([^"]*)"/.exec(tag)?.[1] ?? (url ? extractMediaToken(url) : void 0);
+      if (url || token) {
+        const alt = /(?:caption|alt)="([^"]*)"/.exec(tag)?.[1] ?? "";
+        refs.push({ raw: tag, url, token: token || void 0, alt, index: refs.length });
+      }
+      xml = XML_IMAGE.exec(line);
+    }
+  }
+  return refs;
+}
+function normalizeRemoteImageUrls(content) {
+  let out = content;
+  for (const ref of collectRemoteImages(content)) {
+    if (!ref.token)
+      continue;
+    out = out.split(ref.raw).join(ref.raw.replace(ref.url, `media:${ref.token}`));
+  }
+  return out;
+}
+var unescapeImageMarkup = {
+  id: "unescape-image-markup",
+  description: "\u4E0B\u884C\uFF1A\u98DE\u4E66\u628A\u5B83\u89E3\u6790\u4E0D\u4E86\u7684\u56FE\u7247\u5F15\u7528\u8F6C\u4E49\u6210 !\\[\\](\u8DEF\u5F84) \u8FD9\u6837\u7684\u5F62\u6001\uFF0C\u76F4\u63A5\u5199\u56DE\u672C\u5730\u4F1A\u53D8\u6210\u6E32\u67D3\u4E0D\u51FA\u6765\u7684\u574F\u5F15\u7528\u3002\u8FD9\u6761\u89C4\u5219\u628A\u56FE\u7247\u5F15\u7528\u91CC\u7684\u8F6C\u4E49\u65B9\u62EC\u53F7\u8FD8\u539F\uFF08\u53EA\u5904\u7406\u56FE\u7247\u8BED\u6CD5\uFF0C\u4E0D\u52A8\u666E\u901A\u94FE\u63A5\u4E0E\u6B63\u6587\uFF09\u3002",
+  defaultEnabled: true,
+  apply: (input) => input.replace(/!\\\[\\\[([^\]]*?)\\\]\\\]/g, "![[$1]]").replace(/!\\\[\\\]\(/g, "![](")
+};
+var imageDownload = {
+  id: "image-download",
+  description: "\u4E0B\u884C\uFF1A\u628A\u53D6\u56DE\u5185\u5BB9\u91CC\u7684\u98DE\u4E66\u56FE\u7247\u4E0B\u8F7D\u5230\u672C\u5730\u9644\u4EF6\u76EE\u5F55\uFF0C\u5E76\u628A\u5F15\u7528\u6539\u5199\u6210 ![[\u9644\u4EF6\u76EE\u5F55/\u6587\u4EF6\u540D]]\u3002\u9700\u8981 docs:document.media:download \u6743\u9650\uFF1B\u4E0B\u8F7D\u5931\u8D25\u65F6\u4FDD\u7559\u539F\u59CB\u5F15\u7528\u5E76\u5728\u62A5\u544A\u91CC\u8BF4\u660E\uFF0C\u4E0D\u4F1A\u8BA9\u6574\u6B21\u62C9\u53D6\u5931\u8D25\u3002",
+  defaultEnabled: true,
+  apply: (input, ctx) => {
+    const downloads = ctx.imageDownloads;
+    if (!downloads || downloads.size === 0)
+      return input;
+    let out = input;
+    for (const [raw, localPath] of downloads) {
+      if (!localPath)
+        continue;
+      const target = ctx.attachmentLinkStyle === "path" ? localPath : localPath.split("/").pop() ?? localPath;
+      out = out.split(raw).join(`![[${target}]]`);
+    }
+    return out;
+  }
+};
+var BUILT_IN_RULES = {
+  toFeishu: [
+    sourceDiagnostics,
+    imageRefNormalize,
+    tabIndentToSpaces,
+    mathEscapeHash,
+    mathTrimInlineSpaces,
+    inlineFormulaToBlock,
+    blockFormulaOwnParagraph,
+    listExitAfterHardbreak,
+    nativeMath,
+    footnoteDowngrade,
+    imageUpload
+  ],
+  toObsidian: [unescapeImageMarkup, dropTitleHeading, restoreNativeMath, mathEscapeHash, mathTrimInlineSpaces, imageDownload, restoreImageRef]
+};
+function entryOf(rule) {
+  return { id: rule.id, enabled: rule.defaultEnabled, description: rule.description };
+}
+function defaultRulesFile() {
+  return {
+    version: RULES_VERSION,
+    toFeishu: BUILT_IN_RULES.toFeishu.map(entryOf),
+    toObsidian: BUILT_IN_RULES.toObsidian.map(entryOf)
+  };
+}
+function mergeDirection(direction, raw, warnings) {
+  const builtIns = BUILT_IN_RULES[direction];
+  const byId = new Map(builtIns.map((rule) => [rule.id, rule]));
+  const merged = [];
+  const seen = /* @__PURE__ */ new Set();
+  if (Array.isArray(raw)) {
+    for (const item3 of raw) {
+      const id = typeof item3?.id === "string" ? item3.id : "";
+      if (!id)
+        continue;
+      const builtIn = byId.get(id);
+      if (!builtIn) {
+        warnings.push(`\u89C4\u5219\u6587\u4EF6\u91CC ${direction} \u7684 "${id}" \u4E0D\u662F\u5185\u7F6E\u89C4\u5219\uFF0C\u5DF2\u5FFD\u7565`);
+        continue;
+      }
+      if (seen.has(id))
+        continue;
+      seen.add(id);
+      const enabled = typeof item3.enabled === "boolean" ? item3.enabled : builtIn.defaultEnabled;
+      merged.push({ id, enabled, description: builtIn.description });
+    }
+  }
+  for (const rule of builtIns) {
+    if (seen.has(rule.id))
+      continue;
+    warnings.push(`\u89C4\u5219\u6587\u4EF6\u91CC ${direction} \u7F3A\u5C11 "${rule.id}"\uFF0C\u5DF2\u6309\u9ED8\u8BA4\u503C\uFF08${rule.defaultEnabled ? "\u5F00" : "\u5173"}\uFF09\u8865\u4E0A`);
+    merged.push(entryOf(rule));
+  }
+  return merged;
+}
+function mergeRulesFile(raw, warnings = []) {
+  const source = raw ?? {};
+  return {
+    version: typeof source.version === "number" ? source.version : RULES_VERSION,
+    toFeishu: mergeDirection("toFeishu", source.toFeishu, warnings),
+    toObsidian: mergeDirection("toObsidian", source.toObsidian, warnings)
+  };
+}
+function parseRulesFile(text, warnings = []) {
+  return mergeRulesFile(JSON.parse(text), warnings);
+}
+async function writeRulesFile(adapter, rules) {
+  const path = (0, import_obsidian3.normalizePath)(RULES_PATH);
+  const dir = path.slice(0, path.lastIndexOf("/"));
+  if (dir)
+    await ensureFolder(adapter, dir);
+  await adapter.write(path, `${JSON.stringify(rules, null, 2)}
+`);
+}
+async function loadRules(adapter, logger) {
+  const path = (0, import_obsidian3.normalizePath)(RULES_PATH);
+  if (!await adapter.exists(path)) {
+    const rules = defaultRulesFile();
+    try {
+      await writeRulesFile(adapter, rules);
+      logger?.info(`\u5DF2\u5199\u5165\u9ED8\u8BA4\u8F6C\u6362\u89C4\u5219\uFF1A${RULES_PATH}`);
+    } catch (error) {
+      logger?.warn(`\u5199\u5165\u9ED8\u8BA4\u8F6C\u6362\u89C4\u5219\u5931\u8D25\uFF08\u7EE7\u7EED\u7528\u5185\u7F6E\u9ED8\u8BA4\u503C\uFF09\uFF1A${String(error)}`);
+    }
+    return rules;
+  }
+  try {
+    const warnings = [];
+    const rules = parseRulesFile(await adapter.read(path), warnings);
+    for (const warning of warnings)
+      logger?.warn(`\u8F6C\u6362\u89C4\u5219\uFF1A${warning}`);
+    return rules;
+  } catch (error) {
+    logger?.warn(`\u8F6C\u6362\u89C4\u5219\u6587\u4EF6\u65E0\u6CD5\u89E3\u6790\uFF0C\u672C\u6B21\u4F7F\u7528\u5185\u7F6E\u9ED8\u8BA4\u503C\uFF08\u6587\u4EF6\u672A\u6539\u52A8\uFF09\uFF1A${String(error)}`);
+    return defaultRulesFile();
+  }
+}
+function applyRules(direction, input, ctx, rules) {
+  const enabled = new Set(rules[direction].filter((entry) => entry.enabled).map((entry) => entry.id));
+  let output = input;
+  for (const rule of BUILT_IN_RULES[direction]) {
+    if (!enabled.has(rule.id))
+      continue;
+    output = rule.apply(output, ctx);
+  }
+  return output;
+}
+var COSMETIC_PUBLISH_RULE_IDS = [
+  "math-escape-hash",
+  "math-trim-inline-spaces",
+  "inline-formula-to-block",
+  "block-formula-own-paragraph",
+  "list-exit-after-hardbreak",
+  "native-math"
+];
+function sameAfterCosmeticRules(a, b, ctx, rules) {
+  const enabled = new Set(rules.toFeishu.filter((entry) => entry.enabled).map((entry) => entry.id));
+  const normalize = (text) => {
+    let output = text;
+    for (const rule of BUILT_IN_RULES.toFeishu) {
+      if (!COSMETIC_PUBLISH_RULE_IDS.includes(rule.id) || !enabled.has(rule.id))
+        continue;
+      output = rule.apply(output, ctx);
+    }
+    return output;
+  };
+  return normalize(a) === normalize(b);
+}
+function ruleEnabled(rules, direction, id) {
+  return rules[direction].some((entry) => entry.id === id && entry.enabled);
+}
+function normalizeObsidianMath(input, rules) {
+  let out = input;
+  for (const rule of [restoreNativeMath, mathEscapeHash, mathTrimInlineSpaces]) {
+    if (ruleEnabled(rules, "toObsidian", rule.id))
+      out = rule.apply(out, { relPath: "", documentTitle: "", localContent: input });
+  }
+  return out;
+}
+function publishRulesFingerprint(rules) {
+  const enabled = new Set(rules.toFeishu.filter((entry) => entry.enabled).map((entry) => entry.id));
+  return JSON.stringify([PUBLISH_RULES_REVISION, BUILT_IN_RULES.toFeishu.filter((rule) => rule.id !== "source-format-diagnostics" && enabled.has(rule.id)).map((rule) => rule.id)]);
+}
+function pullRulesFingerprint(rules) {
+  const enabled = new Set(rules.toObsidian.filter((entry) => entry.enabled).map((entry) => entry.id));
+  return JSON.stringify([1, BUILT_IN_RULES.toObsidian.filter((rule) => enabled.has(rule.id)).map((rule) => rule.id)]);
+}
+
+// src/settings-tab.ts
+var SpacePickerModal = class extends import_obsidian4.FuzzySuggestModal {
+  constructor(app, spaces, onChoose) {
+    super(app);
+    this.spaces = spaces;
+    this.onChoose = onChoose;
+    this.setPlaceholder("\u9009\u62E9\u8981\u540C\u6B65\u7684\u77E5\u8BC6\u7A7A\u95F4");
+  }
+  getItems() {
+    return this.spaces;
+  }
+  getItemText(space) {
+    return `${space.name} \xB7 ${space.space_id}`;
+  }
+  onChooseItem(space) {
+    this.onChoose(space);
+  }
+};
+var FeishuWikiSyncSettingTab = class extends import_obsidian4.PluginSettingTab {
+  constructor(app, host) {
+    super(app, host);
+    this.host = host;
+  }
+  display() {
+    const { containerEl } = this;
+    const settings = this.host.settings;
+    containerEl.empty();
+    containerEl.createEl("p", {
+      cls: "setting-item-description",
+      text: "\u5C06\u5F53\u524D\u4ED3\u5E93\u7684 Markdown \u7B14\u8BB0\u4E0E\u98DE\u4E66\u77E5\u8BC6\u5E93\u53CC\u5411\u540C\u6B65\u3002\u6587\u6863\u6A21\u5F0F\u4FBF\u4E8E\u5728\u98DE\u4E66\u9605\u8BFB\u4E0E\u7F16\u8F91\uFF1B\u6587\u4EF6\u955C\u50CF\u6A21\u5F0F\u4FDD\u7559\u539F\u59CB Markdown\u3002"
+    });
+    this.renderAuth(containerEl, settings);
+    this.renderTarget(containerEl, settings);
+    this.renderSyncMode(containerEl, settings);
+    this.renderRules(containerEl);
+    this.renderBehaviour(containerEl, settings);
+    this.renderState(containerEl, settings);
+  }
+  renderSyncMode(containerEl, settings) {
+    new import_obsidian4.Setting(containerEl).setName("\u540C\u6B65\u6A21\u5F0F").setHeading();
+    new import_obsidian4.Setting(containerEl).setName("\u7B14\u8BB0\u540C\u6B65\u5F62\u6001").setDesc(
+      "\u6587\u4EF6\u955C\u50CF\u4FDD\u7559\u539F\u59CB Markdown\uFF1B\u6587\u6863\u6A21\u5F0F\u751F\u6210\u53EF\u7F16\u8F91\u7684\u98DE\u4E66\u65B0\u7248\u6587\u6863\uFF0C\u652F\u6301\u56FE\u7247\u3001\u5217\u8868\u3001\u4EE3\u7801\u3001\u8868\u683C\u548C\u516C\u5F0F\u3002\u6587\u6863\u6A21\u5F0F\u4F1A\u8F6C\u6362\u6392\u7248\uFF0C\u4E0D\u80FD\u4FDD\u8BC1\u6E90\u7801\u9010\u5B57\u4E0D\u53D8\uFF1B\u5207\u6362\u6A21\u5F0F\u4F1A\u91CD\u65B0\u5BF9\u63A5\uFF0C\u540C\u540D\u4F46\u5185\u5BB9\u4E0D\u540C\u5219\u4FDD\u7559\u53CC\u65B9\u5E76\u62A5\u544A\u51B2\u7A81\u3002"
+    ).addDropdown(
+      (dropdown) => dropdown.addOption("md", "\u6587\u4EF6\u955C\u50CF\uFF08\u539F\u751F Markdown\uFF09").addOption("doc", "\u6587\u6863\u6A21\u5F0F\uFF08\u98DE\u4E66\u65B0\u7248\u6587\u6863\uFF09").setValue(settings.syncMode).onChange(async (value) => {
+        const next = value === "doc" ? "doc" : "md";
+        if (next === settings.syncMode)
+          return;
+        settings.syncMode = next;
+        await this.host.saveSettings();
+        this.host.refreshAutoSync();
+        new import_obsidian4.Notice(
+          next === "doc" ? "\u5DF2\u5207\u5230\u6587\u6863\u6A21\u5F0F\uFF1A\u4E0B\u4E00\u6B21\u540C\u6B65\u6309\u300C\u9996\u6B21\u5BF9\u63A5\u300D\u5224\u5B9A\uFF0C\u4E0D\u4F1A\u76F4\u63A5\u8986\u76D6\u672C\u5730" : "\u5DF2\u5207\u5230\u6587\u4EF6\u955C\u50CF\u6A21\u5F0F\uFF1A\u4E0B\u4E00\u6B21\u540C\u6B65\u6309\u300C\u9996\u6B21\u5BF9\u63A5\u300D\u5224\u5B9A\uFF0C\u4E0D\u4F1A\u76F4\u63A5\u8986\u76D6\u672C\u5730"
+        );
+        this.display();
+      })
+    );
+    containerEl.createEl("p", {
+      cls: "setting-item-description",
+      text: `\u5F53\u524D\uFF1A${settings.syncMode === "doc" ? "\u6587\u6863\u6A21\u5F0F\uFF08\u98DE\u4E66\u65B0\u7248\u6587\u6863 docx\uFF09" : "\u6587\u4EF6\u955C\u50CF\uFF08\u539F\u751F Markdown \u6587\u4EF6\uFF09"} \xB7 \u6587\u6863\u6A21\u5F0F\u7684\u8F6C\u6362\u89C4\u5219\u5728 ${RULES_PATH}`
+    });
+  }
+  renderRules(containerEl) {
+    new import_obsidian4.Setting(containerEl).setName("\u8F6C\u6362\u89C4\u5219\uFF08\u6587\u6863\u6A21\u5F0F\uFF09").setHeading();
+    containerEl.createEl("p", {
+      cls: "setting-item-description",
+      text: `\u89C4\u5219\u6587\u4EF6\uFF1A${RULES_PATH}\uFF0C\u6BCF\u6761\u89C4\u5219\u90FD\u6709 enabled \u5F00\u5173\u4E0E description \u8BF4\u660E\u3002\u4E0A\u884C\u89C4\u5219\u5728\u53D1\u7ED9\u98DE\u4E66\u4E4B\u524D\u4F5C\u7528\u4E8E\u672C\u5730 Markdown\uFF0C\u4E0B\u884C\u89C4\u5219\u5728\u5199\u56DE\u672C\u5730\u4E4B\u524D\u4F5C\u7528\u4E8E\u53D6\u56DE\u7684 Markdown\u3002\u6587\u4EF6\u4E0D\u5B58\u5728\u65F6\u4F1A\u81EA\u52A8\u5199\u5165\u4E00\u4EFD\u5B8C\u6574\u9ED8\u8BA4\u89C4\u5219\uFF1B\u52A0\u8F7D\u65F6\u4E0E\u5185\u7F6E\u9ED8\u8BA4\u6309 id \u5408\u5E76\uFF0C\u6539\u8FC7\u7684\u4EE5\u6587\u4EF6\u4E3A\u51C6\u3002\u4E0A\u884C\u89C4\u5219\u66F4\u65B0\u540E\uFF0C\u65E7\u6587\u6863\u4F1A\u8FDB\u5165\u5237\u65B0\u8BA1\u5212\uFF1B\u98DE\u4E66\u6709\u65B0\u6539\u52A8\u65F6\u4F18\u5148\u5904\u7406\u6539\u52A8\u3002\u539F\u7A3F\u683C\u5F0F\u63D0\u793A\u9ED8\u8BA4\u5173\u95ED\uFF0C\u53EF\u901A\u8FC7 source-format-diagnostics \u5F00\u542F\u3002`
+    });
+    new import_obsidian4.Setting(containerEl).setName("\u6253\u5F00\u89C4\u5219\u6587\u4EF6").setDesc("\u7528\u7CFB\u7EDF\u9ED8\u8BA4\u7A0B\u5E8F\u6253\u5F00 rules.json\uFF0C\u6539\u5B8C\u4FDD\u5B58\uFF0C\u4E0B\u6B21\u540C\u6B65\u751F\u6548").addButton(
+      (button) => button.setButtonText("\u6253\u5F00").onClick(async () => {
+        const adapter = this.host.app.vault.adapter;
+        const path = (0, import_obsidian4.normalizePath)(RULES_PATH);
+        try {
+          if (!await adapter.exists(path))
+            await writeRulesFile(adapter, defaultRulesFile());
+          if (adapter instanceof import_obsidian4.FileSystemAdapter) {
+            const { shell } = require("electron");
+            const error = await shell.openPath(adapter.getFullPath(path));
+            if (error)
+              throw new Error(error);
+          } else {
+            new import_obsidian4.Notice(`\u8BF7\u5728\u6587\u4EF6\u7CFB\u7EDF\u91CC\u6253\u5F00 ${path}`);
+          }
+        } catch (error) {
+          new import_obsidian4.Notice(`\u6253\u5F00\u89C4\u5219\u6587\u4EF6\u5931\u8D25\uFF1A${String(error)}\u3002\u6587\u4EF6\u4F4D\u7F6E\uFF1A${path}`, 8e3);
+        }
+      })
+    );
+    new import_obsidian4.Setting(containerEl).setName("\u91CD\u5EFA\u4E3A\u9ED8\u8BA4\u89C4\u5219").setDesc("\u7528\u5185\u7F6E\u9ED8\u8BA4\u89C4\u5219\u8986\u76D6 rules.json\uFF08\u4F1A\u4E22\u6389\u4F60\u5728\u6587\u4EF6\u91CC\u7684\u6539\u52A8\uFF09\uFF0C\u5E76\u505A\u4E00\u6B21\u89E3\u6790\u68C0\u67E5").addButton(
+      (button) => button.setButtonText("\u91CD\u5EFA").onClick(async () => {
+        try {
+          const adapter = this.host.app.vault.adapter;
+          await writeRulesFile(adapter, defaultRulesFile());
+          const rules = await loadRules(adapter, this.host.logger);
+          const enabled = (list) => list.filter((entry) => entry.enabled).length;
+          new import_obsidian4.Notice(
+            `\u5DF2\u91CD\u5EFA ${RULES_PATH}\uFF1A\u4E0A\u884C ${enabled(rules.toFeishu)} \u6761\u3001\u4E0B\u884C ${enabled(rules.toObsidian)} \u6761\u89C4\u5219\u5F00\u542F`,
+            8e3
+          );
+          this.display();
+        } catch (error) {
+          new import_obsidian4.Notice(`\u91CD\u5EFA\u89C4\u5219\u6587\u4EF6\u5931\u8D25\uFF1A${String(error)}`, 8e3);
+        }
+      })
+    );
+  }
+  renderAuth(containerEl, settings) {
+    new import_obsidian4.Setting(containerEl).setName("\u98DE\u4E66\u5E94\u7528\u4E0E\u6388\u6743").setHeading();
+    containerEl.createEl("p", {
+      cls: "setting-item-description",
+      text: "\u9700\u8981\u4E00\u4E2A\u98DE\u4E66\u4F01\u4E1A\u81EA\u5EFA\u5E94\u7528\u3002\u9ED8\u8BA4\u6388\u6743\u8303\u56F4\uFF1Adrive:drive\u3001wiki:wiki\u3001docx:document\u3001docs:document.media:download\u3001docs:document.media:upload\uFF1B\u8BE6\u89C1 README \u7684\u914D\u7F6E\u6B65\u9AA4\u3002\u7528\u300C\u7528\u6237\u6388\u6743\u300D\u65F6\u8FD8\u8981\u5728\u5F00\u653E\u5E73\u53F0\u767B\u8BB0\u4E0B\u65B9\u91CD\u5B9A\u5411\u5730\u5740\uFF0C\u5E76\u5305\u542B offline_access \u4EE5\u81EA\u52A8\u7EED\u671F\u3002"
+    });
+    new import_obsidian4.Setting(containerEl).setName("\u8EAB\u4EFD\u6A21\u5F0F").setDesc("\u7528\u6237\u6388\u6743\uFF1A\u4EE5\u4F60\u672C\u4EBA\u7684\u8EAB\u4EFD\u8BBF\u95EE\u4E2A\u4EBA\u77E5\u8BC6\u5E93\uFF08\u63A8\u8350\uFF09\u3002\u5E94\u7528\u8EAB\u4EFD\uFF1A\u9700\u8981\u628A\u5E94\u7528\u6DFB\u52A0\u4E3A\u77E5\u8BC6\u5E93\u6210\u5458\u3002").addDropdown(
+      (dropdown) => dropdown.addOption("user", "\u7528\u6237\u6388\u6743\uFF08user_access_token\uFF09").addOption("tenant", "\u5E94\u7528\u8EAB\u4EFD\uFF08tenant_access_token\uFF09").setValue(settings.authMode).onChange(async (value) => {
+        settings.authMode = value;
+        await this.host.saveSettings();
+        this.display();
+      })
+    );
+    new import_obsidian4.Setting(containerEl).setName("App ID").setDesc("\u98DE\u4E66\u5F00\u653E\u5E73\u53F0 \u2192 \u51ED\u8BC1\u4E0E\u57FA\u7840\u4FE1\u606F").addText(
+      (text) => text.setValue(settings.appId).onChange(async (value) => {
+        if (settings.appId !== value.trim())
+          settings.userTokens = void 0;
+        settings.appId = value.trim();
+        await this.host.saveSettings();
+      })
+    );
+    new import_obsidian4.Setting(containerEl).setName("App Secret").setDesc("\u4FDD\u5B58\u5728\u63D2\u4EF6\u7684 data.json \u91CC\uFF0C\u8BF7\u52FF\u628A\u8BE5\u6587\u4EF6\u540C\u6B65\u5230\u516C\u5F00\u4ED3\u5E93").addText((text) => {
+      text.inputEl.type = "password";
+      text.setValue(settings.appSecret).onChange(async (value) => {
+        if (settings.appSecret !== value.trim())
+          settings.userTokens = void 0;
+        settings.appSecret = value.trim();
+        await this.host.saveSettings();
+      });
+    });
+    if (settings.authMode === "user") {
+      new import_obsidian4.Setting(containerEl).setName("\u91CD\u5B9A\u5411\u5730\u5740").setDesc("\u9700\u8981\u4E0E\u5F00\u653E\u5E73\u53F0\u91CC\u767B\u8BB0\u7684\u56DE\u8C03\u5730\u5740\u5B8C\u5168\u4E00\u81F4").addText(
+        (text) => text.setValue(settings.redirectUri).onChange(async (value) => {
+          settings.redirectUri = value.trim();
+          await this.host.saveSettings();
+        })
+      );
+      new import_obsidian4.Setting(containerEl).setName("\u6388\u6743\u8303\u56F4").setDesc("\u7A7A\u683C\u5206\u9694\uFF0C\u5FC5\u987B\u90FD\u662F\u5E94\u7528\u5DF2\u5F00\u901A\u7684\u6743\u9650\uFF1Boffline_access \u7528\u4E8E\u81EA\u52A8\u7EED\u671F").addText(
+        (text) => text.setValue(settings.oauthScope).onChange(async (value) => {
+          settings.oauthScope = value.trim();
+          await this.host.saveSettings();
+        })
+      );
+      const tokens = settings.userTokens;
+      new import_obsidian4.Setting(containerEl).setName("\u6388\u6743\u72B6\u6001").setDesc(
+        tokens?.refreshToken ? `\u5DF2\u6388\u6743\uFF0Crefresh token \u6709\u6548\u81F3 ${new Date(tokens.refreshExpiresAt).toLocaleString()}` : "\u5C1A\u672A\u6388\u6743"
+      ).addButton(
+        (button) => button.setButtonText(tokens?.refreshToken ? "\u91CD\u65B0\u6388\u6743" : "\u6388\u6743\u98DE\u4E66\u8D26\u53F7").setCta().onClick(async () => {
+          try {
+            await this.host.startAuthorization();
+            this.display();
+          } catch (error) {
+            new import_obsidian4.Notice(`\u6388\u6743\u5931\u8D25\uFF1A${error instanceof Error ? error.message : String(error)}`);
+          }
+        })
+      ).addButton(
+        (button) => button.setButtonText("\u624B\u52A8\u7C98\u8D34\u6388\u6743\u7801").onClick(async () => {
+          try {
+            await this.host.startManualAuthorization();
+            this.display();
+          } catch (error) {
+            new import_obsidian4.Notice(`\u6388\u6743\u5931\u8D25\uFF1A${error instanceof Error ? error.message : String(error)}`);
+          }
+        })
+      ).addButton(
+        (button) => button.setButtonText("\u64A4\u9500\u6388\u6743").onClick(async () => {
+          await this.host.revokeAuthorization();
+          this.display();
+        })
+      );
+    }
+    new import_obsidian4.Setting(containerEl).setName("\u8FDE\u63A5\u6D4B\u8BD5").setDesc("\u62C9\u53D6\u5F53\u524D\u8EAB\u4EFD\u53EF\u89C1\u7684\u77E5\u8BC6\u7A7A\u95F4\u5217\u8868").addButton(
+      (button) => button.setButtonText("\u6D4B\u8BD5").onClick(async () => {
+        try {
+          const spaces = await this.host.engine.listSpaces();
+          new import_obsidian4.Notice(spaces.length > 0 ? `\u8FDE\u63A5\u6210\u529F\uFF0C\u53EF\u89C1\u77E5\u8BC6\u7A7A\u95F4 ${spaces.length} \u4E2A` : "\u8FDE\u63A5\u6210\u529F\uFF0C\u4F46\u6CA1\u6709\u53EF\u89C1\u7684\u77E5\u8BC6\u7A7A\u95F4");
+        } catch (error) {
+          new import_obsidian4.Notice(`\u8FDE\u63A5\u5931\u8D25\uFF1A${error instanceof Error ? error.message : String(error)}`, 8e3);
+        }
+      })
+    );
+  }
+  renderTarget(containerEl, settings) {
+    new import_obsidian4.Setting(containerEl).setName("\u540C\u6B65\u76EE\u6807").setHeading();
+    containerEl.createEl("p", {
+      cls: "setting-item-description",
+      text: "\u672C\u5730 vault \u6839\u76EE\u5F55 \u2194 \u77E5\u8BC6\u7A7A\u95F4\u3002\u53EA\u6709 .md \u6587\u4EF6\u53C2\u4E0E\u540C\u6B65\uFF1B\u540C\u6B65\u4F1A\u5728\u77E5\u8BC6\u5E93\u91CC\u6309\u672C\u5730\u76EE\u5F55\u5C42\u7EA7\u521B\u5EFA\u9875\u9762\u3002"
+    });
+    new import_obsidian4.Setting(containerEl).setName("\u77E5\u8BC6\u7A7A\u95F4 space_id").setDesc("\u5EFA\u8BAE\u7528\u300C\u62C9\u53D6\u5217\u8868\u300D\u9009\u62E9\uFF1B\u624B\u586B\u65F6\u4F7F\u7528\u6570\u5B57 space_id\uFF0C\u4E0D\u8981\u7C98\u8D34 /wiki/ \u9875\u9762\u94FE\u63A5").addText(
+      (text) => text.setValue(settings.spaceId).onChange(async (value) => {
+        settings.spaceId = value.trim();
+        await this.host.saveSettings();
+      })
+    ).addButton(
+      (button) => button.setButtonText("\u62C9\u53D6\u5217\u8868").onClick(async () => {
+        try {
+          const spaces = await this.host.engine.listSpaces();
+          if (spaces.length === 0) {
+            new import_obsidian4.Notice("\u5F53\u524D\u8EAB\u4EFD\u770B\u4E0D\u5230\u4EFB\u4F55\u77E5\u8BC6\u7A7A\u95F4");
+            return;
+          }
+          new SpacePickerModal(this.app, spaces, async (space) => {
+            settings.spaceId = space.space_id;
+            await this.host.saveSettings();
+            new import_obsidian4.Notice(`\u5DF2\u9009\u62E9\u77E5\u8BC6\u7A7A\u95F4\uFF1A${space.name}`);
+            this.display();
+          }).open();
+        } catch (error) {
+          new import_obsidian4.Notice(`\u62C9\u53D6\u5931\u8D25\uFF1A${error instanceof Error ? error.message : String(error)}`, 8e3);
+        }
+      })
+    );
+    new import_obsidian4.Setting(containerEl).setName("\u540C\u6B65\u6839\u8282\u70B9\uFF08\u53EF\u7559\u7A7A\uFF09").setDesc(
+      "\u7559\u7A7A = \u4EE5\u77E5\u8BC6\u7A7A\u95F4\u9876\u5C42\u4E3A\u540C\u6B65\u6839\uFF1Avault \u7684\u4E00\u7EA7\u76EE\u5F55\u4F1A\u53D8\u6210\u77E5\u8BC6\u5E93\u91CC\u7684\u4E00\u7EA7\u9875\u9762\uFF08vault \u6839\u76EE\u5F55\u4E0B\u7684\u6563\u88C5\u7B14\u8BB0\u4F1A\u653E\u8FDB\u4E0B\u65B9\u90A3\u4E2A\u9876\u5C42\u9875\u9762\u91CC\uFF09\u3002\u586B\u8282\u70B9\u94FE\u63A5\u6216 node_token \u5219\u6240\u6709\u5185\u5BB9\u90FD\u6302\u5230\u8BE5\u8282\u70B9\u4E0B\u9762\uFF0C\u98DE\u4E66\u4FA7\u4E0D\u4F1A\u591A\u51FA\u4E00\u4E2A\u6839\u9875\u9762\u3002\u6CE8\u610F\uFF1A\u7559\u7A7A\u65F6\uFF0C\u77E5\u8BC6\u5E93\u9876\u5C42\u5DF2\u6709\u7684 .md \u6587\u4EF6\u4F1A\u88AB\u62C9\u53D6\u5230\u4F60\u7684 vault \u6839\u76EE\u5F55\u3002"
+    ).addText(
+      (text) => text.setValue(settings.rootNodeToken).onChange(async (value) => {
+        settings.rootNodeToken = value.trim();
+        await this.host.saveSettings();
+        this.display();
+      })
+    );
+    if (!settings.rootNodeToken.trim()) {
+      new import_obsidian4.Setting(containerEl).setName("\u6839\u76EE\u5F55\u9875\u9762\u6807\u9898").setDesc("\u5B58\u653E vault \u6839\u76EE\u5F55\u4E0B\u7B14\u8BB0\u7684\u90A3\u4E2A\u77E5\u8BC6\u5E93\u4E00\u7EA7\u9875\u9762\u7684\u540D\u79F0\uFF0C\u7559\u7A7A\u5219\u7528 vault \u7684\u540D\u5B57\uFF08\u5F53\u524D\uFF1A" + this.app.vault.getName() + "\uFF09").addText(
+        (text) => text.setValue(settings.rootPageTitle).onChange(async (value) => {
+          settings.rootPageTitle = value.trim();
+          await this.host.saveSettings();
+        })
+      );
+    }
+  }
+  renderBehaviour(containerEl, settings) {
+    new import_obsidian4.Setting(containerEl).setName("\u540C\u6B65\u884C\u4E3A").setHeading();
+    new import_obsidian4.Setting(containerEl).setName("\u9644\u4EF6\u76EE\u5F55").setDesc("\u6587\u6863\u6A21\u5F0F\u4E0B\u884C\u65F6\uFF0C\u4ECE\u98DE\u4E66\u4E0B\u8F7D\u7684\u56FE\u7247\u653E\u5230\u8FD9\u4E2A\u76EE\u5F55\uFF08\u76F8\u5BF9 vault \u6839\uFF0C\u586B attachments \u8FD9\u7C7B\u76F8\u5BF9\u8DEF\u5F84\uFF1B\u76EE\u5F55\u4E0D\u5B58\u5728\u4F1A\u81EA\u52A8\u521B\u5EFA\uFF09\u3002").addText(
+      (text) => text.setValue(settings.attachmentFolder).onChange(async (value) => {
+        settings.attachmentFolder = value.trim() || "attachments";
+        await this.host.saveSettings();
+      })
+    );
+    new import_obsidian4.Setting(containerEl).setName("\u9644\u4EF6\u94FE\u63A5\u5199\u6CD5").setDesc("\u4ECE\u98DE\u4E66\u4E0B\u8F7D\u56FE\u7247\u540E\uFF0C\u7B14\u8BB0\u91CC\u5F15\u7528\u5199\u6210\u54EA\u79CD\u5F62\u5F0F\u3002\u6700\u77ED\u8DEF\u5F84 = \u53EA\u5199\u6587\u4EF6\u540D\uFF08\u5982 ![[image-xxx.png]]\uFF0C\u4E0E Obsidian\u300C\u6700\u77ED\u8DEF\u5F84\u300D\u94FE\u63A5\u683C\u5F0F\u4E00\u81F4\uFF09\uFF1B\u5E26\u76EE\u5F55 = \u5199 ![[\u9644\u4EF6\u76EE\u5F55/\u6587\u4EF6\u540D]]\u3002").addDropdown(
+      (dropdown) => dropdown.addOption("shortest", "\u53EA\u5199\u6587\u4EF6\u540D\uFF08\u6700\u77ED\u8DEF\u5F84\uFF09").addOption("path", "\u5E26\u9644\u4EF6\u76EE\u5F55\u524D\u7F00").setValue(settings.attachmentLinkStyle).onChange(async (value) => {
+        settings.attachmentLinkStyle = value;
+        await this.host.saveSettings();
+      })
+    );
+    new import_obsidian4.Setting(containerEl).setName("\u76EE\u5F55\u5C42\u7EA7").setDesc("\u955C\u50CF\u76EE\u5F55\uFF1A\u4E3A\u6BCF\u4E2A\u672C\u5730\u6587\u4EF6\u5939\u5EFA\u4E00\u4E2A\u77E5\u8BC6\u5E93\u8282\u70B9\uFF08\u4F1A\u591A\u51FA\u4E00\u4E9B\u7A7A\u6587\u6863\u9875\uFF09\u3002\u6241\u5E73\uFF1A\u6240\u6709\u7B14\u8BB0\u6302\u5728\u6839\u8282\u70B9\u4E0B\uFF0C\u6587\u4EF6\u540D\u7528\u5206\u9694\u7B26\u7F16\u7801\u8DEF\u5F84\u3002").addDropdown(
+      (dropdown) => dropdown.addOption("nodes", "\u955C\u50CF\u76EE\u5F55\uFF08\u63A8\u8350\uFF09").addOption("flat", "\u6241\u5E73\u5316").setValue(settings.folderMode).onChange(async (value) => {
+        settings.folderMode = value;
+        await this.host.saveSettings();
+        this.display();
+      })
+    );
+    if (settings.folderMode === "flat") {
+      new import_obsidian4.Setting(containerEl).setName("\u6241\u5E73\u5206\u9694\u7B26").setDesc("\u7528\u8BE5\u5B57\u7B26\u4E32\u66FF\u6362\u8DEF\u5F84\u91CC\u7684 /").addText(
+        (text) => text.setValue(settings.flatSeparator).onChange(async (value) => {
+          settings.flatSeparator = value || "__";
+          await this.host.saveSettings();
+        })
+      );
+    }
+    new import_obsidian4.Setting(containerEl).setName("\u6392\u9664\u89C4\u5219").setDesc("\u6BCF\u884C\u4E00\u6761 glob\uFF0C\u652F\u6301 * \u4E0E **\u3002.obsidian/ \u4E0E .trash/ \u59CB\u7EC8\u6392\u9664\uFF0C\u51B2\u7A81\u526F\u672C\u76EE\u5F55\u4E5F\u59CB\u7EC8\u6392\u9664\u3002").addTextArea((area) => {
+      area.setValue(settings.excludePatterns).onChange(async (value) => {
+        settings.excludePatterns = value;
+        await this.host.saveSettings();
+      });
+      area.inputEl.rows = 4;
+    });
+    new import_obsidian4.Setting(containerEl).setName("\u8FDC\u7AEF\u5DF2\u5220\u9664\u65F6\u81EA\u52A8\u91CD\u5EFA").setDesc("\u5173\u95ED\u65F6\uFF08\u63A8\u8350\uFF09\u53EA\u4F1A\u63D0\u793A\uFF0C\u4E0D\u4F1A\u628A\u672C\u5730\u6709\u4FEE\u6539\u7684\u7B14\u8BB0\u91CD\u65B0\u4F20\u4E0A\u53BB").addToggle(
+      (toggle) => toggle.setValue(settings.recreateRemoteIfDeleted).onChange(async (value) => {
+        settings.recreateRemoteIfDeleted = value;
+        await this.host.saveSettings();
+      })
+    );
+    new import_obsidian4.Setting(containerEl).setName("\u6587\u6863\u6A21\u5F0F\uFF1A\u6BCF\u8F6E\u53D6\u56DE\u5168\u6587\u6821\u9A8C").setDesc(
+      "\u5173\u95ED\uFF08\u9ED8\u8BA4\uFF09\uFF1A\u5148\u7528\u98DE\u4E66\u8FD4\u56DE\u7684\u300C\u6700\u540E\u4FEE\u6539\u65F6\u95F4\u300D\uFF08\u79D2\u7EA7\uFF09\u5224\u65AD\u8FDC\u7AEF\u6709\u6CA1\u6709\u53D8\uFF0C\u6CA1\u53D8\u5C31\u4E0D\u53D6\u56DE\u5168\u6587\uFF0C\u4E00\u8F6E\u53EA\u591A\u4E00\u6B21\u6279\u91CF\u5143\u6570\u636E\u8BF7\u6C42\u3002\u4EE3\u4EF7\u662F\u7406\u8BBA\u4E0A\u5B58\u5728\u6781\u7AEF\u60C5\u51B5\u2014\u2014\u540C\u4E00\u79D2\u5185\u7684\u8FDC\u7AEF\u6539\u52A8\u53EF\u80FD\u88AB\u6F0F\u5224\u5230\u4E0B\u4E00\u6B21\u65F6\u95F4\u6233\u53D8\u5316\u3002\u6253\u5F00\uFF1A\u5FFD\u7565\u65F6\u95F4\u6233\uFF0C\u6BCF\u8F6E\u5BF9\u6BCF\u7BC7\u5DF2\u8BB0\u5F55\u6587\u6863\u90FD\u53D6\u56DE\u5168\u6587\u9010\u7BC7\u6821\u9A8C\uFF0C\u6700\u7A33\uFF0C\u4F46\u8BF7\u6C42\u6570\u4E0E\u6D41\u91CF\u660E\u663E\u66F4\u9AD8\u3002"
+    ).addToggle(
+      (toggle) => toggle.setValue(settings.docVerifyRemoteByContent).onChange(async (value) => {
+        settings.docVerifyRemoteByContent = value;
+        await this.host.saveSettings();
+      })
+    );
+    new import_obsidian4.Setting(containerEl).setName("\u5220\u9664\u4F20\u64AD\uFF08\u9ED8\u8BA4\u5173\u95ED\uFF09").setHeading();
+    containerEl.createEl("p", {
+      cls: "setting-item-description",
+      text: "\u4E24\u4E2A\u5F00\u5173\u90FD\u5173\u7740\u65F6\uFF0C\u4EFB\u4F55\u4E00\u8FB9\u5220\u9664\u90FD\u53EA\u5728\u540C\u6B65\u7ED3\u679C\u91CC\u63D0\u793A\uFF0C\u4E0D\u4F1A\u81EA\u52A8\u5220\u53E6\u4E00\u8FB9\u3002\u6253\u5F00\u540E\u5220\u9664\u4F1A\u51FA\u73B0\u5728\u8BA1\u5212\u9884\u89C8\u7684\u72EC\u7ACB\u5206\u7EC4\u91CC\uFF0C\u9700\u8981\u4F60\u5728\u9884\u89C8\u6846\u91CC\u786E\u8BA4\u624D\u4F1A\u6267\u884C\u3002"
+    });
+    new import_obsidian4.Setting(containerEl).setName("\u672C\u5730\u5220\u9664\u540E\u540C\u65F6\u5220\u9664\u8FDC\u7AEF").setDesc(
+      "\u672C\u5730\u5220\u6389\u7684\u7B14\u8BB0\uFF0C\u540C\u6B65\u65F6\u628A\u8FDC\u7AEF\u5BF9\u5E94\u7684\u6587\u4EF6/\u6587\u6863\u4E00\u8D77\u5220\u6389\uFF08\u8D70\u4E91\u7A7A\u95F4\u63A5\u53E3\uFF0C\u5220\u9664\u8FDB\u98DE\u4E66\u56DE\u6536\u7AD9\uFF0C\u53EF\u4EE5\u6062\u590D\uFF09\u3002\u8FDC\u7AEF\u81EA\u4E0A\u6B21\u540C\u6B65\u540E\u88AB\u6539\u8FC7\u3001\u6216\u8BE5\u8DEF\u5F84\u547D\u4E2D\u6392\u9664\u89C4\u5219\u65F6\uFF0C\u90FD\u4E0D\u4F1A\u5220\uFF0C\u4ECD\u7136\u6309\u51B2\u7A81/\u5FFD\u7565\u5904\u7406\u3002\u5220\u9664\u59CB\u7EC8\u9700\u8981\u624B\u52A8\u540C\u6B65\u786E\u8BA4\uFF1B\u5B9A\u65F6\u540C\u6B65\u53EA\u63D0\u793A\u5F85\u5220\u9664\u9879\u3002"
+    ).addToggle(
+      (toggle) => toggle.setValue(settings.propagateLocalDelete).onChange(async (value) => {
+        settings.propagateLocalDelete = value;
+        await this.host.saveSettings();
+      })
+    );
+    new import_obsidian4.Setting(containerEl).setName("\u8FDC\u7AEF\u5220\u9664\u540E\u540C\u65F6\u5220\u9664\u672C\u5730").setDesc(
+      "\u8FDC\u7AEF\u5220\u6389\u7684\u6587\u4EF6/\u6587\u6863\uFF0C\u540C\u6B65\u65F6\u628A\u672C\u5730\u7B14\u8BB0\u79FB\u8FDB vault \u7684 .trash\uFF08\u4E0D\u662F\u6C38\u4E45\u5220\u9664\uFF09\uFF0C\u5E76\u6E05\u6389\u6620\u5C04\u5173\u7CFB\u3002\u672C\u5730\u81EA\u4E0A\u6B21\u540C\u6B65\u540E\u88AB\u6539\u8FC7\u65F6\u4E0D\u4F1A\u5220\uFF0C\u53EA\u4F1A\u63D0\u793A\u3002\u6CE8\u610F\uFF1A\u8FD9\u6761\u4F1A\u771F\u7684\u52A8\u4F60\u672C\u5730\u7684\u6587\u4EF6\uFF0C\u540C\u6837\u4F1A\u5728\u8BA1\u5212\u9884\u89C8\u91CC\u5355\u72EC\u5217\u51FA\u7B49\u4F60\u786E\u8BA4\u3002"
+    ).addToggle(
+      (toggle) => toggle.setValue(settings.propagateRemoteDelete).onChange(async (value) => {
+        settings.propagateRemoteDelete = value;
+        await this.host.saveSettings();
+      })
+    );
+    new import_obsidian4.Setting(containerEl).setName("\u540C\u6B65\u524D\u9884\u89C8\u8BA1\u5212").setDesc("\u6BCF\u6B21\u540C\u6B65\u5148\u5F39\u51FA\u8BA1\u5212\u786E\u8BA4\u6846").addToggle(
+      (toggle) => toggle.setValue(settings.showPlanBeforeSync).onChange(async (value) => {
+        settings.showPlanBeforeSync = value;
+        await this.host.saveSettings();
+      })
+    );
+    new import_obsidian4.Setting(containerEl).setName("\u5B9A\u65F6\u81EA\u52A8\u540C\u6B65").setDesc("\u5355\u4F4D\u5206\u949F\uFF0C0 \u8868\u793A\u5173\u95ED\u3002\u81EA\u52A8\u540C\u6B65\u8DF3\u8FC7\u9884\u89C8\u3001\u4FDD\u7559\u51B2\u7A81\u526F\u672C\uFF1B\u5220\u9664\u9879\u7559\u5F85\u624B\u52A8\u540C\u6B65\u786E\u8BA4\u3002").addText(
+      (text) => text.setValue(String(settings.autoSyncMinutes)).onChange(async (value) => {
+        const parsed = Number.parseInt(value, 10);
+        settings.autoSyncMinutes = Number.isFinite(parsed) && parsed > 0 ? parsed : 0;
+        await this.host.saveSettings();
+        this.host.refreshAutoSync();
+      })
+    );
+    new import_obsidian4.Setting(containerEl).setName("\u8C03\u8BD5\u65E5\u5FD7").setDesc(`\u5199\u5165 .obsidian/feishu-sync/sync.log`).addToggle(
+      (toggle) => toggle.setValue(settings.debugLog).onChange(async (value) => {
+        settings.debugLog = value;
+        await this.host.saveSettings();
+      })
+    );
+  }
+  renderState(containerEl, settings) {
+    new import_obsidian4.Setting(containerEl).setName("\u72B6\u6001").setHeading();
+    const records = Object.keys(settings.syncMode === "doc" ? settings.state.docRecords : settings.state.records).length;
+    const folders = Object.keys(settings.state.folders).length;
+    containerEl.createEl("p", {
+      cls: "setting-item-description",
+      text: `\u4E0A\u6B21\u540C\u6B65\uFF1A${settings.state.lastSyncAt ? new Date(settings.state.lastSyncAt).toLocaleString() : "\u4ECE\u672A\u540C\u6B65"} \xB7 \u5DF2\u6620\u5C04\u7B14\u8BB0 ${records} \u7BC7 \xB7 \u5DF2\u5EFA\u76EE\u5F55\u8282\u70B9 ${folders} \u4E2A`
+    });
+    containerEl.createEl("p", {
+      cls: "setting-item-description",
+      text: `\u51B2\u7A81\u526F\u672C\u76EE\u5F55\uFF1A${CONFLICT_DIR}/\uFF08\u672C\u5730\u4E0E\u8FDC\u7AEF\u90FD\u4E0D\u6539\u52A8\uFF0C\u526F\u672C\u4EC5\u4F5C\u53C2\u8003\uFF09`
+    });
+    new import_obsidian4.Setting(containerEl).setName("\u6E05\u7A7A\u540C\u6B65\u72B6\u6001").setDesc("\u6E05\u6389\u4E24\u79CD\u6A21\u5F0F\u7684\u6620\u5C04\u3001\u56FE\u7247\u7F13\u5B58\u4E0E\u540C\u6B65\u65F6\u95F4\uFF0C\u4FDD\u7559\u8D26\u53F7\u3001\u89C4\u5219\u548C\u7B14\u8BB0\u3002\u4E0B\u6B21\u6309\u9996\u6B21\u5BF9\u63A5\u5224\u5B9A\uFF1B\u540C\u540D\u4F46\u5185\u5BB9\u4E0D\u540C\u4F1A\u62A5\u544A\u51B2\u7A81\u3002").addButton(
+      (button) => button.setWarning().setButtonText("\u6E05\u7A7A").onClick(async () => {
+        if (this.host.isSyncBusy()) {
+          new import_obsidian4.Notice("\u540C\u6B65\u6B63\u5728\u8FDB\u884C\u4E2D\uFF0C\u8BF7\u7B49\u5B83\u7ED3\u675F\u540E\u518D\u6E05\u7A7A\u72B6\u6001");
+          return;
+        }
+        settings.state = emptyState();
+        await this.host.saveSettings();
+        new import_obsidian4.Notice("\u540C\u6B65\u72B6\u6001\u5DF2\u6E05\u7A7A");
+        this.display();
+      })
+    );
+    new import_obsidian4.Setting(containerEl).setName("\u5DF2\u77E5\u8FB9\u754C").setHeading();
+    const list = containerEl.createEl("ul", { cls: "setting-item-description" });
+    list.createEl("li", { text: "\u98DE\u4E66\u4E0D\u63A5\u53D7 0 \u5B57\u8282 Markdown\uFF0C\u7A7A\u6587\u4EF6\u5728\u6587\u4EF6\u955C\u50CF\u6A21\u5F0F\u4E0B\u4F1A\u88AB\u8DF3\u8FC7\u5E76\u63D0\u793A\uFF1B\u6587\u6863\u6A21\u5F0F\u4E0B\u7A7A\u7B14\u8BB0\u4E5F\u4F1A\u540C\u6B65\uFF08\u6B63\u6587\u4E3A\u7A7A\uFF0C\u98DE\u4E66\u4FA7\u53EA\u6709\u6807\u9898\uFF09\u3002" });
+    list.createEl("li", { text: "\u6587\u6863\u6A21\u5F0F\u4F1A\u4E0A\u4F20\u672C\u5730\u56FE\u7247\uFF08\u5199\u8FDB\u6587\u6863\u7684\u56FE\u7247\u5757\uFF09\u5E76\u4E0B\u8F7D\u98DE\u4E66\u91CC\u7684\u56FE\u7247\u5230\u9644\u4EF6\u76EE\u5F55\uFF1B\u89C4\u5219\u6587\u4EF6\u91CC image-upload / image-download \u53EF\u5173\u3002\u6587\u4EF6\u955C\u50CF\u6A21\u5F0F\u4E0D\u505A\u56FE\u7247\u5904\u7406\uFF0C\u56FE\u7247\u53EA\u662F\u7B14\u8BB0\u91CC\u7684\u6587\u672C\u3002" });
+    list.createEl("li", { text: "\u5220\u9664\u9ED8\u8BA4\u4E0D\u4F1A\u4F20\u64AD\uFF0C\u53EA\u5728\u7ED3\u679C\u91CC\u63D0\u793A\uFF1B\u8981\u4F20\u64AD\u5C31\u5728\u4E0A\u9762\u6253\u5F00\u5BF9\u5E94\u7684\u5220\u9664\u5F00\u5173\uFF08\u8FDC\u7AEF\u5220\u9664\u8FDB\u98DE\u4E66\u56DE\u6536\u7AD9\uFF0C\u672C\u5730\u5220\u9664\u8FDB .trash\uFF09\u3002" });
+    list.createEl("li", { text: "\u4E24\u8FB9\u540C\u65F6\u4FEE\u6539\u540C\u4E00\u7BC7\u65F6\u6309\u51B2\u7A81\u5904\u7406\uFF1A\u8FDC\u7AEF\u7248\u672C\u53E6\u5B58\u4E3A\u526F\u672C\uFF0C\u672C\u5730\u4E0E\u8FDC\u7AEF\u90FD\u4E0D\u52A8\u3002" });
+  }
+};
+
+// src/sync/guards.ts
+var import_crypto = require("crypto");
+var import_obsidian6 = require("obsidian");
+
+// src/sync/scanner.ts
+var import_obsidian5 = require("obsidian");
+var ALWAYS_EXCLUDED = [".obsidian/**", ".trash/**", `${CONFLICT_DIR}/**`, "**/.DS_Store"];
+function assertSafeVaultPath(relPath) {
+  if (!relPath || /[\\\x00-\x1f:]/.test(relPath) || relPath.split("/").some((part) => !part || part === "." || part === "..")) {
+    throw new Error(`\u65E0\u6548\u7684\u4ED3\u5E93\u76F8\u5BF9\u8DEF\u5F84\uFF1A${relPath}`);
+  }
+}
+function globToRegExp(pattern) {
+  let source = "^";
+  for (let index = 0; index < pattern.length; index += 1) {
+    const char = pattern[index];
+    if (char === "*") {
+      if (pattern[index + 1] === "*") {
+        if (pattern[index + 2] === "/") {
+          source += "(?:.*/)?";
+          index += 2;
+        } else {
+          source += ".*";
+          index += 1;
+        }
+      } else {
+        source += "[^/]*";
+      }
+    } else if (char === "?") {
+      source += "[^/]";
+    } else if ("\\^$.|+()[]{}".includes(char)) {
+      source += `\\${char}`;
+    } else {
+      source += char;
+    }
+  }
+  return new RegExp(`${source}$`);
+}
+var PathFilter = class {
+  constructor(userPatterns) {
+    const raw = userPatterns.split("\n").map((line) => line.trim()).filter((line) => line && !line.startsWith("#")).map((line) => line.endsWith("/") ? `${line}**` : line).map((line) => line.replace(/^\.\//, "").replace(/^\//, ""));
+    this.patterns = [...ALWAYS_EXCLUDED, ...raw].map(globToRegExp);
+  }
+  isExcluded(relPath) {
+    return this.patterns.some((pattern) => pattern.test(relPath));
+  }
+};
+function scanLocalNotes(app, filter) {
+  const notes = /* @__PURE__ */ new Map();
+  for (const file of app.vault.getMarkdownFiles()) {
+    if (filter.isExcluded(file.path))
+      continue;
+    const stat = file.stat;
+    notes.set(file.path, { relPath: file.path, size: stat?.size ?? 0, mtime: stat?.mtime ?? 0 });
+  }
+  return notes;
+}
+async function readLocalBytes(app, relPath) {
+  const file = app.vault.getAbstractFileByPath(relPath);
+  if (!(file instanceof import_obsidian5.TFile)) {
+    throw new Error(`\u627E\u4E0D\u5230\u672C\u5730\u6587\u4EF6\uFF1A${relPath}`);
+  }
+  return app.vault.readBinary(file);
+}
+function localStat(app, relPath) {
+  const file = app.vault.getAbstractFileByPath(relPath);
+  if (!(file instanceof import_obsidian5.TFile))
+    return { size: 0, mtime: 0 };
+  return { size: file.stat?.size ?? 0, mtime: file.stat?.mtime ?? 0 };
+}
+async function writeLocalBytes(app, relPath, data) {
+  assertSafeVaultPath(relPath);
+  const existing = app.vault.getAbstractFileByPath(relPath);
+  if (existing instanceof import_obsidian5.TFile) {
+    await app.vault.modifyBinary(existing, data);
+    return;
+  }
+  const dir = relPath.includes("/") ? relPath.slice(0, relPath.lastIndexOf("/")) : "";
+  if (dir && !app.vault.getAbstractFileByPath(dir)) {
+    await app.vault.createFolder(dir).catch(() => void 0);
+  }
+  await app.vault.createBinary(relPath, data);
+}
+
+// src/feishu/wiki.ts
+var PAGE_SIZE = 50;
+var MAX_DEPTH = 20;
+function nextPage(page, seen) {
+  if (!Array.isArray(page.items))
+    throw new Error("\u77E5\u8BC6\u5E93\u5217\u8868\u54CD\u5E94\u7F3A\u5C11 items\uFF0C\u5DF2\u505C\u6B62\u540C\u6B65\uFF0C\u907F\u514D\u8BEF\u5224\u8FDC\u7AEF\u5220\u9664");
+  if (!page.has_more)
+    return void 0;
+  if (!page.page_token || seen.has(page.page_token))
+    throw new Error("\u77E5\u8BC6\u5E93\u5206\u9875\u6E38\u6807\u7F3A\u5931\u6216\u91CD\u590D\uFF0C\u5DF2\u505C\u6B62\u540C\u6B65");
+  seen.add(page.page_token);
+  return page.page_token;
+}
+async function listSpaces(client) {
+  const spaces = [];
+  const seen = /* @__PURE__ */ new Set();
+  let pageToken;
+  do {
+    const page = await client.json("GET", "/open-apis/wiki/v2/spaces", {
+      query: { page_size: PAGE_SIZE, page_token: pageToken }
+    });
+    spaces.push(...page.items ?? []);
+    pageToken = nextPage(page, seen);
+  } while (pageToken);
+  return spaces;
+}
+async function listNodes(client, spaceId, parentNodeToken) {
+  const nodes = [];
+  const seen = /* @__PURE__ */ new Set();
+  let pageToken;
+  do {
+    const page = await client.json("GET", `/open-apis/wiki/v2/spaces/${pathSegment(spaceId)}/nodes`, {
+      query: { page_size: PAGE_SIZE, parent_node_token: parentNodeToken, page_token: pageToken }
+    });
+    nodes.push(...page.items ?? []);
+    pageToken = nextPage(page, seen);
+  } while (pageToken);
+  return nodes;
+}
+async function getNodeByToken(client, token, objType) {
+  const data = await client.json("GET", "/open-apis/wiki/v2/spaces/node_by_token", {
+    query: { token, obj_type: objType }
+  });
+  return data?.node;
+}
+async function walkWikiTree(client, spaceId, rootNodeToken, options = {}) {
+  const entries = [];
+  const queue = [{ nodeToken: rootNodeToken, relDir: "", depth: 0 }];
+  const visited = new Set(rootNodeToken ? [rootNodeToken] : []);
+  const onProgress = options.onProgress;
+  while (queue.length > 0) {
+    const current = queue.shift();
+    if (current.depth > MAX_DEPTH)
+      throw new Error(`\u77E5\u8BC6\u5E93\u76EE\u5F55\u8D85\u8FC7 ${MAX_DEPTH} \u5C42\uFF0C\u8BF7\u9009\u62E9\u66F4\u5C0F\u7684\u540C\u6B65\u6839\u8282\u70B9\uFF1B\u672A\u6267\u884C\u540C\u6B65`);
+    const nodes = await listNodes(client, spaceId, current.nodeToken);
+    for (const node of nodes) {
+      const title = (node.title ?? "").trim();
+      if (node.node_type === "shortcut")
+        continue;
+      if (visited.has(node.node_token))
+        continue;
+      visited.add(node.node_token);
+      if (node.obj_type === "file") {
+        if (!/\.md$/i.test(title))
+          continue;
+        entries.push({
+          nodeToken: node.node_token,
+          objToken: node.obj_token,
+          objType: node.obj_type,
+          parentNodeToken: node.parent_node_token,
+          title,
+          relDir: current.relDir,
+          depth: current.depth + 1
+        });
+        continue;
+      }
+      const childDir = node.node_token === options.rootContainerNode ? "" : current.relDir ? `${current.relDir}/${title}` : title;
+      entries.push({
+        nodeToken: node.node_token,
+        objToken: node.obj_token,
+        objType: node.obj_type,
+        parentNodeToken: node.parent_node_token,
+        title,
+        relDir: current.relDir,
+        depth: current.depth + 1
+      });
+      if (node.has_child === false)
+        continue;
+      queue.push({ nodeToken: node.node_token, relDir: childDir, depth: current.depth + 1 });
+    }
+    onProgress?.(entries.length, current.relDir);
+  }
+  return entries;
+}
+async function createContainerNode(client, spaceId, parentNodeToken, title) {
+  const body = {
+    obj_type: "docx",
+    node_type: "origin",
+    title
+  };
+  if (parentNodeToken)
+    body.parent_node_token = parentNodeToken;
+  const data = await client.json("POST", `/open-apis/wiki/v2/spaces/${pathSegment(spaceId)}/nodes`, { body });
+  if (!data?.node?.node_token) {
+    throw new Error(`\u521B\u5EFA\u77E5\u8BC6\u5E93\u8282\u70B9\u5931\u8D25\uFF1A${title}`);
+  }
+  return data.node;
+}
+async function moveDocToWiki(client, spaceId, parentNodeToken, objToken, objType) {
+  const body = {
+    obj_type: objType,
+    obj_token: objToken,
+    apply: true
+  };
+  if (parentNodeToken)
+    body.parent_wiki_token = parentNodeToken;
+  await client.json("POST", `/open-apis/wiki/v2/spaces/${pathSegment(spaceId)}/nodes/move_docs_to_wiki`, { body });
+}
+
+// src/sync/guards.ts
+async function assertRemoteAbsent(client, spaceId, rootNodeToken, token) {
+  if (!token)
+    throw new Error("\u7F3A\u5C11\u539F\u6709\u8FDC\u7AEF\u6620\u5C04\uFF0C\u672A\u5220\u9664\u672C\u5730\u7B14\u8BB0");
+  const entries = await walkWikiTree(client, spaceId, rootNodeToken);
+  if (entries.some((entry) => entry.objToken === token)) {
+    throw new Error("\u8FDC\u7AEF\u7B14\u8BB0\u5728\u9884\u89C8\u540E\u5DF2\u6062\u590D\uFF0C\u672A\u5220\u9664\u672C\u5730\uFF0C\u8BF7\u91CD\u65B0\u540C\u6B65");
+  }
+}
+function planFingerprint(settings) {
+  const { state, userTokens: _tokens, debugLog: _debug, autoSyncMinutes: _timer, showPlanBeforeSync: _preview, ...config } = settings;
+  const { lastSyncAt: _lastRun, ...mappings } = state;
+  return (0, import_crypto.createHash)("sha256").update(JSON.stringify([config, mappings])).digest("hex");
+}
+function validateSettings(settings) {
+  assertSafeVaultPath(settings.attachmentFolder);
+  if (settings.attachmentFolder.startsWith(".obsidian") || settings.attachmentFolder.startsWith(".trash")) {
+    throw new Error("\u9644\u4EF6\u76EE\u5F55\u4E0D\u80FD\u653E\u5728 .obsidian \u6216 .trash \u4E2D");
+  }
+  if (settings.folderMode === "flat" && (!settings.flatSeparator || /[\\/:\x00-\x1f]/.test(settings.flatSeparator))) {
+    throw new Error("\u6241\u5E73\u5206\u9694\u7B26\u4E0D\u80FD\u4E3A\u7A7A\uFF0C\u4E5F\u4E0D\u80FD\u5305\u542B\u8DEF\u5F84\u5206\u9694\u7B26");
+  }
+  if (/\/wiki\//i.test(settings.spaceId))
+    throw new Error("space_id \u9700\u8981\u77E5\u8BC6\u7A7A\u95F4 ID\uFF1B\u8BF7\u7528\u300C\u62C9\u53D6\u5217\u8868\u300D\u9009\u62E9\uFF0C\u9875\u9762\u94FE\u63A5\u586B\u5165\u540C\u6B65\u6839\u8282\u70B9");
+}
+function validateLocalPaths(paths, settings) {
+  for (const path of paths) {
+    assertSafeVaultPath(path);
+    if (settings.folderMode === "flat" && path.includes(settings.flatSeparator)) {
+      throw new Error(`\u7B14\u8BB0\u8DEF\u5F84\u5305\u542B\u6241\u5E73\u5206\u9694\u7B26 ${settings.flatSeparator}\uFF0C\u65E0\u6CD5\u65E0\u6B67\u4E49\u8FD8\u539F\uFF1A${path}\uFF1B\u8BF7\u4F7F\u7528\u955C\u50CF\u76EE\u5F55\u6A21\u5F0F`);
+    }
+  }
+}
+function assertPlanCurrent(plan, settings) {
+  if (plan.settingsFingerprint !== planFingerprint(settings)) {
+    throw new Error("\u9884\u89C8\u540E\u540C\u6B65\u8BBE\u7F6E\u6216\u6620\u5C04\u72B6\u6001\u53D1\u751F\u53D8\u5316\uFF0C\u8BF7\u91CD\u65B0\u9884\u89C8\u540C\u6B65\u8BA1\u5212");
+  }
+}
+function prepareTarget(settings, spaceId, rootNodeToken, syncMode) {
+  const previous = settings.state.target;
+  const changed = !!previous && (previous.spaceId !== spaceId || previous.rootNodeToken !== rootNodeToken || (previous.syncMode ?? "md") !== syncMode || previous.folderMode !== void 0 && previous.folderMode !== settings.folderMode || previous.flatSeparator !== void 0 && previous.flatSeparator !== settings.flatSeparator || previous.rootPageTitle !== void 0 && previous.rootPageTitle !== settings.rootPageTitle);
+  if (changed)
+    settings.state = emptyState();
+  settings.state.target = {
+    spaceId,
+    rootNodeToken,
+    syncMode,
+    folderMode: settings.folderMode,
+    flatSeparator: settings.flatSeparator,
+    rootPageTitle: settings.rootPageTitle
+  };
+  return changed;
+}
+function filterPlan(plan, mode) {
+  if (mode === "both")
+    return plan;
+  const items = plan.items.filter((entry) => mode === "pull" ? !["push", "create-remote", "delete-remote"].includes(entry.action) : !["pull", "create-local", "delete-local"].includes(entry.action));
+  return { ...plan, items, counts: summarize(items) };
+}
+async function isEditorDirty(app, relPath) {
+  for (const leaf of app.workspace.getLeavesOfType("markdown")) {
+    const view = leaf.view;
+    if (view?.file?.path !== relPath || !view.editor)
+      continue;
+    const file = app.vault.getAbstractFileByPath(relPath);
+    const disk = file instanceof import_obsidian6.TFile ? await app.vault.read(file) : "";
+    if (view.editor.getValue() !== disk)
+      return true;
+  }
+  return false;
+}
+function deferDeletes(plan, allowDeletes = true) {
+  if (allowDeletes)
+    return plan;
+  const items = plan.items.map((entry) => entry.action === "delete-local" || entry.action === "delete-remote" ? {
+    ...entry,
+    action: entry.action === "delete-local" ? "remote-deleted" : "local-deleted",
+    reason: "\u5220\u9664\u7B49\u5F85\u624B\u52A8\u540C\u6B65\u786E\u8BA4\uFF0C\u5B9A\u65F6\u540C\u6B65\u672A\u6267\u884C\u5220\u9664"
+  } : entry);
+  return { ...plan, items, counts: summarize(items) };
+}
+
+// src/feishu/files.ts
+var META_CHUNK = 50;
+function pickString(source, keys) {
+  if (!source)
+    return void 0;
+  for (const key of keys) {
+    const value = source[key];
+    if (typeof value === "string" && value)
+      return value;
+    if (typeof value === "number")
+      return String(value);
+  }
+  return void 0;
+}
+async function batchQueryMetas(client, tokens, docType = "file") {
+  const result = /* @__PURE__ */ new Map();
+  for (let index = 0; index < tokens.length; index += META_CHUNK) {
+    const chunk = tokens.slice(index, index + META_CHUNK);
+    const data = await client.json("POST", "/open-apis/drive/v1/metas/batch_query", {
+      body: {
+        request_docs: chunk.map((token) => ({ doc_token: token, doc_type: docType })),
+        with_url: true
+      }
+    });
+    for (const meta of data?.metas ?? []) {
+      const token = pickString(meta, ["doc_token", "token"]);
+      if (!token)
+        continue;
+      result.set(token, {
+        token,
+        title: pickString(meta, ["title", "name"]),
+        url: pickString(meta, ["url"]),
+        modifiedTime: pickString(meta, ["latest_modify_time", "modified_time", "latest_modify_time_ms"])
+      });
+    }
+  }
+  return result;
+}
+async function uploadMarkdown(client, options) {
+  const fields = {
+    file_name: options.fileName,
+    parent_type: options.parentType,
+    parent_node: options.parentNode,
+    size: String(options.data.byteLength)
+  };
+  if (options.fileToken)
+    fields.file_token = options.fileToken;
+  const data = await client.json("POST", "/open-apis/drive/v1/files/upload_all", {
+    multipart: { fields, file: { name: options.fileName, data: options.data } }
+  });
+  const fileToken = pickString(data, ["file_token"]) ?? options.fileToken;
+  if (!fileToken)
+    throw new Error(`\u4E0A\u4F20 ${options.fileName} \u540E\u672A\u8FD4\u56DE file_token`);
+  return { fileToken, version: pickString(data, ["version"]) };
+}
+async function downloadFile(client, fileToken, version) {
+  const bytes = await client.binary(`/open-apis/drive/v1/medias/${pathSegment(fileToken)}/preview_download`, version ? { version } : void 0);
+  if (bytes.byteLength === 0) {
+    throw new Error(`\u8FDC\u7AEF ${fileToken} \u8FD4\u56DE\u4E86\u7A7A\u5185\u5BB9\uFF0C\u5DF2\u653E\u5F03\u672C\u6B21\u8986\u76D6`);
+  }
+  return bytes;
+}
+async function deleteDriveFile(client, token, type) {
+  await client.json("DELETE", `/open-apis/drive/v1/files/${pathSegment(token)}`, { query: { type } });
+}
+async function uploadMarkdownToWiki(client, options, onFallback) {
+  const driveThenMove = async () => {
+    const uploaded = await uploadMarkdown(client, {
+      fileName: options.fileName,
+      data: options.data,
+      parentType: "explorer",
+      parentNode: ""
+    });
+    await moveDocToWiki(client, options.spaceId, options.parentNode, uploaded.fileToken, "file");
+    return uploaded;
+  };
+  if (!options.fileToken && !options.parentNode) {
+    return driveThenMove();
+  }
+  try {
+    return await uploadMarkdown(client, {
+      fileName: options.fileName,
+      data: options.data,
+      parentType: "wiki",
+      parentNode: options.parentNode ?? "",
+      fileToken: options.fileToken
+    });
+  } catch (error) {
+    if (error instanceof FeishuError && error.authRelated)
+      throw error;
+    if (options.fileToken)
+      throw error;
+    if (!(error instanceof FeishuError) || ![200, 400].includes(error.status) || ![1061002, 1061006].includes(error.code))
+      throw error;
+    onFallback?.(error instanceof Error ? error.message : String(error));
+    return driveThenMove();
+  }
+}
+
+// src/sync/executor.ts
+var import_obsidian7 = require("obsidian");
+
+// src/sync/hash.ts
+function loadNodeCrypto() {
+  const requireFn = globalThis.require;
+  if (!requireFn)
+    return null;
+  try {
+    return requireFn("crypto");
+  } catch {
+    return null;
+  }
+}
+function toHex(bytes) {
+  let out = "";
+  for (const byte of bytes)
+    out += byte.toString(16).padStart(2, "0");
+  return out;
+}
+async function sha256Hex(data) {
+  const nodeCrypto = loadNodeCrypto();
+  if (nodeCrypto) {
+    return nodeCrypto.createHash("sha256").update(new Uint8Array(data)).digest("hex");
+  }
+  const subtle = globalThis.crypto?.subtle;
+  if (subtle) {
+    const digest = await subtle.digest("SHA-256", data);
+    return toHex(new Uint8Array(digest));
+  }
+  throw new Error("\u5F53\u524D\u73AF\u5883\u6CA1\u6709\u53EF\u7528\u7684 SHA-256 \u5B9E\u73B0");
+}
+
+// src/sync/executor.ts
+function two(value) {
+  return String(value).padStart(2, "0");
+}
+function conflictCopyRelPath(relPath) {
+  const now = /* @__PURE__ */ new Date();
+  const stamp = `${now.getFullYear()}${two(now.getMonth() + 1)}${two(now.getDate())}-${two(now.getHours())}${two(now.getMinutes())}${two(now.getSeconds())}-${String(now.getMilliseconds()).padStart(3, "0")}`;
+  const base = relPath.replace(/\.md$/i, "");
+  return `${CONFLICT_DIR}/${base}.${stamp}.md`;
+}
+function existsLocally(app, relPath) {
+  return app.vault.getAbstractFileByPath(relPath) instanceof import_obsidian7.TFile;
+}
+async function hashLocalFile(app, relPath) {
+  return sha256Hex(await readLocalBytes(app, relPath));
+}
+async function executePlan(plan, ctx, options) {
+  const reports = [];
+  const { state, settings } = ctx;
+  const folderNodes = /* @__PURE__ */ new Map();
+  let rootContainerToken;
+  const ensureRootContainer = async () => {
+    if (ctx.rootNodeToken)
+      return ctx.rootNodeToken;
+    if (rootContainerToken)
+      return rootContainerToken;
+    const cached = state.folders[""];
+    if (cached?.nodeToken) {
+      rootContainerToken = cached.nodeToken;
+      return rootContainerToken;
+    }
+    const title = settings.rootPageTitle.trim() || ctx.app.vault.getName();
+    const topLevel = await listNodes(ctx.client, ctx.spaceId);
+    const found = topLevel.find((node2) => node2.title === title && node2.obj_type !== "file");
+    if (found?.node_token) {
+      state.folders[""] = { nodeToken: found.node_token };
+      rootContainerToken = found.node_token;
+      ctx.logger.info(`\u590D\u7528\u77E5\u8BC6\u5E93\u9876\u5C42\u9875\u9762\u300C${title}\u300D\u5B58\u653E vault \u6839\u76EE\u5F55\u4E0B\u7684\u7B14\u8BB0`);
+      return rootContainerToken;
+    }
+    const node = await createContainerNode(ctx.client, ctx.spaceId, void 0, title);
+    state.folders[""] = { nodeToken: node.node_token };
+    rootContainerToken = node.node_token;
+    ctx.logger.info(`\u5728\u77E5\u8BC6\u5E93\u9876\u5C42\u521B\u5EFA\u9875\u9762\u300C${title}\u300D\u5B58\u653E vault \u6839\u76EE\u5F55\u4E0B\u7684\u7B14\u8BB0`);
+    return rootContainerToken;
+  };
+  const resolveFolderNode = async (relDir, needFileParent) => {
+    if (settings.folderMode === "flat" || relDir === "") {
+      return needFileParent ? ensureRootContainer() : ctx.rootNodeToken;
+    }
+    const cached = folderNodes.get(relDir);
+    if (cached)
+      return cached;
+    const existing = state.folders[relDir];
+    if (existing?.nodeToken) {
+      folderNodes.set(relDir, existing.nodeToken);
+      return existing.nodeToken;
+    }
+    const parentDir = dirnameOf(relDir);
+    const parentNode = await resolveFolderNode(parentDir, false);
+    const node = await createContainerNode(ctx.client, ctx.spaceId, parentNode, basenameOf(relDir));
+    state.folders[relDir] = { nodeToken: node.node_token, parentNodeToken: parentNode };
+    folderNodes.set(relDir, node.node_token);
+    ctx.logger.info(`\u521B\u5EFA\u77E5\u8BC6\u5E93\u76EE\u5F55\u8282\u70B9 ${relDir} -> ${node.node_token}`);
+    return node.node_token;
+  };
+  const remoteFileName = (relPath) => settings.folderMode === "flat" ? relPath.split("/").join(settings.flatSeparator) : basenameOf(relPath);
+  const writeConflictCopy = async (relPath, bytes, localHash, remoteHash) => {
+    const copyPath = conflictCopyRelPath(relPath);
+    const adapter = ctx.app.vault.adapter;
+    await ensureFolder(adapter, dirnameOf(copyPath));
+    await adapter.writeBinary(copyPath, bytes);
+    state.conflicts[relPath] = { remoteHash, localHash, copyPath, at: Date.now() };
+    return copyPath;
+  };
+  const pushes = plan.items.filter((entry) => entry.action === "push" || entry.action === "create-remote");
+  const pulls = plan.items.filter((entry) => entry.action === "pull" || entry.action === "create-local");
+  const links = plan.items.filter((entry) => entry.action === "link");
+  const conflicts = plan.items.filter((entry) => entry.action === "conflict");
+  const remoteDeletes = plan.items.filter((entry) => entry.action === "delete-remote");
+  const localDeletes = plan.items.filter((entry) => entry.action === "delete-local");
+  const observed = plan.items.filter(
+    (entry) => ["local-deleted", "remote-deleted", "empty-local", "dirty-editor", "forget"].includes(entry.action)
+  );
+  const steps = [];
+  let stepIndex = 0;
+  const totalSteps = (options.allowPush ? pushes.length + remoteDeletes.length : 0) + (options.allowPull ? pulls.length + localDeletes.length : 0) + links.length + conflicts.length;
+  const tick = (message) => {
+    stepIndex += 1;
+    options.onProgress?.(message, stepIndex, totalSteps);
+  };
+  if (options.allowPush) {
+    for (const entry of pushes) {
+      steps.push(async () => {
+        try {
+          const statBefore = localStat(ctx.app, entry.relPath);
+          const bytes = await readLocalBytes(ctx.app, entry.relPath);
+          if (await options.isEditorDirty(entry.relPath) || entry.localHash !== void 0 && await sha256Hex(bytes) !== entry.localHash) {
+            throw new Error("\u9884\u89C8\u540E\u672C\u5730\u6B63\u6587\u5DF2\u6539\u53D8\uFF0C\u8BF7\u4FDD\u5B58\u540E\u91CD\u65B0\u9884\u89C8");
+          }
+          if (entry.action === "push") {
+            const previous = state.records[entry.relPath];
+            const token = entry.fileToken ?? previous?.fileToken;
+            if (!token || await sha256Hex(await downloadFile(ctx.client, token)) !== (entry.remoteHash ?? previous?.baseHash)) {
+              throw new Error("\u9884\u89C8\u540E\u98DE\u4E66\u6B63\u6587\u5DF2\u6539\u53D8\uFF0C\u5DF2\u505C\u6B62\u8986\u76D6\uFF0C\u8BF7\u91CD\u65B0\u540C\u6B65");
+            }
+          }
+          const parentNode = await resolveFolderNode(entry.parentDir, true);
+          const record = state.records[entry.relPath];
+          const previousToken = entry.action === "push" ? record?.fileToken : void 0;
+          const result = await uploadMarkdownToWiki(
+            ctx.client,
+            {
+              spaceId: ctx.spaceId,
+              parentNode,
+              fileName: remoteFileName(entry.relPath),
+              data: bytes,
+              fileToken: previousToken
+            },
+            (reason) => ctx.logger.warn(`\u76F4\u63A5\u4E0A\u4F20\u5230\u77E5\u8BC6\u5E93\u8282\u70B9\u5931\u8D25\uFF0C\u6539\u7528\u4E91\u7A7A\u95F4\u4E2D\u8F6C\uFF1A${reason}`)
+          );
+          const hash = await sha256Hex(bytes);
+          const statAfter = localStat(ctx.app, entry.relPath);
+          const stable = statAfter.size === statBefore.size && statAfter.mtime === statBefore.mtime;
+          let nodeToken = record?.nodeToken;
+          if (result.fileToken !== record?.fileToken) {
+            const node = await getNodeByToken(ctx.client, result.fileToken, "file").catch(() => void 0);
+            nodeToken = node?.node_token;
+          }
+          state.records[entry.relPath] = {
+            fileToken: result.fileToken,
+            nodeToken,
+            parentNodeToken: parentNode,
+            baseHash: hash,
+            localSize: stable ? statAfter.size : -1,
+            localMtime: stable ? statAfter.mtime : -1,
+            remoteModifiedTime: void 0,
+            remoteVersion: result.version,
+            lastSyncedAt: Date.now()
+          };
+          delete state.conflicts[entry.relPath];
+          reports.push({ relPath: entry.relPath, action: entry.action, ok: true });
+          tick(`\u4E0A\u4F20 ${entry.relPath}`);
+        } catch (error) {
+          ctx.logger.error(`\u4E0A\u4F20 ${entry.relPath} \u5931\u8D25\uFF1A${describeError(error)}`);
+          reports.push({ relPath: entry.relPath, action: entry.action, ok: false, message: describeError(error) });
+          tick(`\u4E0A\u4F20\u5931\u8D25 ${entry.relPath}`);
+        }
+      });
+    }
+  }
+  if (options.allowPull) {
+    for (const entry of pulls) {
+      steps.push(async () => {
+        const record = state.records[entry.relPath];
+        const fileToken = entry.fileToken ?? record?.fileToken;
+        if (!fileToken) {
+          reports.push({ relPath: entry.relPath, action: entry.action, ok: false, message: "\u7F3A\u5C11\u8FDC\u7AEF file_token" });
+          tick(`\u8DF3\u8FC7 ${entry.relPath}`);
+          return;
+        }
+        try {
+          const present = existsLocally(ctx.app, entry.relPath);
+          if (entry.action === "pull" && !present) {
+            reports.push({
+              relPath: entry.relPath,
+              action: entry.action,
+              ok: true,
+              message: "\u751F\u6210\u8BA1\u5212\u540E\u672C\u5730\u6587\u4EF6\u5DF2\u88AB\u5220\u9664\uFF0C\u672A\u91CD\u65B0\u521B\u5EFA\uFF08\u5982\u9700\u6062\u590D\u8BF7\u518D\u8DD1\u4E00\u6B21\u540C\u6B65\uFF09"
+            });
+            tick(`\u8DF3\u8FC7 ${entry.relPath}`);
+            return;
+          }
+          if (present && (entry.localSize !== void 0 || entry.localMtime !== void 0)) {
+            const before = localStat(ctx.app, entry.relPath);
+            const movedSincePlan = before.size !== entry.localSize || before.mtime !== entry.localMtime;
+            if (movedSincePlan) {
+              const remoteBytes = await downloadFile(ctx.client, fileToken);
+              const remoteHash = await sha256Hex(remoteBytes);
+              const currentLocalHash = await hashLocalFile(ctx.app, entry.relPath);
+              if (currentLocalHash !== remoteHash) {
+                const copyPath = await writeConflictCopy(entry.relPath, remoteBytes, currentLocalHash, remoteHash);
+                reports.push({
+                  relPath: entry.relPath,
+                  action: "conflict",
+                  ok: true,
+                  message: "\u8BA1\u5212\u751F\u6210\u540E\u672C\u5730\u53C8\u6709\u65B0\u6539\u52A8\uFF0C\u5DF2\u6539\u4E3A\u4FDD\u7559\u53CC\u65B9\uFF0C\u672C\u5730\u4E0E\u8FDC\u7AEF\u90FD\u672A\u6539\u52A8",
+                  copyPath
+                });
+                ctx.logger.warn(`\u62C9\u53D6\u524D\u53D1\u73B0\u672C\u5730\u5DF2\u6539\u52A8\uFF0C\u8F6C\u4E3A\u51B2\u7A81\uFF1A${entry.relPath}`);
+                tick(`\u51B2\u7A81 ${entry.relPath}`);
+                return;
+              }
+              state.records[entry.relPath] = {
+                fileToken,
+                nodeToken: entry.nodeToken ?? record?.nodeToken,
+                parentNodeToken: record?.parentNodeToken,
+                baseHash: currentLocalHash,
+                localSize: before.size,
+                localMtime: before.mtime,
+                remoteModifiedTime: entry.remoteModifiedTime ?? record?.remoteModifiedTime,
+                remoteVersion: record?.remoteVersion,
+                lastSyncedAt: Date.now()
+              };
+              delete state.conflicts[entry.relPath];
+              reports.push({ relPath: entry.relPath, action: "link", ok: true, message: "\u4E24\u8FB9\u5185\u5BB9\u4E00\u81F4\uFF0C\u53EA\u66F4\u65B0\u4E86\u57FA\u7EBF" });
+              tick(`\u5EFA\u7ACB\u6620\u5C04 ${entry.relPath}`);
+              return;
+            }
+          }
+          if (present && await options.isEditorDirty(entry.relPath)) {
+            reports.push({ relPath: entry.relPath, action: "dirty-editor", ok: true, message: "\u6587\u4EF6\u6B63\u5728\u7F16\u8F91\u4E14\u672A\u4FDD\u5B58\uFF0C\u672A\u8986\u76D6" });
+            tick(`\u8DF3\u8FC7\u7F16\u8F91\u4E2D\u7684 ${entry.relPath}`);
+            return;
+          }
+          const bytes = await downloadFile(ctx.client, fileToken);
+          if (entry.action === "create-local" && present) {
+            const currentLocalHash = await hashLocalFile(ctx.app, entry.relPath);
+            const remoteHash = await sha256Hex(bytes);
+            if (currentLocalHash !== remoteHash) {
+              const copyPath = await writeConflictCopy(entry.relPath, bytes, currentLocalHash, remoteHash);
+              reports.push({
+                relPath: entry.relPath,
+                action: "conflict",
+                ok: true,
+                message: "\u672C\u5730\u5728\u8BA1\u5212\u751F\u6210\u540E\u51FA\u73B0\u4E86\u540C\u540D\u6587\u4EF6\u4E14\u5185\u5BB9\u4E0D\u540C\uFF0C\u5DF2\u4FDD\u7559\u53CC\u65B9",
+                copyPath
+              });
+              tick(`\u51B2\u7A81 ${entry.relPath}`);
+              return;
+            }
+          }
+          const presentNow = existsLocally(ctx.app, entry.relPath);
+          if (presentNow !== present || presentNow && (await options.isEditorDirty(entry.relPath) || entry.localHash !== void 0 && await hashLocalFile(ctx.app, entry.relPath) !== entry.localHash)) {
+            throw new Error("\u4E0B\u8F7D\u671F\u95F4\u672C\u5730\u7B14\u8BB0\u5DF2\u6539\u53D8\uFF0C\u672A\u8986\u76D6\uFF0C\u8BF7\u91CD\u65B0\u540C\u6B65");
+          }
+          await writeLocalBytes(ctx.app, entry.relPath, bytes);
+          const hash = await sha256Hex(bytes);
+          const stat = localStat(ctx.app, entry.relPath);
+          state.records[entry.relPath] = {
+            fileToken,
+            nodeToken: entry.nodeToken ?? record?.nodeToken,
+            parentNodeToken: record?.parentNodeToken,
+            baseHash: hash,
+            localSize: stat.size,
+            localMtime: stat.mtime,
+            remoteModifiedTime: entry.remoteModifiedTime ?? record?.remoteModifiedTime,
+            remoteVersion: record?.remoteVersion,
+            lastSyncedAt: Date.now()
+          };
+          delete state.conflicts[entry.relPath];
+          reports.push({ relPath: entry.relPath, action: entry.action, ok: true });
+          tick(`\u4E0B\u8F7D ${entry.relPath}`);
+        } catch (error) {
+          ctx.logger.error(`\u4E0B\u8F7D ${entry.relPath} \u5931\u8D25\uFF1A${describeError(error)}`);
+          reports.push({ relPath: entry.relPath, action: entry.action, ok: false, message: describeError(error) });
+          tick(`\u4E0B\u8F7D\u5931\u8D25 ${entry.relPath}`);
+        }
+      });
+    }
+  }
+  for (const entry of links) {
+    steps.push(async () => {
+      try {
+        const statBefore = localStat(ctx.app, entry.relPath);
+        const bytes = await readLocalBytes(ctx.app, entry.relPath);
+        const hash = await sha256Hex(bytes);
+        const statAfter = localStat(ctx.app, entry.relPath);
+        const stable = statAfter.size === statBefore.size && statAfter.mtime === statBefore.mtime;
+        const existing = state.records[entry.relPath];
+        const fileToken = entry.fileToken ?? existing?.fileToken;
+        if (!fileToken || await options.isEditorDirty(entry.relPath) || hash !== entry.localHash || await sha256Hex(await downloadFile(ctx.client, fileToken)) !== entry.remoteHash) {
+          throw new Error("\u9884\u89C8\u540E\u5185\u5BB9\u5DF2\u6539\u53D8\uFF0C\u672A\u66F4\u65B0\u6620\u5C04\uFF0C\u8BF7\u91CD\u65B0\u540C\u6B65");
+        }
+        state.records[entry.relPath] = {
+          fileToken: entry.fileToken ?? existing?.fileToken ?? "",
+          nodeToken: entry.nodeToken ?? existing?.nodeToken,
+          parentNodeToken: existing?.parentNodeToken,
+          baseHash: hash,
+          localSize: stable ? statAfter.size : -1,
+          localMtime: stable ? statAfter.mtime : -1,
+          remoteModifiedTime: entry.remoteModifiedTime,
+          remoteVersion: entry.remoteVersion ?? existing?.remoteVersion,
+          lastSyncedAt: Date.now()
+        };
+        delete state.conflicts[entry.relPath];
+        reports.push({ relPath: entry.relPath, action: entry.action, ok: true, message: entry.reason });
+        tick(`\u5EFA\u7ACB\u6620\u5C04 ${entry.relPath}`);
+      } catch (error) {
+        reports.push({ relPath: entry.relPath, action: entry.action, ok: false, message: describeError(error) });
+        tick(`\u5EFA\u7ACB\u6620\u5C04\u5931\u8D25 ${entry.relPath}`);
+      }
+    });
+  }
+  for (const entry of conflicts) {
+    steps.push(async () => {
+      const record = state.records[entry.relPath];
+      const fileToken = entry.fileToken ?? record?.fileToken;
+      const previous = state.conflicts[entry.relPath];
+      if (entry.duplicateConflict && previous) {
+        reports.push({
+          relPath: entry.relPath,
+          action: "conflict",
+          ok: true,
+          message: "\u4ECD\u662F\u4E0A\u6B21\u672A\u5904\u7406\u7684\u51B2\u7A81\uFF0C\u672A\u91CD\u590D\u751F\u6210\u526F\u672C",
+          copyPath: previous.copyPath
+        });
+        tick(`\u51B2\u7A81 ${entry.relPath}`);
+        return;
+      }
+      if (!fileToken) {
+        reports.push({ relPath: entry.relPath, action: "conflict", ok: false, message: "\u7F3A\u5C11\u8FDC\u7AEF file_token\uFF0C\u65E0\u6CD5\u53D6\u51FA\u51B2\u7A81\u7248\u672C" });
+        tick(`\u51B2\u7A81 ${entry.relPath}`);
+        return;
+      }
+      try {
+        const bytes = await downloadFile(ctx.client, fileToken);
+        const remoteHash = await sha256Hex(bytes);
+        const present = existsLocally(ctx.app, entry.relPath);
+        const localHash = present ? await hashLocalFile(ctx.app, entry.relPath) : "";
+        if (previous && previous.remoteHash === remoteHash && previous.localHash === localHash) {
+          reports.push({
+            relPath: entry.relPath,
+            action: "conflict",
+            ok: true,
+            message: "\u4ECD\u662F\u4E0A\u6B21\u672A\u5904\u7406\u7684\u51B2\u7A81\uFF0C\u672A\u91CD\u590D\u751F\u6210\u526F\u672C",
+            copyPath: previous.copyPath
+          });
+          tick(`\u51B2\u7A81 ${entry.relPath}`);
+          return;
+        }
+        const copyPath = await writeConflictCopy(entry.relPath, bytes, localHash, remoteHash);
+        reports.push({
+          relPath: entry.relPath,
+          action: "conflict",
+          ok: true,
+          message: "\u8FDC\u7AEF\u7248\u672C\u5DF2\u53E6\u5B58\u4E3A\u526F\u672C\uFF0C\u672C\u5730\u4E0E\u8FDC\u7AEF\u90FD\u672A\u6539\u52A8",
+          copyPath
+        });
+        ctx.logger.warn(`\u51B2\u7A81\uFF1A${entry.relPath} -> ${copyPath}`);
+        tick(`\u51B2\u7A81 ${entry.relPath}`);
+      } catch (error) {
+        reports.push({ relPath: entry.relPath, action: "conflict", ok: false, message: describeError(error) });
+        tick(`\u51B2\u7A81\u5904\u7406\u5931\u8D25 ${entry.relPath}`);
+      }
+    });
+  }
+  for (const step of steps) {
+    await step();
+  }
+  if (options.allowPush) {
+    for (const entry of remoteDeletes) {
+      const record = state.records[entry.relPath];
+      const fileToken = entry.fileToken ?? record?.fileToken;
+      const title = entry.remoteTitle ?? entry.relPath;
+      if (!fileToken) {
+        reports.push({ relPath: entry.relPath, action: "delete-remote", ok: false, message: "\u7F3A\u5C11\u8FDC\u7AEF file_token\uFF0C\u672A\u5220\u9664" });
+        tick(`\u8DF3\u8FC7\u5220\u9664 ${entry.relPath}`);
+        continue;
+      }
+      try {
+        if (existsLocally(ctx.app, entry.relPath) || await options.isEditorDirty(entry.relPath)) {
+          throw new Error("\u672C\u5730\u7B14\u8BB0\u5DF2\u6062\u590D\u6216\u6B63\u5728\u7F16\u8F91\uFF0C\u672A\u5220\u9664\u8FDC\u7AEF\uFF0C\u8BF7\u91CD\u65B0\u9884\u89C8");
+        }
+        const remoteHashNow = await sha256Hex(await downloadFile(ctx.client, fileToken));
+        if (!record || remoteHashNow !== record.baseHash) {
+          throw new Error("\u98DE\u4E66\u5185\u5BB9\u5728\u9884\u89C8\u540E\u5DF2\u6539\u53D8\uFF0C\u672A\u5220\u9664\uFF0C\u8BF7\u91CD\u65B0\u540C\u6B65");
+        }
+        if (existsLocally(ctx.app, entry.relPath) || await options.isEditorDirty(entry.relPath)) {
+          throw new Error("\u68C0\u67E5\u671F\u95F4\u672C\u5730\u7B14\u8BB0\u5DF2\u6062\u590D\uFF0C\u672A\u5220\u9664\u8FDC\u7AEF");
+        }
+        await deleteDriveFile(ctx.client, fileToken, "file");
+        delete state.records[entry.relPath];
+        delete state.conflicts[entry.relPath];
+        ctx.logger.info(`\u5DF2\u5220\u9664\u8FDC\u7AEF\u6587\u4EF6 ${title}\uFF08${fileToken}\uFF09\uFF0C\u8FDB\u98DE\u4E66\u56DE\u6536\u7AD9\u53EF\u6062\u590D`);
+        reports.push({
+          relPath: entry.relPath,
+          action: "delete-remote",
+          ok: true,
+          message: `\u5DF2\u5220\u9664\u8FDC\u7AEF\u300C${title}\u300D\uFF08\u8FDB\u98DE\u4E66\u56DE\u6536\u7AD9\uFF0C\u53EF\u6062\u590D\uFF09`
+        });
+        tick(`\u5220\u9664\u8FDC\u7AEF ${entry.relPath}`);
+      } catch (error) {
+        ctx.logger.error(`\u5220\u9664\u8FDC\u7AEF ${entry.relPath} \u5931\u8D25\uFF1A${describeError(error)}`);
+        reports.push({ relPath: entry.relPath, action: "delete-remote", ok: false, message: describeError(error) });
+        tick(`\u5220\u9664\u8FDC\u7AEF\u5931\u8D25 ${entry.relPath}`);
+      }
+    }
+  }
+  if (options.allowPull) {
+    for (const entry of localDeletes) {
+      try {
+        const file = existsLocally(ctx.app, entry.relPath) ? ctx.app.vault.getAbstractFileByPath(entry.relPath) : null;
+        if (file) {
+          await assertRemoteAbsent(ctx.client, ctx.spaceId, ctx.rootNodeToken, state.records[entry.relPath]?.fileToken);
+          if (await options.isEditorDirty(entry.relPath) || !entry.localHash || await hashLocalFile(ctx.app, entry.relPath) !== entry.localHash) {
+            throw new Error("\u672C\u5730\u7B14\u8BB0\u5728\u9884\u89C8\u540E\u5DF2\u6539\u53D8\uFF0C\u672A\u5220\u9664\uFF0C\u8BF7\u91CD\u65B0\u540C\u6B65");
+          }
+          await ctx.app.vault.trash(file, false);
+        }
+        delete state.records[entry.relPath];
+        delete state.conflicts[entry.relPath];
+        reports.push({
+          relPath: entry.relPath,
+          action: "delete-local",
+          ok: true,
+          message: file ? "\u8FDC\u7AEF\u5DF2\u5220\u9664\uFF0C\u672C\u5730\u7B14\u8BB0\u5DF2\u79FB\u5165 .trash" : "\u8FDC\u7AEF\u5DF2\u5220\u9664\uFF0C\u672C\u5730\u6587\u4EF6\u5DF2\u4E0D\u5B58\u5728\uFF0C\u53EA\u6E05\u7406\u4E86\u6620\u5C04"
+        });
+        tick(`\u5220\u9664\u672C\u5730 ${entry.relPath}`);
+      } catch (error) {
+        ctx.logger.error(`\u5220\u9664\u672C\u5730 ${entry.relPath} \u5931\u8D25\uFF1A${describeError(error)}`);
+        reports.push({ relPath: entry.relPath, action: "delete-local", ok: false, message: describeError(error) });
+        tick(`\u5220\u9664\u672C\u5730\u5931\u8D25 ${entry.relPath}`);
+      }
+    }
+  }
+  if (options.allowPush && pushes.length > 0) {
+    await refreshRemoteModifiedTime(ctx, pushes);
+  }
+  for (const entry of observed) {
+    if (entry.action === "forget") {
+      delete state.records[entry.relPath];
+      delete state.conflicts[entry.relPath];
+    }
+    reports.push({ relPath: entry.relPath, action: entry.action, ok: true, message: entry.reason });
+  }
+  state.lastSyncAt = Date.now();
+  return reports;
+}
+async function refreshRemoteModifiedTime(ctx, entries) {
+  const tokens = [];
+  for (const entry of entries) {
+    const record = ctx.state.records[entry.relPath];
+    if (record?.fileToken)
+      tokens.push(record.fileToken);
+  }
+  if (tokens.length === 0)
+    return;
+  try {
+    const metas = await batchQueryMetas(ctx.client, tokens);
+    for (const entry of entries) {
+      const record = ctx.state.records[entry.relPath];
+      if (!record)
+        continue;
+      const meta = metas.get(record.fileToken);
+      if (meta?.modifiedTime)
+        record.remoteModifiedTime = meta.modifiedTime;
+    }
+  } catch (error) {
+    ctx.logger.warn(`\u5237\u65B0\u8FDC\u7AEF\u5143\u6570\u636E\u5931\u8D25\uFF08\u4E0B\u6B21\u540C\u6B65\u4F1A\u91CD\u65B0\u6821\u9A8C\u5185\u5BB9\uFF09\uFF1A${describeError(error)}`);
+  }
+}
+
+// src/sync/planner.ts
+function item(relPath, action, reason, extra = {}) {
+  return { relPath, action, reason, parentDir: dirnameOf(relPath), ...extra };
+}
+function remoteFields(remote) {
+  return {
+    remoteTitle: remote.entry.title,
+    fileToken: remote.entry.objToken,
+    nodeToken: remote.entry.nodeToken,
+    remoteModifiedTime: remote.modifiedTime
+  };
+}
+function conflictItem(relPath, state, reason, extra, localHash, remoteHash) {
+  const previous = state.conflicts[relPath];
+  const duplicate = !!previous && previous.remoteHash === remoteHash && previous.localHash === localHash;
+  return item(relPath, "conflict", duplicate ? "\u4E0E\u4E0A\u6B21\u76F8\u540C\u7684\u51B2\u7A81\uFF0C\u672A\u91CD\u590D\u751F\u6210\u526F\u672C" : reason, {
+    ...extra,
+    localHash,
+    remoteHash,
+    duplicateConflict: duplicate
+  });
+}
+async function buildPlan(input) {
+  const { state, local, remote } = input;
+  const items = [];
+  const relPaths = /* @__PURE__ */ new Set([...local.keys(), ...remote.keys(), ...Object.keys(state.records)]);
+  for (const relPath of Array.from(relPaths).sort()) {
+    if (input.isExcluded(relPath))
+      continue;
+    const localNote = local.get(relPath);
+    const remoteNote = remote.get(relPath);
+    const record = state.records[relPath];
+    if (!record) {
+      if (localNote && remoteNote) {
+        if (localNote.size === 0) {
+          items.push(item(relPath, "empty-local", "\u7A7A\u6587\u4EF6\u4E0D\u4F1A\u88AB\u4E0A\u4F20\uFF08\u98DE\u4E66\u4E0D\u63A5\u53D7 0 \u5B57\u8282 Markdown\uFF09", remoteFields(remoteNote)));
+          continue;
+        }
+        const [localHash2, remoteHash2] = await Promise.all([
+          input.hashLocal(relPath),
+          input.hashRemote(remoteNote.entry.objToken)
+        ]);
+        if (localHash2 === remoteHash2) {
+          items.push(item(relPath, "link", "\u4E24\u8FB9\u5185\u5BB9\u4E00\u81F4\uFF0C\u53EA\u5EFA\u7ACB\u6620\u5C04", { ...remoteFields(remoteNote), localHash: localHash2, remoteHash: remoteHash2 }));
+        } else {
+          items.push(
+            conflictItem(relPath, state, "\u9996\u6B21\u5BF9\u63A5\uFF1A\u540C\u540D\u6587\u4EF6\u4E24\u8FB9\u5185\u5BB9\u4E0D\u540C\uFF0C\u5DF2\u4FDD\u7559\u53CC\u65B9", remoteFields(remoteNote), localHash2, remoteHash2)
+          );
+        }
+        continue;
+      }
+      if (localNote) {
+        if (localNote.size === 0) {
+          items.push(item(relPath, "empty-local", "\u7A7A\u6587\u4EF6\u4E0D\u4F1A\u88AB\u4E0A\u4F20\uFF08\u98DE\u4E66\u4E0D\u63A5\u53D7 0 \u5B57\u8282 Markdown\uFF09"));
+        } else {
+          items.push(item(relPath, "create-remote"));
+        }
+        continue;
+      }
+      if (remoteNote) {
+        items.push(item(relPath, "create-local", void 0, remoteFields(remoteNote)));
+      }
+      continue;
+    }
+    if (!localNote && !remoteNote) {
+      items.push(item(relPath, "forget", "\u4E24\u8FB9\u90FD\u5DF2\u4E0D\u5B58\u5728\uFF0C\u6E05\u7406\u6620\u5C04"));
+      continue;
+    }
+    if (!localNote) {
+      if (!remoteNote) {
+        items.push(item(relPath, "forget", "\u4E24\u8FB9\u90FD\u5DF2\u4E0D\u5B58\u5728\uFF0C\u6E05\u7406\u6620\u5C04"));
+        continue;
+      }
+      const remoteState2 = await checkRemoteChanged(input, record, remoteNote);
+      if (remoteState2.changed) {
+        items.push(
+          conflictItem(
+            relPath,
+            state,
+            "\u672C\u5730\u5DF2\u5220\u9664\u3001\u8FDC\u7AEF\u88AB\u4FEE\u6539\uFF1A\u4E3A\u907F\u514D\u4E22\u5185\u5BB9\uFF0C\u672A\u81EA\u52A8\u5904\u7406",
+            { ...remoteFields(remoteNote), fileToken: record.fileToken },
+            "",
+            remoteState2.hash ?? ""
+          )
+        );
+      } else if (input.propagateLocalDelete) {
+        items.push(
+          item(relPath, "delete-remote", "\u672C\u5730\u5DF2\u5220\u9664\uFF0C\u6309\u8BBE\u7F6E\u5220\u9664\u8FDC\u7AEF\uFF08\u8FDB\u98DE\u4E66\u56DE\u6536\u7AD9\uFF0C\u53EF\u6062\u590D\uFF09", {
+            ...remoteFields(remoteNote),
+            fileToken: record.fileToken
+          })
+        );
+      } else {
+        items.push(item(relPath, "local-deleted", "\u672C\u5730\u5DF2\u5220\u9664\u3001\u8FDC\u7AEF\u672A\u53D8\uFF08\u672A\u81EA\u52A8\u5220\u9664\u8FDC\u7AEF\uFF09", remoteFields(remoteNote)));
+      }
+      continue;
+    }
+    if (!remoteNote) {
+      const localChanged2 = await isLocalChanged(input, record, localNote);
+      if (!localChanged2) {
+        if (input.propagateRemoteDelete) {
+          items.push(item(relPath, "delete-local", "\u8FDC\u7AEF\u5DF2\u5220\u9664\u4E14\u672C\u5730\u672A\u53D8\uFF0C\u6309\u8BBE\u7F6E\u628A\u672C\u5730\u7B14\u8BB0\u79FB\u8FDB .trash", {
+            fileToken: record.fileToken,
+            localSize: localNote.size,
+            localMtime: localNote.mtime
+          }));
+        } else {
+          items.push(item(relPath, "remote-deleted", "\u8FDC\u7AEF\u5DF2\u5220\u9664\u3001\u672C\u5730\u672A\u53D8\uFF08\u672A\u81EA\u52A8\u5220\u9664\u672C\u5730\uFF09"));
+        }
+      } else if (input.recreateRemoteIfDeleted) {
+        items.push(item(relPath, "create-remote", "\u8FDC\u7AEF\u5DF2\u5220\u9664\u4F46\u672C\u5730\u6709\u4FEE\u6539\uFF0C\u6309\u8BBE\u7F6E\u91CD\u65B0\u4E0A\u4F20"));
+      } else {
+        items.push(item(relPath, "remote-deleted", "\u8FDC\u7AEF\u5DF2\u5220\u9664\u3001\u672C\u5730\u6709\u4FEE\u6539\uFF1A\u4E3A\u907F\u514D\u8BEF\u6062\u590D\uFF0C\u672A\u81EA\u52A8\u91CD\u5EFA"));
+      }
+      continue;
+    }
+    if (localNote.size === 0) {
+      items.push(item(relPath, "empty-local", "\u7A7A\u6587\u4EF6\u4E0D\u53C2\u4E0E\u540C\u6B65", remoteFields(remoteNote)));
+      continue;
+    }
+    const localChanged = await isLocalChanged(input, record, localNote);
+    const remoteState = await checkRemoteChanged(input, record, remoteNote);
+    const remoteChanged = remoteState.changed;
+    if (!localChanged && !remoteChanged) {
+      items.push(item(relPath, "skip"));
+      continue;
+    }
+    if (localChanged && !remoteChanged) {
+      items.push(item(relPath, "push", void 0, remoteFields(remoteNote)));
+      continue;
+    }
+    if (!localChanged && remoteChanged) {
+      items.push(item(relPath, "pull", void 0, { ...remoteFields(remoteNote), localSize: localNote.size, localMtime: localNote.mtime }));
+      continue;
+    }
+    const [localHash, remoteHash] = await Promise.all([input.hashLocal(relPath), input.hashRemote(remoteNote.entry.objToken)]);
+    if (localHash === remoteHash) {
+      items.push(item(relPath, "link", "\u4E24\u8FB9\u5185\u5BB9\u4E00\u81F4\uFF0C\u53EA\u66F4\u65B0\u57FA\u7EBF", { ...remoteFields(remoteNote), localHash, remoteHash }));
+      continue;
+    }
+    if (localHash === record.baseHash) {
+      items.push(
+        item(relPath, "pull", "\u672C\u5730\u5185\u5BB9\u672A\u53D8\uFF0C\u8FDC\u7AEF\u624D\u662F\u65B0\u7248\u672C", {
+          ...remoteFields(remoteNote),
+          localHash,
+          remoteHash,
+          localSize: localNote.size,
+          localMtime: localNote.mtime
+        })
+      );
+      continue;
+    }
+    if (remoteHash === record.baseHash) {
+      items.push(item(relPath, "push", "\u8FDC\u7AEF\u5185\u5BB9\u672A\u53D8\uFF0C\u672C\u5730\u624D\u662F\u65B0\u7248\u672C", { ...remoteFields(remoteNote), localHash, remoteHash }));
+      continue;
+    }
+    items.push(
+      conflictItem(relPath, state, "\u4E24\u8FB9\u90FD\u6539\u8FC7\u4E14\u5185\u5BB9\u4E0D\u540C\uFF0C\u5DF2\u4FDD\u7559\u53CC\u65B9", remoteFields(remoteNote), localHash, remoteHash)
+    );
+  }
+  for (const entry of items) {
+    const note = local.get(entry.relPath);
+    if (!note || entry.action === "skip")
+      continue;
+    entry.localSize = note.size;
+    entry.localMtime = note.mtime;
+    entry.localHash = await input.hashLocal(entry.relPath);
+  }
+  return {
+    items,
+    counts: summarize(items),
+    localNoteCount: local.size,
+    remoteNoteCount: remote.size
+  };
+}
+async function isLocalChanged(input, record, localNote) {
+  if (record.localSize === localNote.size && record.localMtime === localNote.mtime && record.baseHash) {
+    return false;
+  }
+  const hash = await input.hashLocal(localNote.relPath);
+  return hash !== record.baseHash;
+}
+async function checkRemoteChanged(input, record, remoteNote) {
+  if (record.remoteModifiedTime && remoteNote.modifiedTime && record.remoteModifiedTime === remoteNote.modifiedTime) {
+    return { changed: false };
+  }
+  const hash = await input.hashRemote(remoteNote.entry.objToken);
+  return { changed: hash !== record.baseHash, hash };
+}
+
+// src/sync/engine.ts
+function parseTokenFromInput(input) {
+  const value = input.trim();
+  if (!value)
+    return "";
+  if (!/^https?:\/\//i.test(value))
+    return value;
+  try {
+    const url = new URL(value);
+    const segments = url.pathname.split("/").filter(Boolean);
+    return segments.length > 0 ? segments[segments.length - 1] : value;
+  } catch {
+    return value;
+  }
+}
+var SyncEngine = class {
+  constructor(deps) {
+    this.deps = deps;
+    this.syncing = false;
+  }
+  isSyncing() {
+    return this.syncing;
+  }
+  createClient() {
+    return new FeishuClient((force) => this.deps.auth.getToken(force), this.deps.logger);
+  }
+  async listSpaces() {
+    const client = this.createClient();
+    return listSpaces(client);
+  }
+  async run(options) {
+    if (this.syncing)
+      throw new Error("\u5DF2\u6709\u540C\u6B65\u4EFB\u52A1\u5728\u6267\u884C\u4E2D");
+    this.syncing = true;
+    try {
+      return await this.runInternal(options);
+    } finally {
+      this.syncing = false;
+    }
+  }
+  async runInternal(options) {
+    const settings = this.deps.getSettings();
+    validateSettings(settings);
+    const spaceId = parseTokenFromInput(settings.spaceId);
+    const rootNodeToken = parseTokenFromInput(settings.rootNodeToken) || void 0;
+    if (!spaceId)
+      throw new Error("\u8BF7\u5148\u5728\u63D2\u4EF6\u8BBE\u7F6E\u91CC\u586B\u5199\u77E5\u8BC6\u5E93 space_id");
+    const client = this.createClient();
+    const logger = this.deps.logger;
+    const filter = new PathFilter(settings.excludePatterns);
+    if (options.preApprovedPlan)
+      assertPlanCurrent(options.preApprovedPlan, settings);
+    if (prepareTarget(settings, spaceId, rootNodeToken ?? "", "md")) {
+      logger.warn("\u540C\u6B65\u76EE\u6807\u6216\u6A21\u5F0F\u5DF2\u53D8\u66F4\uFF0C\u5DF2\u6E05\u7A7A\u65E7\u6620\u5C04\uFF0C\u672C\u8F6E\u6309\u9996\u6B21\u5BF9\u63A5\u5224\u5B9A");
+    }
+    try {
+      let plan;
+      if (options.preApprovedPlan) {
+        plan = filterPlan(options.preApprovedPlan, options.mode);
+      } else {
+        if (!rootNodeToken && !settings.state.folders[""]?.nodeToken) {
+          const title = settings.rootPageTitle.trim() || this.deps.app.vault.getName();
+          try {
+            const topLevel = await listNodes(client, spaceId);
+            const found = topLevel.find((node) => node.title === title && node.obj_type !== "file");
+            if (found?.node_token) {
+              settings.state.folders[""] = { nodeToken: found.node_token };
+              logger.info(`\u8BC6\u522B\u5230\u5DF2\u6709\u7684\u77E5\u8BC6\u5E93\u9876\u5C42\u9875\u9762\u300C${title}\u300D\uFF0C\u590D\u7528\u5B83\u5B58\u653E vault \u6839\u76EE\u5F55\u4E0B\u7684\u7B14\u8BB0`);
+            }
+          } catch (error) {
+            throw new Error(`\u8BFB\u53D6\u77E5\u8BC6\u5E93\u9876\u5C42\u9875\u9762\u5931\u8D25\uFF0C\u5DF2\u505C\u6B62\u540C\u6B65\u4EE5\u907F\u514D\u91CD\u590D\u521B\u5EFA\uFF1A${String(error)}`);
+          }
+        }
+        options.onProgress?.("\u626B\u63CF\u672C\u5730\u7B14\u8BB0\u2026");
+        const local = scanLocalNotes(this.deps.app, filter);
+        validateLocalPaths(local.keys(), settings);
+        options.onProgress?.("\u8BFB\u53D6\u98DE\u4E66\u77E5\u8BC6\u5E93\u8282\u70B9\u6811\u2026");
+        const tree = await walkWikiTree(client, spaceId, rootNodeToken, {
+          rootContainerNode: settings.state.folders[""]?.nodeToken,
+          onProgress: (visited) => {
+            if (visited % 50 === 0)
+              options.onProgress?.(`\u8BFB\u53D6\u98DE\u4E66\u77E5\u8BC6\u5E93\u8282\u70B9\u6811\u2026\uFF08\u5DF2\u89C1 ${visited} \u4E2A\u8282\u70B9\uFF09`);
+          }
+        });
+        const remote = /* @__PURE__ */ new Map();
+        const seenPaths = /* @__PURE__ */ new Map();
+        for (const entry of tree) {
+          if (entry.objType !== "file")
+            continue;
+          if (entry.relDir && filter.isExcluded(entry.relDir))
+            continue;
+          const raw = joinPath(entry.relDir, entry.title);
+          const relPath = settings.folderMode === "flat" ? raw.split(settings.flatSeparator).join("/") : raw;
+          if (filter.isExcluded(relPath))
+            continue;
+          assertSafeVaultPath(relPath);
+          if (relPath.split("/").some((segment) => segment === ".." || segment === "." || segment === "")) {
+            logger.warn(`\u8FDC\u7AEF\u6807\u9898\u5305\u542B\u975E\u6CD5\u8DEF\u5F84\u7247\u6BB5\uFF0C\u5DF2\u8DF3\u8FC7\uFF1A${raw}`);
+            continue;
+          }
+          const normalized = relPath.normalize("NFC").toLowerCase();
+          const clash = seenPaths.get(normalized);
+          if (clash === relPath) {
+            throw new Error(`\u8FDC\u7AEF\u5B58\u5728\u591A\u4E2A\u540C\u540D\u8282\u70B9\uFF0C\u5DF2\u505C\u6B62\u540C\u6B65\uFF0C\u8BF7\u5148\u5728\u77E5\u8BC6\u5E93\u4E2D\u5904\u7406\uFF1A${relPath}`);
+          }
+          if (clash && clash !== relPath) {
+            throw new Error(`\u8FDC\u7AEF\u8DEF\u5F84\u5B58\u5728\u5927\u5C0F\u5199\u6216 Unicode \u6B67\u4E49\uFF0C\u5DF2\u505C\u6B62\u540C\u6B65\uFF1A${relPath} / ${clash}`);
+          }
+          seenPaths.set(normalized, relPath);
+          remote.set(relPath, { relPath, entry });
+        }
+        const modifiedTimes = /* @__PURE__ */ new Map();
+        if (remote.size > 0) {
+          options.onProgress?.("\u8BFB\u53D6\u8FDC\u7AEF\u5143\u6570\u636E\u2026");
+          const tokens = Array.from(remote.values()).map((note) => note.entry.objToken);
+          try {
+            const metas = await batchQueryMetas(client, tokens);
+            for (const [token, meta] of metas) {
+              if (meta.modifiedTime)
+                modifiedTimes.set(token, meta.modifiedTime);
+            }
+          } catch (error) {
+            logger.warn(`\u6279\u91CF\u8BFB\u53D6\u8FDC\u7AEF\u5143\u6570\u636E\u5931\u8D25\uFF0C\u5C06\u9010\u6587\u4EF6\u6821\u9A8C\u5185\u5BB9\uFF1A${String(error)}`);
+          }
+        }
+        for (const note of remote.values()) {
+          note.modifiedTime = modifiedTimes.get(note.entry.objToken);
+        }
+        const localHashCache = /* @__PURE__ */ new Map();
+        const remoteHashCache = /* @__PURE__ */ new Map();
+        plan = await buildPlan({
+          state: settings.state,
+          local,
+          remote,
+          isExcluded: (relPath) => filter.isExcluded(relPath),
+          recreateRemoteIfDeleted: settings.recreateRemoteIfDeleted,
+          propagateLocalDelete: settings.propagateLocalDelete,
+          propagateRemoteDelete: settings.propagateRemoteDelete,
+          hashLocal: async (relPath) => {
+            const cached = localHashCache.get(relPath);
+            if (cached)
+              return cached;
+            const bytes = await readLocalBytes(this.deps.app, relPath);
+            const hash = await sha256Hex(bytes);
+            localHashCache.set(relPath, hash);
+            return hash;
+          },
+          hashRemote: async (fileToken) => {
+            const cached = remoteHashCache.get(fileToken);
+            if (cached)
+              return cached;
+            const bytes = await downloadFile(client, fileToken);
+            const hash = await sha256Hex(bytes);
+            remoteHashCache.set(fileToken, hash);
+            return hash;
+          }
+        });
+        plan = filterPlan(plan, options.mode);
+      }
+      plan = deferDeletes(plan, options.allowDeletes);
+      plan.settingsFingerprint = planFingerprint(settings);
+      if (options.dryRun) {
+        return { plan, report: [], executed: false };
+      }
+      let allowPush = options.mode !== "pull";
+      const allowPull = options.mode !== "push";
+      let planForRun = plan;
+      if (options.confirm) {
+        const decision = await options.confirm(plan);
+        if (decision === "cancel")
+          return { plan, report: [], executed: false };
+        if (decision === "pull-only") {
+          allowPush = false;
+          planForRun = filterPlan(plan, "pull");
+        }
+      }
+      assertPlanCurrent(plan, settings);
+      try {
+        const report = await executePlan(
+          planForRun,
+          {
+            app: this.deps.app,
+            client,
+            settings,
+            state: settings.state,
+            logger,
+            spaceId,
+            rootNodeToken
+          },
+          {
+            allowPush,
+            allowPull,
+            isEditorDirty: (relPath) => isEditorDirty(this.deps.app, relPath),
+            onProgress: (message, done, total) => options.onProgress?.(`${message}\uFF08${done}/${total}\uFF09`)
+          }
+        );
+        return { plan: planForRun, report, executed: true };
+      } finally {
+        await this.deps.saveSettings();
+      }
+    } catch (error) {
+      await this.deps.saveSettings();
+      throw error;
+    }
+  }
+};
+
+// src/feishu/docs.ts
+var CREATE_EXTRA_PARAM = '{"open_create_async":true}';
+var FETCH_EXTRA_PARAM = '{"enable_user_cite_reference_map":true,"include_comments":true,"return_html5_block_data":true}';
+var ASYNC_MAX_WAIT_MS = 10 * 60 * 1e3;
+var ASYNC_DEFAULT_POLL_MS = 3e3;
+var ASYNC_MIN_POLL_MS = 100;
+var ASYNC_MAX_POLL_MS = 1e4;
+function sleep2(ms) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms));
+}
+function readString2(source, key) {
+  const value = source?.[key];
+  if (typeof value === "string" && value)
+    return value;
+  if (typeof value === "number")
+    return String(value);
+  return void 0;
+}
+function escapeTitleText(title) {
+  return title.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&#34;").replace(/'/g, "&#39;").replace(/\t/g, "&#x9;").replace(/\n/g, "&#xA;").replace(/\r/g, "&#xD;");
+}
+function buildMarkdownContent(title, markdown) {
+  const tag = `<title>${escapeTitleText(title.trim())}</title>`;
+  return markdown === "" ? tag : `${tag}
+${encodeFeishuMath(markdown)}`;
+}
+function warningsText(data) {
+  const warnings = data?.warnings;
+  if (!Array.isArray(warnings) || warnings.length === 0)
+    return "";
+  return `\uFF1B\u670D\u52A1\u7AEF warnings\uFF1A${warnings.map((item3) => String(item3)).join(" / ")}`;
+}
+function assertOperationSucceeded(endpoint, data) {
+  if (typeof data?.result === "string" && data.result.toLowerCase() === "failed") {
+    throw new FeishuError(`docs_ai ${endpoint} \u8FD4\u56DE result=failed${warningsText(data)}`, { endpoint });
+  }
+}
+function pollInterval(pollAfterMs) {
+  if (!pollAfterMs || pollAfterMs <= 0)
+    return ASYNC_DEFAULT_POLL_MS;
+  return Math.min(ASYNC_MAX_POLL_MS, Math.max(ASYNC_MIN_POLL_MS, pollAfterMs));
+}
+function decodeTaskResult(endpoint, task) {
+  const raw = task.result?.create_document;
+  if (typeof raw !== "string" || raw.trim() === "") {
+    throw new FeishuError(`docs_ai ${endpoint} \u7684\u5F02\u6B65\u4EFB\u52A1\u6210\u529F\u4F46\u7F3A\u5C11 result.create_document`, { endpoint });
+  }
+  try {
+    const parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object")
+      throw new Error("\u4E0D\u662F JSON \u5BF9\u8C61");
+    return parsed;
+  } catch (error) {
+    throw new FeishuError(`docs_ai ${endpoint} \u7684 result.create_document \u4E0D\u662F\u5408\u6CD5 JSON\uFF1A${String(error)}`, { endpoint });
+  }
+}
+async function waitForAsyncTask(client, task, options) {
+  const taskId = (task.task_id ?? "").trim();
+  if (!taskId) {
+    throw new FeishuError(`docs_ai ${options.endpoint} \u8FD4\u56DE\u4E86\u6CA1\u6709 task_id \u7684\u5F02\u6B65\u4EFB\u52A1`, { endpoint: options.endpoint });
+  }
+  const path = `/open-apis/docs_ai/v1/async_tasks/${pathSegment(taskId)}`;
+  const deadline = Date.now() + ASYNC_MAX_WAIT_MS;
+  let current = task;
+  let delay = 0;
+  let polls = 0;
+  for (; ; ) {
+    const status = (current.status ?? "").trim().toLowerCase();
+    if (status === "succeeded")
+      return decodeTaskResult(options.endpoint, current);
+    if (status === "failed" || status === "expired") {
+      const code = current.failure?.code ? `\uFF08code: ${current.failure.code}\uFF09` : "";
+      const message = current.failure?.message || status;
+      throw new FeishuError(`docs_ai \u6587\u6863\u5904\u7406\u5931\u8D25\uFF1A${message}${code}`, { endpoint: path });
+    }
+    if (status !== "" && status !== "processing") {
+      throw new FeishuError(`docs_ai ${path} \u8FD4\u56DE\u4E86\u672A\u77E5\u4EFB\u52A1\u72B6\u6001 ${current.status}`, { endpoint: path });
+    }
+    if (Date.now() >= deadline) {
+      throw new FeishuError(`docs_ai \u7B49\u5F85\u6587\u6863\u5904\u7406\u8D85\u8FC7 ${Math.round(ASYNC_MAX_WAIT_MS / 6e4)} \u5206\u949F\uFF0C\u8BF7\u7A0D\u540E\u7528\u300C\u53D6\u56DE\u300D\u91CD\u8BD5`, {
+        endpoint: path
+      });
+    }
+    if (delay > 0)
+      await sleep2(delay);
+    polls += 1;
+    options.onProgress?.(`\u7B49\u5F85\u98DE\u4E66\u5904\u7406\u6587\u6863\uFF08\u7B2C ${polls} \u6B21\u8F6E\u8BE2\uFF09\u2026`);
+    const data = await client.json("GET", path);
+    const next = data?.task;
+    if (!next)
+      throw new FeishuError(`docs_ai ${path} \u7684\u54CD\u5E94\u91CC\u6CA1\u6709 task`, { endpoint: path });
+    const returnedId = (next.task_id ?? "").trim();
+    if (returnedId && returnedId !== taskId) {
+      throw new FeishuError(`docs_ai ${path} \u8FD4\u56DE\u7684 task_id \u4E0E\u8BF7\u6C42\u4E0D\u4E00\u81F4`, { endpoint: path });
+    }
+    current = next;
+    delay = pollInterval(current.poll_after_ms);
+  }
+}
+async function createDocumentFromMarkdown(client, options) {
+  const title = options.title.trim();
+  if (!title)
+    throw new Error("\u521B\u5EFA\u6587\u6863\u9700\u8981\u975E\u7A7A\u6807\u9898");
+  const path = "/open-apis/docs_ai/v1/documents";
+  const body = {
+    format: "markdown",
+    content: buildMarkdownContent(title, options.markdown),
+    extra_param: CREATE_EXTRA_PARAM
+  };
+  if (options.parentToken)
+    body.parent_token = options.parentToken;
+  options.onProgress?.("\u521B\u5EFA\u98DE\u4E66\u6587\u6863\u2026");
+  const initial = await client.json("POST", path, { body });
+  assertOperationSucceeded(path, initial);
+  const taskId = (initial?.task?.task_id ?? "").trim();
+  const ready = taskId ? await waitForAsyncTask(client, initial.task, { endpoint: path, onProgress: options.onProgress }) : initial;
+  assertOperationSucceeded(path, ready);
+  const created = ready?.document;
+  const asRecord2 = ready;
+  const documentId = readString2(created, "document_id") ?? readString2(asRecord2, "document_id");
+  if (!documentId) {
+    throw new FeishuError(`docs_ai \u521B\u5EFA\u6587\u6863\u6210\u529F\u4F46\u6CA1\u6709\u8FD4\u56DE document_id`, { endpoint: path });
+  }
+  return {
+    documentId,
+    url: readString2(created, "url") ?? readString2(asRecord2, "url"),
+    newBlocks: readNewBlocks(ready),
+    revisionId: readRevisionId(ready)
+  };
+}
+async function updateDocumentFromMarkdown(client, documentId, options) {
+  const id = documentId.trim();
+  if (!id)
+    throw new Error("\u66F4\u65B0\u6587\u6863\u9700\u8981 document_id");
+  const path = `/open-apis/docs_ai/v1/documents/${pathSegment(id)}`;
+  const content = options.includeTitle === false ? encodeFeishuMath(options.markdown) : buildMarkdownContent(options.title, options.markdown);
+  const data = await client.json("PUT", path, {
+    body: { format: "markdown", command: "overwrite", revision_id: -1, content }
+  });
+  assertOperationSucceeded(path, data);
+  return { newBlocks: readNewBlocks(data), revisionId: readRevisionId(data) };
+}
+async function fetchDocumentMarkdown(client, documentId) {
+  const id = documentId.trim();
+  if (!id)
+    throw new Error("\u53D6\u56DE\u6587\u6863\u9700\u8981 document_id");
+  const path = `/open-apis/docs_ai/v1/documents/${pathSegment(id)}/fetch`;
+  const data = await client.json("POST", path, {
+    body: {
+      format: "markdown",
+      extra_param: FETCH_EXTRA_PARAM,
+      // CLI 默认 --detail simple：不导出 block id / 样式属性
+      export_option: { export_block_id: false, export_style_attrs: false, export_cite_extra_data: false }
+    }
+  });
+  const content = data?.document?.content;
+  if (typeof content !== "string") {
+    throw new FeishuError(`docs_ai \u53D6\u56DE\u6587\u6863 ${id} \u7684\u54CD\u5E94\u91CC\u6CA1\u6709 document.content`, { endpoint: path });
+  }
+  return content;
+}
+
+// src/sync/docPlanner.ts
+function documentTitleFor(relPath, settings) {
+  const name = basenameOf(relPath).replace(/\.md$/i, "");
+  if (settings.folderMode !== "flat")
+    return name;
+  const dir = dirnameOf(relPath);
+  if (!dir)
+    return name;
+  return `${dir.split("/").join(settings.flatSeparator)}${settings.flatSeparator}${name}`;
+}
+function uniqueDocumentTitle(title, taken) {
+  if (!taken.has(title))
+    return { title, renamed: false };
+  let candidate = `${title} (note)`;
+  let index = 2;
+  while (taken.has(candidate)) {
+    candidate = `${title} (note ${index})`;
+    index += 1;
+  }
+  return { title: candidate, renamed: true };
+}
+function illegalSegments(relPath) {
+  return relPath.split("/").some((segment) => segment === ".." || segment === "." || segment === "");
+}
+function deriveRelPath(entry, options, warnings) {
+  if (options.folderMode === "flat") {
+    const relPath2 = `${entry.title.split(options.flatSeparator).join("/")}.md`;
+    if (illegalSegments(relPath2)) {
+      warnings.push(`\u8FDC\u7AEF\u6807\u9898\u91CC\u7684\u8DEF\u5F84\u7247\u6BB5\u975E\u6CD5\uFF0C\u5DF2\u8DF3\u8FC7\uFF1A${entry.title}`);
+      return void 0;
+    }
+    return relPath2;
+  }
+  const relPath = joinPath(entry.relDir, `${entry.title.replace(/\.md$/i, "")}.md`);
+  if (illegalSegments(relPath)) {
+    warnings.push(`\u8FDC\u7AEF\u6807\u9898\u5305\u542B\u975E\u6CD5\u8DEF\u5F84\u7247\u6BB5\uFF0C\u5DF2\u8DF3\u8FC7\uFF1A${entry.title}`);
+    return void 0;
+  }
+  return relPath;
+}
+function buildDocRemoteIndex(options) {
+  const warnings = [];
+  const containerTokens = /* @__PURE__ */ new Set();
+  for (const folder of Object.values(options.state.folders)) {
+    if (folder.nodeToken)
+      containerTokens.add(folder.nodeToken);
+  }
+  if (options.rootContainerNode)
+    containerTokens.add(options.rootContainerNode);
+  const parentTokens = /* @__PURE__ */ new Set();
+  for (const entry of options.entries) {
+    if (entry.parentNodeToken)
+      parentTokens.add(entry.parentNodeToken);
+  }
+  for (const entry of options.entries) {
+    if (entry.objType === "file")
+      continue;
+    if (containerTokens.has(entry.nodeToken) || parentTokens.has(entry.nodeToken))
+      containerTokens.add(entry.nodeToken);
+  }
+  const containers = /* @__PURE__ */ new Map();
+  const containerTitles = /* @__PURE__ */ new Set();
+  for (const entry of options.entries) {
+    if (!containerTokens.has(entry.nodeToken))
+      continue;
+    const relDir = entry.nodeToken === options.rootContainerNode ? "" : joinPath(entry.relDir, entry.title);
+    if (options.folderMode === "nodes" && !containers.has(relDir)) {
+      containers.set(relDir, { nodeToken: entry.nodeToken, title: entry.title, parentNodeToken: entry.parentNodeToken });
+    }
+    containerTitles.add(entry.title);
+  }
+  const knownDocumentPaths = /* @__PURE__ */ new Map();
+  for (const [relPath, record] of Object.entries(options.state.docRecords)) {
+    knownDocumentPaths.set(record.documentId, relPath);
+  }
+  const notes = /* @__PURE__ */ new Map();
+  const seenPaths = /* @__PURE__ */ new Map();
+  for (const entry of options.entries) {
+    if (entry.objType !== "docx" || containerTokens.has(entry.nodeToken) && !knownDocumentPaths.has(entry.objToken))
+      continue;
+    const relPath = knownDocumentPaths.get(entry.objToken) ?? deriveRelPath(entry, options, warnings);
+    if (!relPath)
+      continue;
+    assertSafeVaultPath(relPath);
+    if (options.isExcluded(relPath))
+      continue;
+    const normalized = relPath.normalize("NFC").toLowerCase();
+    const clash = seenPaths.get(normalized);
+    if (clash === relPath) {
+      warnings.push(`\u8FDC\u7AEF\u5B58\u5728\u591A\u4E2A\u540C\u540D\u6587\u6863\uFF0C\u53EA\u5904\u7406\u5176\u4E2D\u4E00\u4E2A\uFF1A${relPath}`);
+      continue;
+    }
+    if (clash && clash !== relPath) {
+      warnings.push(`\u8FDC\u7AEF\u5B58\u5728\u4EC5\u5927\u5C0F\u5199\u6216 Unicode \u5F62\u5F0F\u4E0D\u540C\u7684\u540C\u540D\u6587\u6863\uFF0C\u5DF2\u8DF3\u8FC7\u5176\u4E2D\u4E00\u4E2A\uFF1A${relPath}\uFF08\u4E0E ${clash} \u51B2\u7A81\uFF09`);
+      continue;
+    }
+    seenPaths.set(normalized, relPath);
+    notes.set(relPath, {
+      relPath,
+      documentId: entry.objToken,
+      nodeToken: entry.nodeToken,
+      parentNodeToken: entry.parentNodeToken,
+      title: entry.title
+    });
+  }
+  return { notes, containers, containerTitles, warnings };
+}
+function createDocPlanCache() {
+  return {
+    localText: /* @__PURE__ */ new Map(),
+    localHash: /* @__PURE__ */ new Map(),
+    fetched: /* @__PURE__ */ new Map(),
+    fetchedHash: /* @__PURE__ */ new Map(),
+    pulled: /* @__PURE__ */ new Map(),
+    fetchCount: 0
+  };
+}
+function item2(relPath, action, reason, extra = {}) {
+  return { relPath, action, reason, parentDir: dirnameOf(relPath), ...extra };
+}
+function conflictItem2(relPath, state, reason, extra, localHash, remoteHash) {
+  const previous = state.conflicts[relPath];
+  const duplicate = !!previous && previous.remoteHash === remoteHash && previous.localHash === localHash;
+  return item2(relPath, "conflict", duplicate ? "\u4E0E\u4E0A\u6B21\u76F8\u540C\u7684\u51B2\u7A81\uFF0C\u672A\u91CD\u590D\u751F\u6210\u526F\u672C" : reason, {
+    ...extra,
+    localHash,
+    remoteHash,
+    duplicateConflict: duplicate
+  });
+}
+async function readLocalCached(input, relPath) {
+  const cached = input.cache.localText.get(relPath);
+  if (cached !== void 0)
+    return cached;
+  const text = await input.readLocal(relPath);
+  input.cache.localText.set(relPath, text);
+  return text;
+}
+async function hashLocalCached(input, relPath) {
+  const cached = input.cache.localHash.get(relPath);
+  if (cached !== void 0)
+    return cached;
+  const hash = await input.hashText(await readLocalCached(input, relPath));
+  input.cache.localHash.set(relPath, hash);
+  return hash;
+}
+async function fetchCached(input, documentId) {
+  const cached = input.cache.fetched.get(documentId);
+  if (cached !== void 0)
+    return cached;
+  input.cache.fetchCount += 1;
+  const text = await input.fetchMarkdown(documentId);
+  input.cache.fetched.set(documentId, text);
+  return text;
+}
+async function remoteChangedState(input, record, documentId, verifyContent = false) {
+  const metaTime = input.remoteModifiedTimes.get(documentId);
+  if (!verifyContent && !input.verifyRemoteByContent && record.remoteModifiedTime) {
+    if (metaTime !== void 0 && metaTime === record.remoteModifiedTime)
+      return { changed: false, metaTime };
+  }
+  const hash = await fetchedHash(input, documentId);
+  return { changed: hash !== record.baseRemoteHash, hash, metaTime };
+}
+async function fetchedHash(input, documentId) {
+  const cached = input.cache.fetchedHash.get(documentId);
+  if (cached !== void 0)
+    return cached;
+  const hash = await input.hashFetched(await fetchCached(input, documentId));
+  input.cache.fetchedHash.set(documentId, hash);
+  return hash;
+}
+async function pulledContent(input, relPath, remoteNote, localNote) {
+  const cached = input.cache.pulled.get(relPath);
+  if (cached !== void 0)
+    return cached;
+  const fetched = await fetchCached(input, remoteNote.documentId);
+  const localText = localNote ? await readLocalCached(input, relPath) : "";
+  const pulled = applyRules(
+    "toObsidian",
+    fetched,
+    { relPath, documentTitle: documentTitleFor(relPath, input.settings), localContent: localText },
+    input.rules
+  );
+  input.cache.pulled.set(relPath, pulled);
+  return pulled;
+}
+async function isLocalChanged2(input, record, localNote) {
+  if (record.localSize === localNote.size && record.localMtime === localNote.mtime && record.baseLocalHash) {
+    return false;
+  }
+  const hash = await hashLocalCached(input, localNote.relPath);
+  return hash !== record.baseLocalHash;
+}
+async function buildDocPlan(input) {
+  const { state, local, remote } = input;
+  const items = [];
+  const fingerprint = publishRulesFingerprint(input.rules);
+  const warnings = [];
+  const relPaths = /* @__PURE__ */ new Set([...local.keys(), ...remote.notes.keys(), ...Object.keys(state.docRecords)]);
+  for (const relPath of Array.from(relPaths).sort()) {
+    if (input.isExcluded(relPath))
+      continue;
+    const localNote = local.get(relPath);
+    const remoteNote = remote.notes.get(relPath);
+    const record = state.docRecords[relPath];
+    if (localNote && ruleEnabled(input.rules, "toFeishu", "source-format-diagnostics")) {
+      for (const message of sourceFormatWarnings(await readLocalCached(input, relPath)))
+        warnings.push({ relPath, message });
+    }
+    const remoteFields2 = remoteNote ? { remoteTitle: remoteNote.title, nodeToken: remoteNote.nodeToken, documentId: remoteNote.documentId } : {};
+    if (input.forcePush && localNote && localNote.size > 0) {
+      items.push(
+        item2(relPath, remoteNote ? "push" : "create-remote", "\u5F3A\u5236\u91CD\u63A8\uFF1A\u5FFD\u7565\u57FA\u7EBF", {
+          ...remoteFields2,
+          remoteHash: remoteNote ? await fetchedHash(input, remoteNote.documentId) : void 0,
+          localSize: localNote.size,
+          localMtime: localNote.mtime
+        })
+      );
+      continue;
+    }
+    if (!record) {
+      if (localNote && remoteNote) {
+        const [pulled2, localText2, localHash2, hash2] = await Promise.all([
+          pulledContent(input, relPath, remoteNote, localNote),
+          readLocalCached(input, relPath),
+          hashLocalCached(input, relPath),
+          fetchedHash(input, remoteNote.documentId)
+        ]);
+        const extra2 = { ...remoteFields2, localHash: localHash2, remoteHash: hash2, localSize: localNote.size, localMtime: localNote.mtime };
+        if (pulled2 === localText2) {
+          items.push(item2(relPath, "link", "\u4E24\u8FB9\u5185\u5BB9\u4E00\u81F4\uFF0C\u53EA\u5EFA\u7ACB\u6620\u5C04", extra2));
+        } else {
+          items.push(conflictItem2(relPath, state, "\u9996\u6B21\u5BF9\u63A5\uFF1A\u540C\u540D\u6587\u6863\u4E24\u8FB9\u5185\u5BB9\u4E0D\u540C\uFF0C\u5DF2\u4FDD\u7559\u53CC\u65B9", extra2, localHash2, hash2));
+        }
+        continue;
+      }
+      if (localNote) {
+        items.push(
+          item2(
+            relPath,
+            "create-remote",
+            localNote.size === 0 ? "\u7A7A\u7B14\u8BB0\u5728\u6587\u6863\u6A21\u5F0F\u4E0B\u4E5F\u4F1A\u540C\u6B65\uFF08<title> \u4FDD\u8BC1 content \u975E\u7A7A\uFF09" : void 0
+          )
+        );
+        continue;
+      }
+      if (remoteNote) {
+        items.push(item2(relPath, "create-local", void 0, remoteFields2));
+      }
+      continue;
+    }
+    if (!localNote && !remoteNote) {
+      items.push(item2(relPath, "forget", "\u4E24\u8FB9\u90FD\u5DF2\u4E0D\u5B58\u5728\uFF0C\u6E05\u7406\u6620\u5C04"));
+      continue;
+    }
+    if (!localNote) {
+      const remoteState2 = await remoteChangedState(input, record, remoteNote.documentId);
+      const hash2 = remoteState2.hash ?? record.baseRemoteHash;
+      const stamp = remoteState2.metaTime ? { remoteModifiedTime: remoteState2.metaTime } : {};
+      if (remoteState2.changed) {
+        items.push(
+          conflictItem2(
+            relPath,
+            state,
+            "\u672C\u5730\u5DF2\u5220\u9664\u3001\u8FDC\u7AEF\u88AB\u4FEE\u6539\uFF1A\u4E3A\u907F\u514D\u4E22\u5185\u5BB9\uFF0C\u672A\u81EA\u52A8\u5904\u7406",
+            { ...remoteFields2, localHash: "", remoteHash: hash2 },
+            "",
+            hash2
+          )
+        );
+      } else if (input.propagateLocalDelete) {
+        items.push(
+          item2(relPath, "delete-remote", "\u672C\u5730\u5DF2\u5220\u9664\uFF0C\u6309\u8BBE\u7F6E\u5220\u9664\u8FDC\u7AEF\u6587\u6863\uFF08\u8FDB\u98DE\u4E66\u56DE\u6536\u7AD9\uFF0C\u53EF\u6062\u590D\uFF09", {
+            ...remoteFields2,
+            ...stamp
+          })
+        );
+      } else {
+        items.push(item2(relPath, "local-deleted", "\u672C\u5730\u5DF2\u5220\u9664\u3001\u8FDC\u7AEF\u672A\u53D8\uFF08\u672A\u81EA\u52A8\u5220\u9664\u8FDC\u7AEF\uFF09", { ...remoteFields2, ...stamp }));
+      }
+      continue;
+    }
+    if (!remoteNote) {
+      const localChanged2 = await isLocalChanged2(input, record, localNote);
+      if (!localChanged2) {
+        if (input.propagateRemoteDelete) {
+          items.push(
+            item2(relPath, "delete-local", "\u8FDC\u7AEF\u5DF2\u5220\u9664\u4E14\u672C\u5730\u672A\u53D8\uFF0C\u6309\u8BBE\u7F6E\u628A\u672C\u5730\u7B14\u8BB0\u79FB\u8FDB .trash", {
+              localSize: localNote.size,
+              localMtime: localNote.mtime
+            })
+          );
+        } else {
+          items.push(item2(relPath, "remote-deleted", "\u8FDC\u7AEF\u5DF2\u5220\u9664\u3001\u672C\u5730\u672A\u53D8\uFF08\u672A\u81EA\u52A8\u5220\u9664\u672C\u5730\uFF09"));
+        }
+      } else if (input.recreateRemoteIfDeleted) {
+        items.push(item2(relPath, "create-remote", "\u8FDC\u7AEF\u5DF2\u5220\u9664\u4F46\u672C\u5730\u6709\u4FEE\u6539\uFF0C\u6309\u8BBE\u7F6E\u91CD\u65B0\u4E0A\u4F20"));
+      } else {
+        items.push(item2(relPath, "remote-deleted", "\u8FDC\u7AEF\u5DF2\u5220\u9664\u3001\u672C\u5730\u6709\u4FEE\u6539\uFF1A\u4E3A\u907F\u514D\u8BEF\u6062\u590D\uFF0C\u672A\u81EA\u52A8\u91CD\u5EFA"));
+      }
+      continue;
+    }
+    const localChanged = await isLocalChanged2(input, record, localNote);
+    const rulesChanged = record.publishRulesFingerprint !== fingerprint;
+    const remoteState = await remoteChangedState(input, record, remoteNote.documentId, rulesChanged);
+    const remoteChanged = remoteState.changed;
+    const hash = remoteState.hash;
+    const localHash = await hashLocalCached(input, relPath);
+    const extra = {
+      ...remoteFields2,
+      localHash,
+      remoteHash: hash,
+      localSize: localNote.size,
+      localMtime: localNote.mtime,
+      remoteModifiedTime: remoteState.metaTime
+    };
+    if (!localChanged && !remoteChanged) {
+      items.push(rulesChanged ? item2(relPath, "push", "\u8F6C\u6362\u89C4\u5219\u5DF2\u66F4\u65B0\uFF1A\u5237\u65B0\u98DE\u4E66\u6392\u7248\uFF0C\u672C\u5730\u6B63\u6587\u4E0D\u53D8", { ...extra, rulesRefresh: true }) : item2(relPath, "skip", void 0, extra));
+      continue;
+    }
+    if (localChanged && !remoteChanged) {
+      items.push(item2(relPath, "push", void 0, extra));
+      continue;
+    }
+    if (!localChanged && remoteChanged) {
+      items.push(item2(relPath, "pull", void 0, extra));
+      continue;
+    }
+    const [pulled, localText] = await Promise.all([
+      pulledContent(input, relPath, remoteNote, localNote),
+      readLocalCached(input, relPath)
+    ]);
+    if (pulled === localText) {
+      items.push(item2(relPath, "link", "\u4E24\u8FB9\u5185\u5BB9\u4E00\u81F4\uFF0C\u53EA\u66F4\u65B0\u57FA\u7EBF", extra));
+      continue;
+    }
+    items.push(conflictItem2(relPath, state, "\u4E24\u8FB9\u90FD\u6539\u8FC7\u4E14\u5185\u5BB9\u4E0D\u540C\uFF0C\u5DF2\u4FDD\u7559\u53CC\u65B9", extra, localHash, hash ?? localHash));
+  }
+  for (const entry of items) {
+    const note = local.get(entry.relPath);
+    if (!note || entry.action === "skip")
+      continue;
+    entry.localSize = note.size;
+    entry.localMtime = note.mtime;
+    entry.localHash = await hashLocalCached(input, entry.relPath);
+  }
+  return {
+    items,
+    counts: summarize(items),
+    localNoteCount: local.size,
+    remoteNoteCount: remote.notes.size,
+    publishRulesFingerprint: fingerprint,
+    pullRulesFingerprint: pullRulesFingerprint(input.rules),
+    warnings
+  };
+}
+
+// src/sync/docExecutor.ts
+var import_obsidian8 = require("obsidian");
+function two2(value) {
+  return String(value).padStart(2, "0");
+}
+function conflictCopyRelPath2(relPath) {
+  const now = /* @__PURE__ */ new Date();
+  const stamp = `${now.getFullYear()}${two2(now.getMonth() + 1)}${two2(now.getDate())}-${two2(now.getHours())}${two2(now.getMinutes())}${two2(now.getSeconds())}-${String(now.getMilliseconds()).padStart(3, "0")}`;
+  const base = relPath.replace(/\.md$/i, "");
+  return `${CONFLICT_DIR}/${base}.${stamp}.md`;
+}
+function encodeText(text) {
+  return new TextEncoder().encode(text).buffer;
+}
+async function readLocalText(app, relPath) {
+  const file = app.vault.getAbstractFileByPath(relPath);
+  if (!(file instanceof import_obsidian8.TFile))
+    throw new Error(`\u627E\u4E0D\u5230\u672C\u5730\u6587\u4EF6\uFF1A${relPath}`);
+  return app.vault.read(file);
+}
+function existsLocally2(app, relPath) {
+  return app.vault.getAbstractFileByPath(relPath) instanceof import_obsidian8.TFile;
+}
+async function executeDocPlan(plan, ctx, options) {
+  const reports = [];
+  const { state, settings } = ctx;
+  const folderNodes = /* @__PURE__ */ new Map();
+  let rootContainerToken;
+  const ensureRootContainer = async () => {
+    if (ctx.rootNodeToken)
+      return ctx.rootNodeToken;
+    if (rootContainerToken)
+      return rootContainerToken;
+    const cached = state.folders[""];
+    if (cached?.nodeToken) {
+      rootContainerToken = cached.nodeToken;
+      return rootContainerToken;
+    }
+    const title = settings.rootPageTitle.trim() || ctx.app.vault.getName();
+    const topLevel = await listNodes(ctx.client, ctx.spaceId);
+    const found = topLevel.find((node2) => node2.title === title && node2.obj_type !== "file");
+    if (found?.node_token) {
+      state.folders[""] = { nodeToken: found.node_token };
+      rootContainerToken = found.node_token;
+      ctx.logger.info(`\u590D\u7528\u77E5\u8BC6\u5E93\u9876\u5C42\u9875\u9762\u300C${title}\u300D\u5B58\u653E vault \u6839\u76EE\u5F55\u4E0B\u7684\u7B14\u8BB0`);
+      return rootContainerToken;
+    }
+    const node = await createContainerNode(ctx.client, ctx.spaceId, void 0, title);
+    state.folders[""] = { nodeToken: node.node_token };
+    rootContainerToken = node.node_token;
+    ctx.logger.info(`\u5728\u77E5\u8BC6\u5E93\u9876\u5C42\u521B\u5EFA\u9875\u9762\u300C${title}\u300D\u5B58\u653E vault \u6839\u76EE\u5F55\u4E0B\u7684\u7B14\u8BB0`);
+    return rootContainerToken;
+  };
+  const resolveFolderNode = async (relDir, needNoteParent) => {
+    if (settings.folderMode === "flat" || relDir === "") {
+      return needNoteParent ? ensureRootContainer() : ctx.rootNodeToken;
+    }
+    const cached = folderNodes.get(relDir);
+    if (cached)
+      return cached;
+    const existing = state.folders[relDir];
+    if (existing?.nodeToken) {
+      folderNodes.set(relDir, existing.nodeToken);
+      return existing.nodeToken;
+    }
+    const parentDir = dirnameOf(relDir);
+    const parentNode = await resolveFolderNode(parentDir, false);
+    const node = await createContainerNode(ctx.client, ctx.spaceId, parentNode, basenameOf(relDir));
+    state.folders[relDir] = { nodeToken: node.node_token, parentNodeToken: parentNode };
+    folderNodes.set(relDir, node.node_token);
+    ctx.logger.info(`\u521B\u5EFA\u77E5\u8BC6\u5E93\u76EE\u5F55\u8282\u70B9 ${relDir} -> ${node.node_token}`);
+    return node.node_token;
+  };
+  const fetchFresh = async (documentId) => {
+    const fetched = await fetchDocumentMarkdown(ctx.client, documentId);
+    ctx.cache.fetched.set(documentId, fetched);
+    ctx.cache.fetchedHash.set(documentId, await ctx.hashFetched(fetched));
+    return fetched;
+  };
+  const fetchedFor = async (documentId) => {
+    const cached = ctx.cache.fetched.get(documentId);
+    if (cached !== void 0)
+      return cached;
+    return fetchFresh(documentId);
+  };
+  const writeConflictCopy = async (relPath, remoteText, localHash, remoteHash) => {
+    const copyPath = conflictCopyRelPath2(relPath);
+    await ensureFolder(ctx.app.vault.adapter, dirnameOf(copyPath));
+    await ctx.app.vault.adapter.write(copyPath, remoteText);
+    state.conflicts[relPath] = { remoteHash, localHash, copyPath, at: Date.now() };
+    return copyPath;
+  };
+  const pulls = plan.items.filter((entry) => entry.action === "pull" || entry.action === "create-local");
+  const pushes = plan.items.filter((entry) => entry.action === "push" || entry.action === "create-remote");
+  const links = plan.items.filter((entry) => entry.action === "link");
+  const conflicts = plan.items.filter((entry) => entry.action === "conflict");
+  const remoteDeletes = plan.items.filter((entry) => entry.action === "delete-remote");
+  const localDeletes = plan.items.filter((entry) => entry.action === "delete-local");
+  const observed = plan.items.filter(
+    (entry) => ["local-deleted", "remote-deleted", "dirty-editor", "forget"].includes(entry.action)
+  );
+  const steps = [];
+  let stepIndex = 0;
+  const totalSteps = (options.allowPush ? pushes.length + remoteDeletes.length : 0) + (options.allowPull ? pulls.length + localDeletes.length : 0) + links.length + conflicts.length;
+  const tick = (message) => {
+    stepIndex += 1;
+    options.onProgress?.(message, stepIndex, totalSteps);
+  };
+  const reportProgress = (message) => options.onProgress?.(message, stepIndex, totalSteps);
+  if (options.allowPush) {
+    for (const entry of pushes) {
+      steps.push(async () => {
+        try {
+          const statBefore = localStat(ctx.app, entry.relPath);
+          const localText = await readLocalText(ctx.app, entry.relPath);
+          const record = state.docRecords[entry.relPath];
+          if (await options.isEditorDirty(entry.relPath))
+            throw new Error("\u7B14\u8BB0\u6B63\u5728\u7F16\u8F91\uFF0C\u8BF7\u4FDD\u5B58\u540E\u91CD\u65B0\u9884\u89C8");
+          if (entry.localHash !== void 0 && await ctx.hashText(localText) !== entry.localHash) {
+            throw new Error("\u9884\u89C8\u540E\u672C\u5730\u6B63\u6587\u5DF2\u6539\u53D8\uFF0C\u8BF7\u91CD\u65B0\u9884\u89C8");
+          }
+          const existingDocumentId = entry.action === "push" ? entry.documentId ?? record?.documentId : void 0;
+          if (existingDocumentId) {
+            const remoteNow = await fetchFresh(existingDocumentId);
+            if (await ctx.hashFetched(remoteNow) !== (entry.remoteHash ?? record?.baseRemoteHash)) {
+              throw new Error("\u9884\u89C8\u540E\u98DE\u4E66\u6B63\u6587\u5DF2\u6539\u53D8\uFF0C\u5DF2\u505C\u6B62\u8986\u76D6\uFF0C\u8BF7\u91CD\u65B0\u540C\u6B65\u5904\u7406\u8FDC\u7AEF\u6539\u52A8");
+            }
+          }
+          const decided = record?.documentTitle ? { title: record.documentTitle, renamed: false } : uniqueDocumentTitle(documentTitleFor(entry.relPath, settings), ctx.containerTitles);
+          const ruleContext = {
+            relPath: entry.relPath,
+            documentTitle: decided.title,
+            localContent: localText,
+            resolveImage: ctx.resolveImage,
+            imageUploads: [],
+            attachmentLinkStyle: settings.attachmentLinkStyle,
+            warnings: []
+          };
+          const sent = applyRules("toFeishu", localText, ruleContext, ctx.rules);
+          const parentNode = await resolveFolderNode(entry.parentDir, true);
+          let documentId;
+          let newBlocks = [];
+          let revisionId;
+          if (existingDocumentId) {
+            const updated = await updateDocumentFromMarkdown(ctx.client, existingDocumentId, { title: decided.title, markdown: sent });
+            documentId = existingDocumentId;
+            newBlocks = updated.newBlocks;
+            revisionId = updated.revisionId;
+          } else {
+            const created = await createDocumentFromMarkdown(ctx.client, {
+              title: decided.title,
+              markdown: sent,
+              onProgress: reportProgress
+            });
+            await moveDocToWiki(ctx.client, ctx.spaceId, parentNode, created.documentId, "docx");
+            documentId = created.documentId;
+            newBlocks = created.newBlocks;
+            revisionId = created.revisionId;
+            if (decided.renamed) {
+              ctx.logger.info(`\u7B14\u8BB0 ${entry.relPath} \u4E0E\u540C\u540D\u76EE\u5F55\u649E\u540D\uFF0C\u6587\u6863\u6807\u9898\u6539\u4E3A\u300C${decided.title}\u300D`);
+            }
+          }
+          const images = await finalizeDocumentImages(ctx, {
+            relPath: entry.relPath,
+            documentId,
+            newBlocks,
+            revisionId,
+            uploads: ruleContext.imageUploads ?? []
+          });
+          for (const warning of ruleContext.warnings ?? [])
+            ctx.logger.warn(`\u8F6C\u6362\uFF1A${entry.relPath} ${warning}`);
+          const fetched = await fetchFresh(documentId);
+          const remoteHash = await ctx.hashFetched(fetched);
+          ctx.logger.debug(
+            `${entry.relPath}: \u53D6\u56DE\u5F62\u6001\u4E0E\u53D1\u9001\u5F62\u6001${fetched === buildMarkdownContent(decided.title, sent) ? "\u4E00\u81F4" : "\u4E0D\u540C\uFF08\u98DE\u4E66\u505A\u4E86\u683C\u5F0F\u5316\uFF0C\u57FA\u7EBF\u4EE5\u53D6\u56DE\u5F62\u6001\u4E3A\u51C6\uFF09"}`
+          );
+          const statAfter = localStat(ctx.app, entry.relPath);
+          const stable = statAfter.size === statBefore.size && statAfter.mtime === statBefore.mtime;
+          const nodeToken = record?.nodeToken ?? (await getNodeByToken(ctx.client, documentId, "docx").catch(() => void 0))?.node_token;
+          state.docRecords[entry.relPath] = {
+            documentId,
+            nodeToken,
+            parentNodeToken: parentNode,
+            documentTitle: decided.title,
+            baseLocalHash: await ctx.hashText(localText),
+            baseRemoteHash: remoteHash,
+            publishRulesFingerprint: images.failures.length ? void 0 : publishRulesFingerprint(ctx.rules),
+            remoteModifiedTime: void 0,
+            localSize: stable ? statAfter.size : -1,
+            localMtime: stable ? statAfter.mtime : -1,
+            lastSyncedAt: Date.now()
+          };
+          delete state.conflicts[entry.relPath];
+          reports.push({
+            relPath: entry.relPath,
+            action: entry.action,
+            ok: images.failures.length === 0,
+            message: buildUploadMessage(localText, images, ruleContext.warnings ?? [])
+          });
+          tick(`\u4E0A\u4F20 ${entry.relPath}`);
+        } catch (error) {
+          ctx.logger.error(`\u4E0A\u4F20 ${entry.relPath} \u5931\u8D25\uFF1A${describeError(error)}`);
+          reports.push({ relPath: entry.relPath, action: entry.action, ok: false, message: describeError(error) });
+          tick(`\u4E0A\u4F20\u5931\u8D25 ${entry.relPath}`);
+        }
+      });
+    }
+  }
+  if (options.allowPull) {
+    for (const entry of pulls) {
+      steps.push(async () => {
+        const record = state.docRecords[entry.relPath];
+        const documentId = entry.documentId ?? record?.documentId;
+        if (!documentId) {
+          reports.push({ relPath: entry.relPath, action: entry.action, ok: false, message: "\u7F3A\u5C11\u8FDC\u7AEF document_id" });
+          tick(`\u8DF3\u8FC7 ${entry.relPath}`);
+          return;
+        }
+        try {
+          const present = existsLocally2(ctx.app, entry.relPath);
+          if (entry.action === "pull" && !present) {
+            reports.push({
+              relPath: entry.relPath,
+              action: entry.action,
+              ok: true,
+              message: "\u751F\u6210\u8BA1\u5212\u540E\u672C\u5730\u6587\u4EF6\u5DF2\u88AB\u5220\u9664\uFF0C\u672A\u91CD\u65B0\u521B\u5EFA\uFF08\u5982\u9700\u6062\u590D\u8BF7\u518D\u8DD1\u4E00\u6B21\u540C\u6B65\uFF09"
+            });
+            tick(`\u8DF3\u8FC7 ${entry.relPath}`);
+            return;
+          }
+          const fetched = await fetchedFor(documentId);
+          const localTextBefore = present ? await readLocalText(ctx.app, entry.relPath) : "";
+          const imageWarnings = [];
+          const imageDownloads = await prepareRemoteImages(ctx, fetched, {
+            documentId,
+            relPath: entry.relPath,
+            warnings: imageWarnings
+          });
+          const pulled = applyRules(
+            "toObsidian",
+            fetched,
+            {
+              relPath: entry.relPath,
+              documentTitle: record?.documentTitle ?? documentTitleFor(entry.relPath, settings),
+              localContent: localTextBefore,
+              attachmentLinkStyle: settings.attachmentLinkStyle,
+              imageDownloads,
+              warnings: imageWarnings
+            },
+            ctx.rules
+          );
+          const remoteHash = await ctx.hashFetched(fetched);
+          for (const warning of imageWarnings)
+            ctx.logger.warn(`\u56FE\u7247\uFF1A${entry.relPath} ${warning}`);
+          if (present && (entry.localSize !== void 0 || entry.localMtime !== void 0)) {
+            const before = localStat(ctx.app, entry.relPath);
+            const movedSincePlan = before.size !== entry.localSize || before.mtime !== entry.localMtime;
+            if (movedSincePlan) {
+              const currentText = await readLocalText(ctx.app, entry.relPath);
+              if (currentText !== pulled) {
+                const copyPath = await writeConflictCopy(
+                  entry.relPath,
+                  fetched,
+                  await ctx.hashText(currentText),
+                  remoteHash
+                );
+                reports.push({
+                  relPath: entry.relPath,
+                  action: "conflict",
+                  ok: true,
+                  message: "\u8BA1\u5212\u751F\u6210\u540E\u672C\u5730\u53C8\u6709\u65B0\u6539\u52A8\uFF0C\u5DF2\u6539\u4E3A\u4FDD\u7559\u53CC\u65B9\uFF0C\u672C\u5730\u4E0E\u8FDC\u7AEF\u90FD\u672A\u6539\u52A8",
+                  copyPath
+                });
+                ctx.logger.warn(`\u62C9\u53D6\u524D\u53D1\u73B0\u672C\u5730\u5DF2\u6539\u52A8\uFF0C\u8F6C\u4E3A\u51B2\u7A81\uFF1A${entry.relPath}`);
+                tick(`\u51B2\u7A81 ${entry.relPath}`);
+                return;
+              }
+              state.docRecords[entry.relPath] = {
+                documentId,
+                nodeToken: entry.nodeToken ?? record?.nodeToken,
+                parentNodeToken: record?.parentNodeToken,
+                documentTitle: record?.documentTitle ?? documentTitleFor(entry.relPath, settings),
+                baseLocalHash: await ctx.hashText(currentText),
+                baseRemoteHash: remoteHash,
+                publishRulesFingerprint: publishRulesFingerprint(ctx.rules),
+                remoteModifiedTime: entry.remoteModifiedTime ?? record?.remoteModifiedTime,
+                localSize: before.size,
+                localMtime: before.mtime,
+                lastSyncedAt: Date.now()
+              };
+              delete state.conflicts[entry.relPath];
+              reports.push({ relPath: entry.relPath, action: "link", ok: true, message: "\u4E24\u8FB9\u5185\u5BB9\u4E00\u81F4\uFF0C\u53EA\u66F4\u65B0\u4E86\u57FA\u7EBF" });
+              tick(`\u5EFA\u7ACB\u6620\u5C04 ${entry.relPath}`);
+              return;
+            }
+          }
+          if (present && await options.isEditorDirty(entry.relPath)) {
+            reports.push({ relPath: entry.relPath, action: "dirty-editor", ok: true, message: "\u6587\u4EF6\u6B63\u5728\u7F16\u8F91\u4E14\u672A\u4FDD\u5B58\uFF0C\u672A\u8986\u76D6" });
+            tick(`\u8DF3\u8FC7\u7F16\u8F91\u4E2D\u7684 ${entry.relPath}`);
+            return;
+          }
+          const presentNow = existsLocally2(ctx.app, entry.relPath);
+          if (presentNow !== present || presentNow && (await options.isEditorDirty(entry.relPath) || entry.localHash !== void 0 && await ctx.hashText(await readLocalText(ctx.app, entry.relPath)) !== entry.localHash)) {
+            throw new Error("\u4E0B\u8F7D\u671F\u95F4\u672C\u5730\u7B14\u8BB0\u5DF2\u6539\u53D8\uFF0C\u672A\u8986\u76D6\uFF0C\u8BF7\u91CD\u65B0\u540C\u6B65");
+          }
+          if (present && localTextBefore !== pulled && sameAfterCosmeticRules(
+            localTextBefore,
+            pulled,
+            {
+              relPath: entry.relPath,
+              documentTitle: record?.documentTitle ?? documentTitleFor(entry.relPath, settings),
+              localContent: localTextBefore
+            },
+            ctx.rules
+          )) {
+            const localText = normalizeObsidianMath(localTextBefore, ctx.rules);
+            const repaired = localText !== localTextBefore;
+            if (repaired)
+              await writeLocalBytes(ctx.app, entry.relPath, encodeText(localText));
+            const stat2 = localStat(ctx.app, entry.relPath);
+            state.docRecords[entry.relPath] = {
+              documentId,
+              nodeToken: entry.nodeToken ?? record?.nodeToken,
+              parentNodeToken: record?.parentNodeToken,
+              documentTitle: record?.documentTitle ?? documentTitleFor(entry.relPath, settings),
+              baseLocalHash: await ctx.hashText(localText),
+              baseRemoteHash: remoteHash,
+              publishRulesFingerprint: publishRulesFingerprint(ctx.rules),
+              remoteModifiedTime: entry.remoteModifiedTime ?? record?.remoteModifiedTime,
+              localSize: stat2.size,
+              localMtime: stat2.mtime,
+              lastSyncedAt: Date.now()
+            };
+            delete state.conflicts[entry.relPath];
+            reports.push({
+              relPath: entry.relPath,
+              action: repaired ? "pull" : "link",
+              ok: true,
+              message: repaired ? "\u5DF2\u4FEE\u590D Obsidian \u516C\u5F0F\u5B9A\u754C\u7B26\u5185\u4FA7\u7A7A\u767D\u6216\u8F6C\u4E49\uFF0C\u4FDD\u7559\u672C\u5730\u6BB5\u843D\u6392\u7248" : "\u8FDC\u7AEF\u5DEE\u5F02\u53EA\u662F\u6392\u7248\u5F52\u4E00\u5316\uFF0C\u672C\u5730\u672A\u6539\u52A8"
+            });
+            tick(`${repaired ? "\u4FEE\u590D\u516C\u5F0F" : "\u8DF3\u8FC7"} ${entry.relPath}`);
+            return;
+          }
+          if (entry.action === "create-local" && present) {
+            const currentText = await readLocalText(ctx.app, entry.relPath);
+            if (currentText !== pulled) {
+              const copyPath = await writeConflictCopy(
+                entry.relPath,
+                fetched,
+                await ctx.hashText(currentText),
+                remoteHash
+              );
+              reports.push({
+                relPath: entry.relPath,
+                action: "conflict",
+                ok: true,
+                message: "\u672C\u5730\u5728\u8BA1\u5212\u751F\u6210\u540E\u51FA\u73B0\u4E86\u540C\u540D\u6587\u4EF6\u4E14\u5185\u5BB9\u4E0D\u540C\uFF0C\u5DF2\u4FDD\u7559\u53CC\u65B9",
+                copyPath
+              });
+              tick(`\u51B2\u7A81 ${entry.relPath}`);
+              return;
+            }
+          }
+          await writeLocalBytes(ctx.app, entry.relPath, encodeText(pulled));
+          const stat = localStat(ctx.app, entry.relPath);
+          state.docRecords[entry.relPath] = {
+            documentId,
+            nodeToken: entry.nodeToken ?? record?.nodeToken,
+            parentNodeToken: record?.parentNodeToken,
+            documentTitle: record?.documentTitle ?? documentTitleFor(entry.relPath, settings),
+            baseLocalHash: await ctx.hashText(pulled),
+            baseRemoteHash: remoteHash,
+            publishRulesFingerprint: publishRulesFingerprint(ctx.rules),
+            remoteModifiedTime: entry.remoteModifiedTime ?? record?.remoteModifiedTime,
+            localSize: stat.size,
+            localMtime: stat.mtime,
+            lastSyncedAt: Date.now()
+          };
+          delete state.conflicts[entry.relPath];
+          reports.push({
+            relPath: entry.relPath,
+            action: entry.action,
+            ok: true,
+            message: imageWarnings.length > 0 ? imageWarnings.join("\uFF1B") : void 0
+          });
+          tick(`\u4E0B\u8F7D ${entry.relPath}`);
+        } catch (error) {
+          ctx.logger.error(`\u4E0B\u8F7D ${entry.relPath} \u5931\u8D25\uFF1A${describeError(error)}`);
+          reports.push({ relPath: entry.relPath, action: entry.action, ok: false, message: describeError(error) });
+          tick(`\u4E0B\u8F7D\u5931\u8D25 ${entry.relPath}`);
+        }
+      });
+    }
+  }
+  for (const entry of links) {
+    steps.push(async () => {
+      try {
+        const statBefore = localStat(ctx.app, entry.relPath);
+        const localText = await readLocalText(ctx.app, entry.relPath);
+        const statAfter = localStat(ctx.app, entry.relPath);
+        const stable = statAfter.size === statBefore.size && statAfter.mtime === statBefore.mtime;
+        const existing = state.docRecords[entry.relPath];
+        const documentId = entry.documentId ?? existing?.documentId ?? "";
+        if (await options.isEditorDirty(entry.relPath) || await ctx.hashText(localText) !== entry.localHash || await ctx.hashFetched(await fetchFresh(documentId)) !== entry.remoteHash) {
+          throw new Error("\u9884\u89C8\u540E\u5185\u5BB9\u5DF2\u6539\u53D8\uFF0C\u672A\u66F4\u65B0\u6620\u5C04\uFF0C\u8BF7\u91CD\u65B0\u540C\u6B65");
+        }
+        state.docRecords[entry.relPath] = {
+          documentId,
+          nodeToken: entry.nodeToken ?? existing?.nodeToken,
+          parentNodeToken: existing?.parentNodeToken,
+          documentTitle: existing?.documentTitle ?? documentTitleFor(entry.relPath, settings),
+          baseLocalHash: entry.localHash ?? await ctx.hashText(localText),
+          baseRemoteHash: entry.remoteHash ?? existing?.baseRemoteHash ?? "",
+          publishRulesFingerprint: publishRulesFingerprint(ctx.rules),
+          remoteModifiedTime: entry.remoteModifiedTime ?? existing?.remoteModifiedTime,
+          localSize: stable ? statAfter.size : -1,
+          localMtime: stable ? statAfter.mtime : -1,
+          lastSyncedAt: Date.now()
+        };
+        delete state.conflicts[entry.relPath];
+        reports.push({ relPath: entry.relPath, action: entry.action, ok: true, message: entry.reason });
+        tick(`\u5EFA\u7ACB\u6620\u5C04 ${entry.relPath}`);
+      } catch (error) {
+        reports.push({ relPath: entry.relPath, action: entry.action, ok: false, message: describeError(error) });
+        tick(`\u5EFA\u7ACB\u6620\u5C04\u5931\u8D25 ${entry.relPath}`);
+      }
+    });
+  }
+  for (const entry of conflicts) {
+    steps.push(async () => {
+      const record = state.docRecords[entry.relPath];
+      const documentId = entry.documentId ?? record?.documentId;
+      const previous = state.conflicts[entry.relPath];
+      if (entry.duplicateConflict && previous) {
+        reports.push({
+          relPath: entry.relPath,
+          action: "conflict",
+          ok: true,
+          message: "\u4ECD\u662F\u4E0A\u6B21\u672A\u5904\u7406\u7684\u51B2\u7A81\uFF0C\u672A\u91CD\u590D\u751F\u6210\u526F\u672C",
+          copyPath: previous.copyPath
+        });
+        tick(`\u51B2\u7A81 ${entry.relPath}`);
+        return;
+      }
+      if (!documentId) {
+        reports.push({ relPath: entry.relPath, action: "conflict", ok: false, message: "\u7F3A\u5C11\u8FDC\u7AEF document_id\uFF0C\u65E0\u6CD5\u53D6\u51FA\u51B2\u7A81\u7248\u672C" });
+        tick(`\u51B2\u7A81 ${entry.relPath}`);
+        return;
+      }
+      try {
+        const fetched = await fetchedFor(documentId);
+        const remoteHash = await ctx.hashFetched(fetched);
+        const present = existsLocally2(ctx.app, entry.relPath);
+        const localText = present ? await readLocalText(ctx.app, entry.relPath) : "";
+        const localHash = present ? await ctx.hashText(localText) : "";
+        if (previous && previous.remoteHash === remoteHash && previous.localHash === localHash) {
+          reports.push({
+            relPath: entry.relPath,
+            action: "conflict",
+            ok: true,
+            message: "\u4ECD\u662F\u4E0A\u6B21\u672A\u5904\u7406\u7684\u51B2\u7A81\uFF0C\u672A\u91CD\u590D\u751F\u6210\u526F\u672C",
+            copyPath: previous.copyPath
+          });
+          tick(`\u51B2\u7A81 ${entry.relPath}`);
+          return;
+        }
+        const copyPath = await writeConflictCopy(entry.relPath, fetched, localHash, remoteHash);
+        if (record)
+          record.conflict = true;
+        reports.push({
+          relPath: entry.relPath,
+          action: "conflict",
+          ok: true,
+          message: "\u8FDC\u7AEF\u7248\u672C\u5DF2\u53E6\u5B58\u4E3A\u526F\u672C\uFF0C\u672C\u5730\u4E0E\u8FDC\u7AEF\u90FD\u672A\u6539\u52A8",
+          copyPath
+        });
+        ctx.logger.warn(`\u51B2\u7A81\uFF1A${entry.relPath} -> ${copyPath}`);
+        tick(`\u51B2\u7A81 ${entry.relPath}`);
+      } catch (error) {
+        reports.push({ relPath: entry.relPath, action: "conflict", ok: false, message: describeError(error) });
+        tick(`\u51B2\u7A81\u5904\u7406\u5931\u8D25 ${entry.relPath}`);
+      }
+    });
+  }
+  for (const step of steps) {
+    await step();
+  }
+  if (options.allowPush) {
+    for (const entry of remoteDeletes) {
+      const record = state.docRecords[entry.relPath];
+      const documentId = entry.documentId ?? record?.documentId;
+      const title = entry.remoteTitle ?? record?.documentTitle ?? entry.relPath;
+      if (!documentId) {
+        reports.push({ relPath: entry.relPath, action: "delete-remote", ok: false, message: "\u7F3A\u5C11\u8FDC\u7AEF document_id\uFF0C\u672A\u5220\u9664" });
+        tick(`\u8DF3\u8FC7\u5220\u9664 ${entry.relPath}`);
+        continue;
+      }
+      try {
+        if (existsLocally2(ctx.app, entry.relPath) || await options.isEditorDirty(entry.relPath)) {
+          throw new Error("\u672C\u5730\u7B14\u8BB0\u5DF2\u6062\u590D\u6216\u6B63\u5728\u7F16\u8F91\uFF0C\u672A\u5220\u9664\u8FDC\u7AEF\uFF0C\u8BF7\u91CD\u65B0\u9884\u89C8");
+        }
+        const remoteHashNow = await ctx.hashFetched(await fetchFresh(documentId));
+        if (!record || remoteHashNow !== record.baseRemoteHash) {
+          throw new Error("\u98DE\u4E66\u5185\u5BB9\u5728\u9884\u89C8\u540E\u5DF2\u6539\u53D8\uFF0C\u672A\u5220\u9664\uFF0C\u8BF7\u91CD\u65B0\u540C\u6B65");
+        }
+        if (existsLocally2(ctx.app, entry.relPath) || await options.isEditorDirty(entry.relPath)) {
+          throw new Error("\u68C0\u67E5\u671F\u95F4\u672C\u5730\u7B14\u8BB0\u5DF2\u6062\u590D\uFF0C\u672A\u5220\u9664\u8FDC\u7AEF");
+        }
+        await deleteDriveFile(ctx.client, documentId, "docx");
+        delete state.docRecords[entry.relPath];
+        delete state.conflicts[entry.relPath];
+        ctx.logger.info(`\u5DF2\u5220\u9664\u8FDC\u7AEF\u6587\u6863 ${title}\uFF08${documentId}\uFF09\uFF0C\u8FDB\u98DE\u4E66\u56DE\u6536\u7AD9\u53EF\u6062\u590D`);
+        reports.push({
+          relPath: entry.relPath,
+          action: "delete-remote",
+          ok: true,
+          message: `\u5DF2\u5220\u9664\u8FDC\u7AEF\u6587\u6863\u300C${title}\u300D\uFF08\u8FDB\u98DE\u4E66\u56DE\u6536\u7AD9\uFF0C\u53EF\u6062\u590D\uFF09`
+        });
+        tick(`\u5220\u9664\u8FDC\u7AEF ${entry.relPath}`);
+      } catch (error) {
+        ctx.logger.error(`\u5220\u9664\u8FDC\u7AEF ${entry.relPath} \u5931\u8D25\uFF1A${describeError(error)}`);
+        reports.push({ relPath: entry.relPath, action: "delete-remote", ok: false, message: describeError(error) });
+        tick(`\u5220\u9664\u8FDC\u7AEF\u5931\u8D25 ${entry.relPath}`);
+      }
+    }
+  }
+  if (options.allowPull) {
+    for (const entry of localDeletes) {
+      try {
+        const file = existsLocally2(ctx.app, entry.relPath) ? ctx.app.vault.getAbstractFileByPath(entry.relPath) : null;
+        if (file) {
+          await assertRemoteAbsent(ctx.client, ctx.spaceId, ctx.rootNodeToken, state.docRecords[entry.relPath]?.documentId);
+          if (await options.isEditorDirty(entry.relPath) || !entry.localHash || await ctx.hashText(await readLocalText(ctx.app, entry.relPath)) !== entry.localHash) {
+            throw new Error("\u672C\u5730\u7B14\u8BB0\u5728\u9884\u89C8\u540E\u5DF2\u6539\u53D8\uFF0C\u672A\u5220\u9664\uFF0C\u8BF7\u91CD\u65B0\u540C\u6B65");
+          }
+          await ctx.app.vault.trash(file, false);
+        }
+        delete state.docRecords[entry.relPath];
+        delete state.conflicts[entry.relPath];
+        reports.push({
+          relPath: entry.relPath,
+          action: "delete-local",
+          ok: true,
+          message: file ? "\u8FDC\u7AEF\u5DF2\u5220\u9664\uFF0C\u672C\u5730\u7B14\u8BB0\u5DF2\u79FB\u5165 .trash" : "\u8FDC\u7AEF\u5DF2\u5220\u9664\uFF0C\u672C\u5730\u6587\u4EF6\u5DF2\u4E0D\u5B58\u5728\uFF0C\u53EA\u6E05\u7406\u4E86\u6620\u5C04"
+        });
+        tick(`\u5220\u9664\u672C\u5730 ${entry.relPath}`);
+      } catch (error) {
+        ctx.logger.error(`\u5220\u9664\u672C\u5730 ${entry.relPath} \u5931\u8D25\uFF1A${describeError(error)}`);
+        reports.push({ relPath: entry.relPath, action: "delete-local", ok: false, message: describeError(error) });
+        tick(`\u5220\u9664\u672C\u5730\u5931\u8D25 ${entry.relPath}`);
+      }
+    }
+  }
+  for (const entry of observed) {
+    if (entry.action === "forget") {
+      delete state.docRecords[entry.relPath];
+      delete state.conflicts[entry.relPath];
+    }
+    reports.push({ relPath: entry.relPath, action: entry.action, ok: true, message: entry.reason });
+  }
+  state.lastSyncAt = Date.now();
+  for (const entry of plan.items) {
+    const record = state.docRecords[entry.relPath];
+    if (entry.action === "skip" && record && entry.remoteModifiedTime && entry.remoteHash === record.baseRemoteHash) {
+      record.remoteModifiedTime = entry.remoteModifiedTime;
+    }
+  }
+  return reports;
+}
+var REMOTE_IMAGE_MAX_BYTES = 20 * 1024 * 1024;
+var IMAGE_MIME_EXT = {
+  "image/png": ".png",
+  "image/jpeg": ".jpg",
+  "image/jpg": ".jpg",
+  "image/gif": ".gif",
+  "image/bmp": ".bmp",
+  "image/webp": ".webp",
+  "image/tiff": ".tiff",
+  "image/svg+xml": ".svg"
+};
+async function finalizeDocumentImages(ctx, options) {
+  const result = { uploaded: 0, reused: 0, failures: [], cleaned: 0 };
+  if (options.uploads.length === 0)
+    return result;
+  const byMarker = correlateImageBlocks(options.newBlocks, options.uploads.map((upload) => upload.marker));
+  const failedBlocks = [];
+  for (const upload of options.uploads) {
+    const blockId = byMarker.get(upload.marker);
+    if (!blockId) {
+      result.failures.push(`${upload.fileName}\uFF1A\u670D\u52A1\u7AEF\u6CA1\u6709\u8FD4\u56DE\u5BF9\u5E94\u7684\u56FE\u7247\u5360\u4F4D\u5757`);
+      continue;
+    }
+    try {
+      const bytes = await ctx.readBinary(upload.vaultPath);
+      const hash = await ctx.hashBytes(bytes);
+      const cacheKey = `${hash}:${options.documentId}`;
+      const cached = ctx.state.imageUploads[cacheKey];
+      if (cached?.fileToken) {
+        try {
+          await bindDocImages(ctx.client, options.documentId, [{ blockId, fileToken: cached.fileToken }]);
+          const bound = await getDocBlockToken(ctx.client, options.documentId, blockId);
+          if (bound === cached.fileToken) {
+            result.reused += 1;
+            continue;
+          }
+          ctx.logger.warn(`\u56FE\u7247 ${upload.fileName} \u590D\u7528\u5DF2\u4E0A\u4F20\u7D20\u6750\u5931\u8D25\uFF08\u56DE\u8BFB\u5230\u7684 token \u4E0D\u4E00\u81F4\uFF09\uFF0C\u6539\u4E3A\u91CD\u65B0\u4E0A\u4F20`);
+        } catch (error) {
+          ctx.logger.warn(`\u56FE\u7247 ${upload.fileName} \u590D\u7528\u5DF2\u4E0A\u4F20\u7D20\u6750\u62A5\u9519\uFF0C\u6539\u4E3A\u91CD\u65B0\u4E0A\u4F20\uFF1A${describeError(error)}`);
+        }
+        delete ctx.state.imageUploads[cacheKey];
+      }
+      const fileToken = await uploadDocImage(ctx.client, {
+        documentId: options.documentId,
+        blockId,
+        fileName: upload.fileName,
+        bytes
+      });
+      await bindDocImages(ctx.client, options.documentId, [{ blockId, fileToken }]);
+      ctx.state.imageUploads[cacheKey] = { fileToken, documentId: options.documentId, hash, path: upload.vaultPath, at: Date.now() };
+      ctx.state.images[fileToken] = { path: upload.vaultPath, token: fileToken, hash, at: Date.now() };
+      result.uploaded += 1;
+    } catch (error) {
+      ctx.logger.error(`\u56FE\u7247 ${upload.fileName} \u4E0A\u4F20/\u7ED1\u5B9A\u5931\u8D25\uFF1A${describeError(error)}`);
+      result.failures.push(`${upload.fileName}\uFF1A${describeError(error)}`);
+      failedBlocks.push(blockId);
+    }
+  }
+  if (failedBlocks.length > 0) {
+    try {
+      await deleteDocBlocks(ctx.client, options.documentId, failedBlocks, options.revisionId);
+      result.cleaned = failedBlocks.length;
+      ctx.logger.warn(`\u5DF2\u6E05\u7406 ${failedBlocks.length} \u4E2A\u56FE\u7247\u5360\u4F4D\u5757\uFF08\u5BF9\u5E94\u56FE\u7247\u6CA1\u4E0A\u4F20\u6210\u529F\uFF0C\u672C\u5730\u5F15\u7528\u4E0D\u53D7\u5F71\u54CD\uFF09`);
+    } catch (error) {
+      ctx.logger.warn(`\u6E05\u7406\u56FE\u7247\u5360\u4F4D\u5757\u5931\u8D25\uFF0C\u6587\u6863\u91CC\u53EF\u80FD\u6B8B\u7559\u5360\u4F4D\uFF1A${describeError(error)}`);
+    }
+  }
+  return result;
+}
+function buildUploadMessage(localText, images, warnings) {
+  const parts = [];
+  if (localText.length === 0)
+    parts.push("\u7A7A\u7B14\u8BB0\u5728\u6587\u6863\u6A21\u5F0F\u4E5F\u4F1A\u540C\u6B65\uFF1A\u6B63\u6587\u4E3A\u7A7A\uFF0C\u98DE\u4E66\u4FA7\u53EA\u6709\u6807\u9898\uFF08md \u6A21\u5F0F\u4F1A\u8DF3\u8FC7\u7A7A\u6587\u4EF6\uFF09");
+  if (images.uploaded > 0 || images.reused > 0)
+    parts.push(`\u56FE\u7247\uFF1A\u65B0\u4E0A\u4F20 ${images.uploaded} \u5F20\u3001\u590D\u7528\u5DF2\u4E0A\u4F20 ${images.reused} \u5F20`);
+  if (images.failures.length > 0) {
+    parts.push(`\u56FE\u7247\u5931\u8D25 ${images.failures.length} \u5F20\uFF08\u5DF2\u6E05\u7406\u5360\u4F4D\u5757 ${images.cleaned} \u4E2A\uFF09\uFF1A${images.failures.join("\uFF1B")}`);
+  }
+  if (warnings.length > 0)
+    parts.push(warnings.join("\uFF1B"));
+  return parts.length > 0 ? parts.join(" \xB7 ") : void 0;
+}
+function extensionFor(contentType, url, alt) {
+  const mime = (contentType ?? "").split(";")[0].trim().toLowerCase();
+  if (IMAGE_MIME_EXT[mime])
+    return IMAGE_MIME_EXT[mime];
+  for (const candidate of [url, alt]) {
+    const match = /\.(png|jpe?g|gif|bmp|webp|tiff?|svg)(?:[?#]|$)/i.exec(candidate);
+    if (match)
+      return `.${match[1].toLowerCase().replace(/^jpeg$/, "jpg")}`;
+  }
+  return ".png";
+}
+function bytesEqual(left, right) {
+  if (left.byteLength !== right.byteLength)
+    return false;
+  const a = new Uint8Array(left);
+  const b = new Uint8Array(right);
+  for (let index = 0; index < a.length; index += 1) {
+    if (a[index] !== b[index])
+      return false;
+  }
+  return true;
+}
+function attachmentName(token, alt, ext) {
+  const altName = alt.trim();
+  if (altName && !/[\\/:\x00-\x1f\[\]|]/.test(altName) && /\.(png|jpe?g|gif|bmp|webp|tiff?|svg)$/i.test(altName))
+    return altName;
+  return `image-${token.slice(-8)}${ext}`;
+}
+function withSuffix(name, index) {
+  const match = /^(.*?)(\.[^.]*)?$/.exec(name);
+  const stem = match?.[1] ?? name;
+  const suffix = match?.[2] ?? "";
+  return `${stem}-${index}${suffix}`;
+}
+async function resolveAttachmentPath(ctx, folder, name, bytes) {
+  const join = (fileName) => folder ? `${folder}/${fileName}` : fileName;
+  const primary = join(name);
+  if (!existsLocally2(ctx.app, primary))
+    return primary;
+  try {
+    if (bytesEqual(await ctx.readBinary(primary), bytes))
+      return primary;
+  } catch (error) {
+    ctx.logger.warn(`\u8BFB\u53D6\u5DF2\u6709\u9644\u4EF6 ${primary} \u5931\u8D25\uFF0C\u6309\u65B0\u6587\u4EF6\u5904\u7406\uFF1A${describeError(error)}`);
+  }
+  for (let index = 1; index < 100; index += 1) {
+    const candidate = join(withSuffix(name, index));
+    if (!existsLocally2(ctx.app, candidate))
+      return candidate;
+  }
+  return void 0;
+}
+async function knownImagePath(ctx, hash) {
+  for (const record of [...Object.values(ctx.state.images), ...Object.values(ctx.state.imageUploads)]) {
+    if (record.hash === hash && record.path && existsLocally2(ctx.app, record.path) && await ctx.hashBytes(await ctx.readBinary(record.path)) === hash)
+      return record.path;
+  }
+  return void 0;
+}
+async function downloadRemoteImage(ctx, options) {
+  try {
+    const downloaded = await downloadDocMedia(ctx.client, options.token);
+    if (downloaded.bytes.byteLength > REMOTE_IMAGE_MAX_BYTES) {
+      options.warnings.push(`\u7D20\u6750 ${options.token} \u8D85\u8FC7 20MB\uFF0C\u5DF2\u8DF3\u8FC7\uFF08\u5F15\u7528\u4FDD\u6301\u539F\u6837\uFF09`);
+      return void 0;
+    }
+    const hash = await ctx.hashBytes(downloaded.bytes);
+    const known = await knownImagePath(ctx, hash);
+    if (known) {
+      ctx.state.images[options.token] = { path: known, token: options.token, hash, at: Date.now() };
+      ctx.logger.debug(`\u8FDC\u7AEF\u56FE\u7247 ${options.token} \u4E0E\u672C\u5730\u5DF2\u6709\u6587\u4EF6\u5185\u5BB9\u4E00\u81F4\uFF0C\u590D\u7528 ${known}`);
+      return known;
+    }
+    const folder = ctx.settings.attachmentFolder.replace(/\\/g, "/").replace(/^\/+|\/+$/g, "");
+    const ext = extensionFor(downloaded.contentType, options.url, options.alt);
+    const name = attachmentName(options.token, options.alt, ext);
+    const path = await resolveAttachmentPath(ctx, folder, name, downloaded.bytes);
+    if (!path) {
+      options.warnings.push(`\u9644\u4EF6 ${name} \u540C\u540D\u6587\u4EF6\u8FC7\u591A\uFF0C\u672A\u843D\u76D8\uFF08\u5F15\u7528\u4FDD\u6301\u539F\u6837\uFF09`);
+      return void 0;
+    }
+    if (!existsLocally2(ctx.app, path))
+      await writeLocalBytes(ctx.app, path, downloaded.bytes);
+    ctx.state.images[options.token] = { path, token: options.token, hash, at: Date.now() };
+    ctx.logger.info(`\u5DF2\u4E0B\u8F7D\u8FDC\u7AEF\u56FE\u7247 ${options.token} \u2192 ${path}`);
+    return path;
+  } catch (error) {
+    ctx.logger.warn(`\u4E0B\u8F7D\u7D20\u6750 ${options.token} \u5931\u8D25\uFF1A${describeError(error)}`);
+    options.warnings.push(`\u7B2C ${options.token} \u5F20\u56FE\u4E0B\u8F7D\u5931\u8D25\uFF08${describeError(error)}\uFF09\uFF0C\u5F15\u7528\u4FDD\u6301\u539F\u6837`);
+    return void 0;
+  }
+}
+async function prepareRemoteImages(ctx, fetched, options) {
+  const map = /* @__PURE__ */ new Map();
+  if (!ruleEnabled(ctx.rules, "toObsidian", "image-download"))
+    return map;
+  const refs = collectRemoteImages(fetched);
+  if (refs.length === 0)
+    return map;
+  let blocks;
+  if (refs.some((ref) => !ref.token)) {
+    try {
+      const listed = await listDocImageBlocks(ctx.client, options.documentId);
+      if (listed.length === refs.length) {
+        blocks = listed;
+      } else {
+        options.warnings.push(
+          `\u53D6\u56DE\u5185\u5BB9\u91CC\u6709 ${refs.length} \u5F20\u56FE\uFF0C\u4F46\u6587\u6863\u91CC\u8BFB\u5230 ${listed.length} \u4E2A\u56FE\u7247\u5757\uFF0C\u6570\u91CF\u4E0D\u4E00\u81F4\uFF0C\u672A\u6309\u987A\u5E8F\u5339\u914D\uFF08\u8FD9\u4E9B\u56FE\u7247\u4FDD\u6301\u539F\u6837\uFF09`
+        );
+      }
+    } catch (error) {
+      options.warnings.push(`\u8BFB\u53D6\u6587\u6863\u56FE\u7247\u5757\u5931\u8D25\uFF0C\u65E0\u6CD5\u89E3\u6790\u56FE\u7247\u7D20\u6750\uFF1A${describeError(error)}`);
+    }
+  }
+  const pathByToken = /* @__PURE__ */ new Map();
+  for (const ref of refs) {
+    const token = ref.token ?? blocks?.[ref.index]?.fileToken;
+    if (!token) {
+      options.warnings.push(`\u7B2C ${ref.index + 1} \u5F20\u56FE\u62FF\u4E0D\u5230\u7D20\u6750 token\uFF0C\u5F15\u7528\u4FDD\u6301\u539F\u6837`);
+      continue;
+    }
+    let localPath = pathByToken.get(token);
+    if (!localPath) {
+      const known = ctx.state.images[token];
+      if (known?.hash && existsLocally2(ctx.app, known.path) && await ctx.hashBytes(await ctx.readBinary(known.path)) === known.hash) {
+        localPath = known.path;
+      } else {
+        localPath = await downloadRemoteImage(ctx, { token, alt: ref.alt, url: ref.url, warnings: options.warnings });
+      }
+      if (localPath)
+        pathByToken.set(token, localPath);
+    }
+    if (localPath)
+      map.set(ref.raw, localPath);
+  }
+  return map;
+}
+
+// src/sync/docEngine.ts
+var DocSyncEngine = class {
+  constructor(deps) {
+    this.deps = deps;
+    this.syncing = false;
+  }
+  isSyncing() {
+    return this.syncing;
+  }
+  createClient() {
+    return new FeishuClient((force) => this.deps.auth.getToken(force), this.deps.logger);
+  }
+  async listSpaces() {
+    return listSpaces(this.createClient());
+  }
+  async run(options) {
+    if (this.syncing)
+      throw new Error("\u5DF2\u6709\u540C\u6B65\u4EFB\u52A1\u5728\u6267\u884C\u4E2D");
+    this.syncing = true;
+    try {
+      return await this.runInternal(options);
+    } finally {
+      this.syncing = false;
+    }
+  }
+  async runInternal(options) {
+    const settings = this.deps.getSettings();
+    const logger = this.deps.logger;
+    validateSettings(settings);
+    const spaceId = parseTokenFromInput(settings.spaceId);
+    const rootNodeToken = parseTokenFromInput(settings.rootNodeToken) || void 0;
+    if (!spaceId)
+      throw new Error("\u8BF7\u5148\u5728\u63D2\u4EF6\u8BBE\u7F6E\u91CC\u586B\u5199\u77E5\u8BC6\u5E93 space_id");
+    const client = this.createClient();
+    const filter = new PathFilter(settings.excludePatterns);
+    if (options.preApprovedPlan)
+      assertPlanCurrent(options.preApprovedPlan, settings);
+    if (prepareTarget(settings, spaceId, rootNodeToken ?? "", "doc")) {
+      logger.warn("\u540C\u6B65\u76EE\u6807\u6216\u6A21\u5F0F\u5DF2\u53D8\u66F4\uFF0C\u5DF2\u6E05\u7A7A\u65E7\u6620\u5C04\uFF0C\u672C\u8F6E\u6309\u9996\u6B21\u5BF9\u63A5\u5224\u5B9A");
+    }
+    try {
+      const rules = await this.rules();
+      if (options.preApprovedPlan) {
+        if (options.preApprovedPlan.publishRulesFingerprint !== publishRulesFingerprint(rules) || options.preApprovedPlan.pullRulesFingerprint !== pullRulesFingerprint(rules)) {
+          throw new Error("\u9884\u89C8\u540E\u8F6C\u6362\u89C4\u5219\u53D1\u751F\u53D8\u5316\uFF0C\u8BF7\u91CD\u65B0\u9884\u89C8\u540C\u6B65\u8BA1\u5212");
+        }
+        const plan2 = filterPlan(options.preApprovedPlan, options.mode);
+        return await this.execute(plan2, options, { settings, client, spaceId, rootNodeToken, filter, rules });
+      }
+      if (!rootNodeToken && !settings.state.folders[""]?.nodeToken) {
+        const title = settings.rootPageTitle.trim() || this.deps.app.vault.getName();
+        try {
+          const topLevel = await listNodes(client, spaceId);
+          const found = topLevel.find((node) => node.title === title && node.obj_type !== "file");
+          if (found?.node_token) {
+            settings.state.folders[""] = { nodeToken: found.node_token };
+            logger.info(`\u8BC6\u522B\u5230\u5DF2\u6709\u7684\u77E5\u8BC6\u5E93\u9876\u5C42\u9875\u9762\u300C${title}\u300D\uFF0C\u590D\u7528\u5B83\u5B58\u653E vault \u6839\u76EE\u5F55\u4E0B\u7684\u7B14\u8BB0`);
+          }
+        } catch (error) {
+          throw new Error(`\u8BFB\u53D6\u77E5\u8BC6\u5E93\u9876\u5C42\u9875\u9762\u5931\u8D25\uFF0C\u5DF2\u505C\u6B62\u540C\u6B65\u4EE5\u907F\u514D\u91CD\u590D\u521B\u5EFA\uFF1A${String(error)}`);
+        }
+      }
+      options.onProgress?.("\u626B\u63CF\u672C\u5730\u7B14\u8BB0\u2026");
+      const local = scanLocalNotes(this.deps.app, filter);
+      validateLocalPaths(local.keys(), settings);
+      options.onProgress?.("\u8BFB\u53D6\u98DE\u4E66\u77E5\u8BC6\u5E93\u8282\u70B9\u6811\u2026");
+      const entries = await walkWikiTree(client, spaceId, rootNodeToken, {
+        rootContainerNode: settings.state.folders[""]?.nodeToken,
+        onProgress: (visited) => {
+          if (visited % 50 === 0)
+            options.onProgress?.(`\u8BFB\u53D6\u98DE\u4E66\u77E5\u8BC6\u5E93\u8282\u70B9\u6811\u2026\uFF08\u5DF2\u89C1 ${visited} \u4E2A\u8282\u70B9\uFF09`);
+        }
+      });
+      const index = buildDocRemoteIndex({
+        entries,
+        state: settings.state,
+        folderMode: settings.folderMode,
+        flatSeparator: settings.flatSeparator,
+        rootContainerNode: settings.state.folders[""]?.nodeToken,
+        isExcluded: (relPath) => filter.isExcluded(relPath)
+      });
+      if (index.warnings.length)
+        throw new Error(`\u8FDC\u7AEF\u8DEF\u5F84\u5B58\u5728\u6B67\u4E49\uFF0C\u8BF7\u5148\u5904\u7406\u518D\u540C\u6B65\uFF1A${index.warnings.join("\uFF1B")}`);
+      if (settings.folderMode === "nodes") {
+        for (const [relDir, container] of index.containers) {
+          const known = settings.state.folders[relDir];
+          if (!known || known.nodeToken !== container.nodeToken) {
+            settings.state.folders[relDir] = { nodeToken: container.nodeToken, parentNodeToken: container.parentNodeToken };
+          }
+        }
+      }
+      logger.info(
+        `\u6587\u6863\u6A21\u5F0F\uFF1A\u8FDC\u7AEF\u8BC6\u522B\u5230 ${index.notes.size} \u7BC7\u6587\u6863\u3001${index.containers.size} \u4E2A\u76EE\u5F55\u8282\u70B9\uFF1B\u672C\u5730 ${local.size} \u7BC7\u7B14\u8BB0`
+      );
+      options.onProgress?.("\u8BFB\u53D6\u8FDC\u7AEF\u6587\u6863\u5143\u6570\u636E\u2026");
+      const remoteModifiedTimes = settings.docVerifyRemoteByContent ? /* @__PURE__ */ new Map() : await this.batchDocumentModifyTimes(client, settings.state);
+      if (remoteModifiedTimes.size === 0 && Object.keys(settings.state.docRecords).length > 0) {
+        logger.debug("\u6587\u6863\u6A21\u5F0F\uFF1A\u6CA1\u62FF\u5230\u53EF\u7528\u7684\u8FDC\u7AEF\u4FEE\u6539\u65F6\u95F4\uFF0C\u672C\u8F6E\u9000\u56DE\u9010\u7BC7\u53D6\u56DE\u6821\u9A8C");
+      }
+      if (settings.docVerifyRemoteByContent) {
+        logger.debug("\u6587\u6863\u6A21\u5F0F\uFF1A\u5DF2\u6253\u5F00\u300C\u6BCF\u8F6E\u53D6\u56DE\u5168\u6587\u6821\u9A8C\u300D\uFF0C\u672C\u8F6E\u5FFD\u7565\u4FEE\u6539\u65F6\u95F4\u6233");
+      }
+      const cache = createDocPlanCache();
+      const planned = await buildDocPlan({
+        state: settings.state,
+        local,
+        remote: index,
+        settings,
+        rules,
+        isExcluded: (relPath) => filter.isExcluded(relPath),
+        recreateRemoteIfDeleted: settings.recreateRemoteIfDeleted,
+        propagateLocalDelete: settings.propagateLocalDelete,
+        propagateRemoteDelete: settings.propagateRemoteDelete,
+        cache,
+        forcePush: options.forcePush === true,
+        remoteModifiedTimes,
+        verifyRemoteByContent: settings.docVerifyRemoteByContent,
+        readLocal: (relPath) => readLocalText(this.deps.app, relPath),
+        hashText: (text) => this.hashText(text),
+        hashFetched: (text) => this.hashFetched(text),
+        fetchMarkdown: (documentId) => this.fetchMarkdown(client, documentId)
+      });
+      logger.debug(
+        `\u6587\u6863\u6A21\u5F0F\uFF1A\u672C\u8F6E fetch \u6587\u6863 ${cache.fetchCount} \u6B21\u3001\u6279\u91CF\u5143\u6570\u636E ${remoteModifiedTimes.size > 0 ? "\u547D\u4E2D" : "\u672A\u547D\u4E2D"}\uFF08${settings.docVerifyRemoteByContent ? "\u5B89\u5168\u9600\u6253\u5F00\uFF1A\u6BCF\u8F6E\u5168\u6587\u6821\u9A8C" : "\u65F6\u95F4\u6233\u5FEB\u8DEF\u5F84"}\uFF09`
+      );
+      const plan = deferDeletes(filterPlan(planned, options.mode), options.allowDeletes);
+      plan.settingsFingerprint = planFingerprint(settings);
+      if (options.dryRun) {
+        return { plan, report: [], executed: false };
+      }
+      return await this.execute(plan, options, { settings, client, spaceId, rootNodeToken, filter, rules, cache, index });
+    } catch (error) {
+      await this.deps.saveSettings();
+      throw error;
+    }
+  }
+  async rules() {
+    return loadRules(this.deps.app.vault.adapter, this.deps.logger);
+  }
+  async hashText(text) {
+    return sha256Hex(new TextEncoder().encode(text).buffer);
+  }
+  /** 远端基线用"取回形态 + 图片 URL 归一化"：图片 URL 里可能带会过期的签名，不归一化会天天判成远端变了。 */
+  async hashFetched(text) {
+    return this.hashText(normalizeRemoteImageUrls(text));
+  }
+  async hashBytes(bytes) {
+    return sha256Hex(bytes);
+  }
+  /** 上行：用 Obsidian 的链接解析把 ![[x.png]] / ![](path) 还原成 vault 里的真实文件 */
+  imageResolver() {
+    return (linkpath, sourcePath) => {
+      const cache = this.deps.app.metadataCache;
+      const target = cache?.getFirstLinkpathDest?.(linkpath, sourcePath);
+      if (!target)
+        return void 0;
+      return { path: target.path, size: target.stat?.size ?? 0 };
+    };
+  }
+  async fetchMarkdown(client, documentId) {
+    return fetchDocumentMarkdown(client, documentId);
+  }
+  async execute(plan, options, context) {
+    let allowPush = options.mode !== "pull";
+    const allowPull = options.mode !== "push";
+    let planForRun = plan;
+    if (options.confirm) {
+      const decision = await options.confirm(plan);
+      if (decision === "cancel")
+        return { plan, report: [], executed: false };
+      if (decision === "pull-only") {
+        allowPush = false;
+        planForRun = filterPlan(plan, "pull");
+      }
+    }
+    assertPlanCurrent(plan, context.settings);
+    const cache = context.cache ?? createDocPlanCache();
+    const local = scanLocalNotes(this.deps.app, context.filter);
+    const containerTitles = new Set(context.index?.containerTitles ?? []);
+    for (const relDir of Object.keys(context.settings.state.folders)) {
+      if (relDir)
+        containerTitles.add(basenameOf(relDir));
+    }
+    for (const relPath of local.keys()) {
+      for (const segment of dirnameOf(relPath).split("/").filter(Boolean))
+        containerTitles.add(segment);
+    }
+    const execContext = {
+      app: this.deps.app,
+      client: context.client,
+      settings: context.settings,
+      state: context.settings.state,
+      logger: this.deps.logger,
+      spaceId: context.spaceId,
+      rootNodeToken: context.rootNodeToken,
+      rules: context.rules,
+      cache,
+      containerTitles,
+      hashText: (text) => this.hashText(text),
+      hashFetched: (text) => this.hashFetched(text),
+      hashBytes: (bytes) => this.hashBytes(bytes),
+      resolveImage: this.imageResolver(),
+      readBinary: (vaultPath) => readLocalBytes(this.deps.app, vaultPath)
+    };
+    try {
+      const report = await executeDocPlan(planForRun, execContext, {
+        allowPush,
+        allowPull,
+        isEditorDirty: (relPath) => isEditorDirty(this.deps.app, relPath),
+        onProgress: (message, done, total) => options.onProgress?.(`${message}\uFF08${done}/${total}\uFF09`)
+      });
+      const touched = touchedRelPaths(report);
+      if (touched.size > 0)
+        await this.refreshDocumentModifyTimes(context.client, context.settings.state, touched);
+      return { plan: planForRun, report, executed: true };
+    } finally {
+      await this.deps.saveSettings();
+    }
+  }
+  /** 批量取「最后修改时间」（Unix 秒字符串）：文档 id → 时间戳。取不到就返回空，调用方退回逐篇取回。 */
+  async batchDocumentModifyTimes(client, state) {
+    const tokens = Array.from(new Set(Object.values(state.docRecords).map((record) => record.documentId))).filter(Boolean);
+    if (tokens.length === 0)
+      return /* @__PURE__ */ new Map();
+    try {
+      const metas = await batchQueryMetas(client, tokens, "docx");
+      const times = /* @__PURE__ */ new Map();
+      for (const [token, meta] of metas) {
+        if (meta.modifiedTime)
+          times.set(token, meta.modifiedTime);
+      }
+      return times;
+    } catch (error) {
+      this.deps.logger.warn(`\u6279\u91CF\u8BFB\u53D6\u8FDC\u7AEF\u6587\u6863\u5143\u6570\u636E\u5931\u8D25\uFF0C\u672C\u8F6E\u9000\u56DE\u9010\u7BC7\u53D6\u56DE\u6821\u9A8C\uFF1A${String(error)}`);
+      return /* @__PURE__ */ new Map();
+    }
+  }
+  async refreshDocumentModifyTimes(client, state, relPaths) {
+    const tokens = Array.from(
+      new Set([...relPaths].map((relPath) => state.docRecords[relPath]?.documentId).filter((token) => Boolean(token)))
+    );
+    if (tokens.length === 0)
+      return;
+    try {
+      const metas = await batchQueryMetas(client, tokens, "docx");
+      for (const record of Object.values(state.docRecords)) {
+        const meta = metas.get(record.documentId);
+        if (meta?.modifiedTime)
+          record.remoteModifiedTime = meta.modifiedTime;
+      }
+    } catch (error) {
+      this.deps.logger.warn(`\u5237\u65B0\u8FDC\u7AEF\u6587\u6863\u4FEE\u6539\u65F6\u95F4\u5931\u8D25\uFF08\u4E0B\u4E00\u8F6E\u4F1A\u9000\u56DE\u9010\u7BC7\u53D6\u56DE\uFF09\uFF1A${String(error)}`);
+    }
+  }
+};
+function touchedRelPaths(report) {
+  const touched = /* @__PURE__ */ new Set();
+  for (const entry of report) {
+    if (!entry.ok)
+      continue;
+    if (["push", "create-remote", "pull", "create-local", "link"].includes(entry.action))
+      touched.add(entry.relPath);
+  }
+  return touched;
+}
+
+// src/ui/auth-modal.ts
+var import_obsidian9 = require("obsidian");
+var AuthCodeModal = class extends import_obsidian9.Modal {
+  constructor(app, authorizeUrl, onSubmit, onCancel) {
+    super(app);
+    this.authorizeUrl = authorizeUrl;
+    this.onSubmit = onSubmit;
+    this.onCancel = onCancel;
+    this.value = "";
+    this.submitted = false;
+  }
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.empty();
+    contentEl.createEl("h2", { text: "\u624B\u52A8\u5B8C\u6210\u98DE\u4E66\u6388\u6743" });
+    contentEl.createEl("p", {
+      text: "\u5982\u679C\u672C\u5730\u56DE\u8C03\u670D\u52A1\u4E0D\u53EF\u7528\uFF0C\u53EF\u4EE5\u624B\u52A8\u5B8C\u6210\u6388\u6743\uFF1A\u5728\u6D4F\u89C8\u5668\u91CC\u6253\u5F00\u4E0B\u9762\u7684\u94FE\u63A5\u5E76\u540C\u610F\u6388\u6743\uFF0C\u9875\u9762\u53EF\u80FD\u663E\u793A\u65E0\u6CD5\u8BBF\u95EE\uFF0C\u4F46\u5730\u5740\u680F\u91CC\u5E26\u6709 code \u53C2\u6570\uFF0C\u628A\u6574\u6761\u5730\u5740\u6216 code \u7C98\u8D34\u5230\u4E0B\u9762\u5373\u53EF\u3002"
+    });
+    const link = contentEl.createEl("div", { cls: "feishu-sync-path" });
+    link.createEl("a", { text: this.authorizeUrl, href: this.authorizeUrl });
+    new import_obsidian9.Setting(contentEl).setName("\u6388\u6743\u7801\u6216\u56DE\u8C03\u5730\u5740").setDesc("\u7C98\u8D34 code \u53C2\u6570\uFF0C\u6216\u76F4\u63A5\u7C98\u8D34\u6D4F\u89C8\u5668\u5730\u5740\u680F\u91CC\u7684\u5B8C\u6574\u56DE\u8C03\u5730\u5740").addText(
+      (text) => text.onChange((value) => {
+        this.value = value;
+      })
+    );
+    new import_obsidian9.Setting(contentEl).addButton(
+      (button) => button.setButtonText("\u53D6\u6D88").onClick(() => {
+        this.close();
+      })
+    ).addButton(
+      (button) => button.setButtonText("\u63D0\u4EA4\u6388\u6743\u7801").setCta().onClick(async () => {
+        const raw = this.value.trim();
+        if (!raw)
+          return;
+        if (this.submitted)
+          return;
+        this.submitted = true;
+        const code = extractCode(raw);
+        await this.onSubmit(code);
+        this.close();
+      })
+    );
+  }
+  onClose() {
+    if (!this.submitted)
+      this.onCancel();
+    this.contentEl.empty();
+  }
+};
+function extractCode(input) {
+  const value = input.trim();
+  if (!/^https?:\/\//i.test(value))
+    return value;
+  try {
+    const url = new URL(value);
+    return url.searchParams.get("code") ?? value;
+  } catch {
+    return value;
+  }
+}
+
+// src/ui/plan-modal.ts
+var import_obsidian10 = require("obsidian");
+
+// src/ui/format-warnings.ts
+function renderFormatWarnings(container, plan) {
+  if (!plan.warnings?.length)
+    return;
+  const section = container.createEl("div", { cls: "feishu-sync-section" });
+  section.createEl("h4", { text: `\u539F\u7A3F\u683C\u5F0F\u63D0\u793A\uFF08${plan.warnings.length}\uFF09` });
+  for (const warning of plan.warnings.slice(0, 100)) {
+    section.createEl("div", { cls: "feishu-sync-reason", text: `${warning.relPath}\uFF1A${warning.message}` });
+  }
+  if (plan.warnings.length > 100)
+    section.createEl("div", { text: "\u4EC5\u663E\u793A\u524D 100 \u6761\u683C\u5F0F\u63D0\u793A" });
+}
+
+// src/ui/plan-modal.ts
+var GROUPS = [
+  { key: "push", title: "\u4F1A\u4E0A\u4F20\u5230\u98DE\u4E66", actions: ["push", "create-remote"] },
+  { key: "pull", title: "\u4F1A\u62C9\u53D6\u5230\u672C\u5730", actions: ["pull", "create-local"] },
+  { key: "delete-remote", title: "\u4F1A\u5220\u9664\u8FDC\u7AEF\uFF08\u8FDB\u98DE\u4E66\u56DE\u6536\u7AD9\uFF0C\u53EF\u6062\u590D\uFF09", actions: ["delete-remote"] },
+  { key: "delete-local", title: "\u4F1A\u5220\u9664\u672C\u5730\u6587\u4EF6\uFF08\u79FB\u5165 .trash\uFF09", actions: ["delete-local"] },
+  { key: "conflict", title: "\u51B2\u7A81\uFF08\u4FDD\u7559\u53CC\u65B9\uFF0C\u4E0D\u81EA\u52A8\u8986\u76D6\uFF09", actions: ["conflict"] },
+  { key: "link", title: "\u53EA\u5EFA\u7ACB\u6620\u5C04", actions: ["link"] },
+  { key: "observe", title: "\u4EC5\u63D0\u793A\uFF0C\u4E0D\u4F1A\u6539\u52A8\u4EFB\u4F55\u4E00\u8FB9", actions: ["local-deleted", "remote-deleted", "empty-local", "dirty-editor", "forget"] }
+];
+var PlanModal = class extends import_obsidian10.Modal {
+  constructor(app, plan, resolve) {
+    super(app);
+    this.plan = plan;
+    this.resolve = resolve;
+    this.decided = false;
+  }
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.empty();
+    contentEl.createEl("h2", { text: "\u98DE\u4E66\u540C\u6B65\u8BA1\u5212" });
+    const summary = contentEl.createEl("div", { cls: "feishu-sync-summary" });
+    const counts = Object.entries(this.plan.counts).filter(([action]) => action !== "skip").map(([action, count]) => `${ACTION_LABELS[action] ?? action} ${count}`).join(" \xB7 ");
+    summary.createEl("div", {
+      text: `\u672C\u5730 ${this.plan.localNoteCount} \u7BC7 \xB7 \u8FDC\u7AEF ${this.plan.remoteNoteCount} \u7BC7${counts ? ` \xB7 ${counts}` : " \xB7 \u65E0\u5F85\u5904\u7406\u6539\u52A8"}`
+    });
+    const skipped = this.plan.counts.skip ?? 0;
+    if (skipped > 0) {
+      summary.createEl("div", { text: `\u5DF2\u540C\u6B65\u4E14\u65E0\u53D8\u5316\uFF1A${skipped} \u7BC7`, cls: "feishu-sync-reason" });
+    }
+    renderFormatWarnings(contentEl, this.plan);
+    for (const group of GROUPS) {
+      const items = this.plan.items.filter((entry) => group.actions.includes(entry.action));
+      if (items.length === 0)
+        continue;
+      const section = contentEl.createEl("div", { cls: "feishu-sync-section" });
+      section.createEl("h4", { text: `${group.title}\uFF08${items.length}\uFF09` });
+      const list = section.createEl("div", { cls: "feishu-sync-list" });
+      for (const entry of items.slice(0, 200)) {
+        renderItem(list, entry);
+      }
+      if (items.length > 200) {
+        list.createEl("div", { text: `\u2026\u8FD8\u6709 ${items.length - 200} \u9879`, cls: "feishu-sync-reason" });
+      }
+    }
+    new import_obsidian10.Setting(contentEl).addButton(
+      (button) => button.setButtonText("\u53D6\u6D88").onClick(() => {
+        this.decide("cancel");
+        this.close();
+      })
+    ).addButton(
+      (button) => button.setButtonText("\u4EC5\u62C9\u53D6\uFF08\u4E0D\u63A8\u9001\uFF09").onClick(() => {
+        this.decide("pull-only");
+        this.close();
+      })
+    ).addButton(
+      (button) => button.setButtonText("\u6267\u884C\u5168\u90E8").setCta().onClick(() => {
+        this.decide("all");
+        this.close();
+      })
+    );
+  }
+  onClose() {
+    this.contentEl.empty();
+    this.decide("cancel");
+  }
+  decide(decision) {
+    if (this.decided)
+      return;
+    this.decided = true;
+    this.resolve(decision);
+  }
+};
+function renderItem(container, entry) {
+  const row = container.createEl("div", { cls: "feishu-sync-plan-item" });
+  const badge = row.createEl("span", { cls: `feishu-sync-badge is-${badgeClass(entry.action)}`, text: ACTION_LABELS[entry.action] ?? entry.action });
+  badge.setAttr("title", entry.action);
+  row.createEl("span", { cls: "feishu-sync-path", text: entry.relPath });
+  if (entry.reason) {
+    row.createEl("span", { cls: "feishu-sync-reason", text: entry.reason });
+  }
+}
+function badgeClass(action) {
+  if (action === "push" || action === "create-remote")
+    return "push";
+  if (action === "pull" || action === "create-local")
+    return "pull";
+  if (action === "conflict")
+    return "conflict";
+  if (action === "delete-remote" || action === "delete-local")
+    return "delete";
+  return "other";
+}
+
+// src/ui/report-modal.ts
+var import_obsidian11 = require("obsidian");
+var ReportModal = class extends import_obsidian11.Modal {
+  constructor(app, plan, report, executed) {
+    super(app);
+    this.plan = plan;
+    this.report = report;
+    this.executed = executed;
+  }
+  onOpen() {
+    const { contentEl } = this;
+    contentEl.empty();
+    contentEl.createEl("h2", { text: this.executed ? "\u98DE\u4E66\u540C\u6B65\u7ED3\u679C" : "\u98DE\u4E66\u540C\u6B65\u8BA1\u5212\uFF08\u672A\u6267\u884C\uFF09" });
+    const failed = this.report.filter((entry) => !entry.ok);
+    const conflicts = this.report.filter((entry) => entry.action === "conflict");
+    const changed = this.report.filter((entry) => entry.ok && isChange(entry.action));
+    const summary = contentEl.createEl("div", { cls: "feishu-sync-summary" });
+    summary.createEl("div", { text: `\u53D8\u66F4 ${changed.length} \u9879 \xB7 \u51B2\u7A81 ${conflicts.length} \u9879 \xB7 \u5931\u8D25 ${failed.length} \u9879` });
+    const planCounts = Object.entries(this.plan.counts).filter(([action, count]) => action !== "skip" && count > 0).map(([action, count]) => `${ACTION_LABELS[action] ?? action} ${count}`).join(" \xB7 ");
+    if (planCounts) {
+      summary.createEl("div", { cls: "feishu-sync-reason", text: `\u672C\u6B21\u8BA1\u5212\uFF1A${planCounts}` });
+    }
+    renderFormatWarnings(contentEl, this.plan);
+    renderSection(contentEl, "\u51B2\u7A81\u526F\u672C\uFF08\u672C\u5730\u4E0E\u8FDC\u7AEF\u5747\u672A\u6539\u52A8\uFF0C\u526F\u672C\u5728 .obsidian/feishu-sync/conflicts/\uFF09", conflicts, true);
+    renderSection(contentEl, "\u5DF2\u6267\u884C", changed, false);
+    renderSection(contentEl, "\u9700\u8981\u6CE8\u610F\uFF08\u672A\u81EA\u52A8\u5904\u7406\uFF09", this.report.filter((entry) => !isChange(entry.action) && entry.action !== "conflict"), false);
+    renderSection(contentEl, "\u5931\u8D25", failed, false);
+    new import_obsidian11.Setting(contentEl).addButton((button) => button.setButtonText("\u5173\u95ED").setCta().onClick(() => this.close()));
+  }
+  onClose() {
+    this.contentEl.empty();
+  }
+};
+function isChange(action) {
+  return ["push", "create-remote", "pull", "create-local", "link", "delete-remote", "delete-local"].includes(action);
+}
+function renderSection(container, title, entries, isConflict) {
+  if (entries.length === 0)
+    return;
+  const section = container.createEl("div", { cls: "feishu-sync-section" });
+  section.createEl("h4", { text: `${title}\uFF08${entries.length}\uFF09` });
+  const list = section.createEl("div", { cls: "feishu-sync-list" });
+  for (const entry of entries.slice(0, 300)) {
+    const row = list.createEl("div", { cls: "feishu-sync-plan-item" });
+    const badge = row.createEl("span", {
+      cls: `feishu-sync-badge is-${isConflict ? "conflict" : entry.ok ? "push" : "conflict"}`,
+      text: entry.ok ? ACTION_LABELS[entry.action] ?? entry.action : "\u5931\u8D25"
+    });
+    badge.setAttr("title", entry.action);
+    row.createEl("span", { cls: "feishu-sync-path", text: entry.relPath });
+    if (entry.copyPath)
+      row.createEl("span", { cls: "feishu-sync-reason", text: `\u526F\u672C\uFF1A${entry.copyPath}` });
+    if (entry.message)
+      row.createEl("span", { cls: "feishu-sync-reason", text: entry.message });
+  }
+  if (entries.length > 300) {
+    list.createEl("div", { text: `\u2026\u8FD8\u6709 ${entries.length - 300} \u9879`, cls: "feishu-sync-reason" });
+  }
+}
+
+// src/main.ts
+var CHANGE_ACTIONS = /* @__PURE__ */ new Set(["push", "create-remote", "pull", "create-local", "link", "delete-remote", "delete-local"]);
+function setNoticeMessage(notice, message) {
+  const candidate = notice;
+  if (typeof candidate.setMessage === "function")
+    candidate.setMessage(message);
+}
+var FeishuWikiSyncPlugin = class extends import_obsidian12.Plugin {
+  constructor() {
+    super(...arguments);
+    this.settings = DEFAULT_SETTINGS;
+    this.statusBar = null;
+    this.autoSyncHandle = null;
+    this.syncInFlight = false;
+  }
+  /** 按设置里的同步模式选引擎，4 条命令与侧栏按钮都走这里。 */
+  get engine() {
+    return this.settings.syncMode === "doc" ? this.docEngine : this.mdEngine;
+  }
+  async onload() {
+    await this.loadSettings();
+    this.logger = new Logger(
+      () => this.app,
+      () => this.settings.debugLog
+    );
+    this.auth = new AuthManager(
+      () => ({
+        mode: this.settings.authMode,
+        appId: this.settings.appId,
+        appSecret: this.settings.appSecret,
+        oauthScope: this.settings.oauthScope,
+        redirectUri: this.settings.redirectUri
+      }),
+      () => this.settings.userTokens,
+      async (tokens) => {
+        this.settings.userTokens = tokens;
+        await this.saveSettings();
+      },
+      this.logger
+    );
+    this.mdEngine = new SyncEngine({
+      app: this.app,
+      getSettings: () => this.settings,
+      saveSettings: () => this.saveSettings(),
+      auth: this.auth,
+      logger: this.logger
+    });
+    this.docEngine = new DocSyncEngine({
+      app: this.app,
+      getSettings: () => this.settings,
+      saveSettings: () => this.saveSettings(),
+      auth: this.auth,
+      logger: this.logger
+    });
+    this.statusBar = this.addStatusBarItem();
+    this.statusBar.addClass("mod-clickable");
+    this.registerDomEvent(this.statusBar, "click", () => void this.runSync("both"));
+    this.updateStatusBar();
+    this.addSettingTab(new FeishuWikiSyncSettingTab(this.app, this));
+    this.addCommand({ id: "preview-plan", name: "\u9884\u89C8\u540C\u6B65\u8BA1\u5212", callback: () => void this.runSync("both", { preview: true }) });
+    this.addCommand({ id: "sync-both", name: "\u53CC\u5411\u540C\u6B65", callback: () => void this.runSync("both") });
+    this.addCommand({ id: "sync-pull", name: "\u4ECE\u98DE\u4E66\u62C9\u53D6\u5230\u672C\u5730", callback: () => void this.runSync("pull") });
+    this.addCommand({ id: "sync-push", name: "\u628A\u672C\u5730\u63A8\u9001\u5230\u98DE\u4E66", callback: () => void this.runSync("push") });
+    this.addCommand({
+      id: "force-push",
+      name: "\u5F3A\u5236\u91CD\u63A8\uFF08\u5FFD\u7565\u57FA\u7EBF\uFF0C\u5237\u65B0\u6240\u6709\u672C\u5730\u7B14\u8BB0\uFF09",
+      callback: () => void this.runSync("push", { forcePush: true })
+    });
+    this.addRibbonIcon("refresh-cw", "Feishu Wiki Sync\uFF1A\u53CC\u5411\u540C\u6B65", () => void this.runSync("both"));
+    this.refreshAutoSync();
+  }
+  onunload() {
+    if (this.autoSyncHandle !== null)
+      window.clearInterval(this.autoSyncHandle);
+    this.autoSyncHandle = null;
+    this.statusBar = null;
+    this.auth?.cancelAuthorization();
+  }
+  async loadSettings() {
+    const raw = await this.loadData();
+    const state = raw?.state ?? {};
+    this.settings = {
+      ...DEFAULT_SETTINGS,
+      ...raw ?? {},
+      state: {
+        records: state.records ?? {},
+        folders: state.folders ?? {},
+        conflicts: state.conflicts ?? {},
+        docRecords: state.docRecords ?? {},
+        images: state.images ?? {},
+        imageUploads: state.imageUploads ?? {},
+        target: state.target,
+        lastSyncAt: state.lastSyncAt
+      }
+    };
+  }
+  isSyncBusy() {
+    return this.syncInFlight || this.mdEngine?.isSyncing() || this.docEngine?.isSyncing();
+  }
+  async saveSettings() {
+    await this.saveData(this.settings);
+  }
+  refreshAutoSync() {
+    if (this.autoSyncHandle !== null) {
+      window.clearInterval(this.autoSyncHandle);
+      this.autoSyncHandle = null;
+    }
+    const minutes = this.settings.autoSyncMinutes;
+    if (!minutes || minutes <= 0)
+      return;
+    this.autoSyncHandle = this.registerInterval(window.setInterval(() => {
+      if (this.isSyncBusy())
+        return;
+      if (this.settings.authMode === "user" && !this.auth.hasValidUserGrant())
+        return;
+      void this.runSync("both", { quiet: true });
+    }, minutes * 6e4));
+  }
+  async startAuthorization() {
+    const state = (0, import_crypto2.randomBytes)(24).toString("hex");
+    const server = this.auth.startCallbackServer(state);
+    const authorizeUrl = this.auth.buildAuthorizeUrl(state);
+    openExternal(authorizeUrl);
+    new import_obsidian12.Notice("\u5DF2\u6253\u5F00\u6D4F\u89C8\u5668\uFF0C\u8BF7\u5728\u98DE\u4E66\u91CC\u5B8C\u6210\u6388\u6743");
+    try {
+      const code = await server.waitForCode();
+      await this.auth.exchangeCode(code);
+      new import_obsidian12.Notice("\u98DE\u4E66\u6388\u6743\u6210\u529F");
+    } catch (error) {
+      server.close();
+      throw error;
+    }
+  }
+  async startManualAuthorization() {
+    const state = (0, import_crypto2.randomBytes)(24).toString("hex");
+    const authorizeUrl = this.auth.buildAuthorizeUrl(state);
+    openExternal(authorizeUrl);
+    await new Promise((resolve) => {
+      new AuthCodeModal(
+        this.app,
+        authorizeUrl,
+        async (codeOrUrl) => {
+          try {
+            await this.auth.exchangeCode(codeOrUrl);
+            new import_obsidian12.Notice("\u98DE\u4E66\u6388\u6743\u6210\u529F");
+          } catch (error) {
+            new import_obsidian12.Notice(`\u6388\u6743\u5931\u8D25\uFF1A${describeError(error)}`, 1e4);
+          }
+          resolve();
+        },
+        () => resolve()
+      ).open();
+    });
+  }
+  async revokeAuthorization() {
+    this.settings.userTokens = void 0;
+    await this.saveSettings();
+    new import_obsidian12.Notice("\u5DF2\u6E05\u9664\u672C\u5730\u4FDD\u5B58\u7684\u98DE\u4E66\u6388\u6743");
+  }
+  async runSync(mode, options = {}) {
+    if (this.engine.isSyncing() || this.syncInFlight) {
+      new import_obsidian12.Notice("\u98DE\u4E66\u540C\u6B65\uFF1A\u5DF2\u6709\u4EFB\u52A1\u5728\u6267\u884C\u4E2D");
+      return;
+    }
+    if (!this.settings.appId || !this.settings.appSecret) {
+      new import_obsidian12.Notice("\u8BF7\u5148\u5728\u63D2\u4EF6\u8BBE\u7F6E\u91CC\u586B\u5199\u98DE\u4E66\u5E94\u7528\u7684 App ID \u4E0E App Secret");
+      return;
+    }
+    if (options.forcePush && this.settings.syncMode !== "doc") {
+      new import_obsidian12.Notice("\u5F3A\u5236\u91CD\u63A8\u4EC5\u7528\u4E8E\u6587\u6863\u6A21\u5F0F\uFF1B\u6587\u4EF6\u955C\u50CF\u6A21\u5F0F\u8BF7\u4F7F\u7528\u666E\u901A\u540C\u6B65");
+      return;
+    }
+    this.syncInFlight = true;
+    const engine = this.engine;
+    const label = this.settings.syncMode === "doc" ? "\u98DE\u4E66\u6587\u6863\u540C\u6B65" : "\u98DE\u4E66\u6587\u4EF6\u540C\u6B65";
+    const wantPreview = !options.quiet && (this.settings.propagateLocalDelete || this.settings.propagateRemoteDelete || options.forcePush === true || (options.preview ?? this.settings.showPlanBeforeSync));
+    const forcePush = options.forcePush === true;
+    const notice = new import_obsidian12.Notice(`${label}\uFF1A\u51C6\u5907\u4E2D\u2026`, 0);
+    let running;
+    const progress = (message) => setNoticeMessage(notice, `${label}\uFF1A${message}`);
+    try {
+      if (wantPreview) {
+        const preview = await engine.run({ mode, dryRun: true, forcePush, onProgress: progress });
+        notice.hide();
+        const decision = await new Promise((resolve) => new PlanModal(this.app, preview.plan, resolve).open());
+        if (decision === "cancel")
+          return;
+        running = new import_obsidian12.Notice(`${label}\uFF1A\u6267\u884C\u4E2D\u2026`, 0);
+        const result2 = await engine.run({
+          mode,
+          preApprovedPlan: preview.plan,
+          onProgress: (message) => setNoticeMessage(running, `${label}\uFF1A${message}`),
+          confirm: async () => decision
+        });
+        running.hide();
+        new ReportModal(this.app, result2.plan, result2.report, result2.executed).open();
+        return;
+      }
+      const result = await engine.run({ mode, forcePush, allowDeletes: !options.quiet, onProgress: progress, confirm: async () => "all" });
+      notice.hide();
+      const failures = result.report.filter((entry) => !entry.ok).length;
+      const conflicts = result.report.filter((entry) => entry.action === "conflict").length;
+      const changes = result.report.filter((entry) => entry.ok && CHANGE_ACTIONS.has(entry.action)).length;
+      const pendingDeletes = result.report.some((entry) => entry.action === "local-deleted" || entry.action === "remote-deleted");
+      if (options.quiet && failures === 0 && conflicts === 0 && !pendingDeletes && !result.plan.warnings?.length) {
+        if (changes > 0)
+          new import_obsidian12.Notice(`${label}\u5B8C\u6210\uFF1A${changes} \u9879\u53D8\u66F4`);
+      } else {
+        new ReportModal(this.app, result.plan, result.report, result.executed).open();
+      }
+    } catch (error) {
+      notice.hide();
+      this.logger.error(`\u540C\u6B65\u5931\u8D25\uFF1A${describeError(error)}`);
+      new import_obsidian12.Notice(`${label}\u5931\u8D25\uFF1A${describeError(error)}`, 12e3);
+    } finally {
+      running?.hide();
+      notice.hide();
+      this.syncInFlight = false;
+      await this.logger.flush();
+      this.updateStatusBar();
+    }
+  }
+  updateStatusBar() {
+    if (!this.statusBar)
+      return;
+    const last = this.settings.state.lastSyncAt;
+    const docMode = this.settings.syncMode === "doc";
+    const count = Object.keys(docMode ? this.settings.state.docRecords : this.settings.state.records).length;
+    const stamp = last ? new Date(last).toLocaleString(void 0, { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" }) : "\u672A\u540C\u6B65";
+    this.statusBar.setText(`\u98DE\u4E66${docMode ? "\u6587\u6863" : ""} ${stamp} \xB7 ${count} \u7BC7`);
+    this.statusBar.setAttr("aria-label", docMode ? "\u70B9\u51FB\u6267\u884C\u6587\u6863\u6A21\u5F0F\u53CC\u5411\u540C\u6B65" : "\u70B9\u51FB\u6267\u884C\u98DE\u4E66\u53CC\u5411\u540C\u6B65");
+  }
+};
