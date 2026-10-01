@@ -40,28 +40,38 @@ interface PageResult<T> {
 const PAGE_SIZE = 50;
 const MAX_DEPTH = 20;
 
+function nextPage<T>(page: PageResult<T>, seen: Set<string>): string | undefined {
+  if (!Array.isArray(page.items)) throw new Error("知识库列表响应缺少 items，已停止同步，避免误判远端删除");
+  if (!page.has_more) return undefined;
+  if (!page.page_token || seen.has(page.page_token)) throw new Error("知识库分页游标缺失或重复，已停止同步");
+  seen.add(page.page_token);
+  return page.page_token;
+}
+
 export async function listSpaces(client: FeishuClient): Promise<WikiSpace[]> {
   const spaces: WikiSpace[] = [];
+  const seen = new Set<string>();
   let pageToken: string | undefined;
   do {
     const page = await client.json<PageResult<WikiSpace>>("GET", "/open-apis/wiki/v2/spaces", {
       query: { page_size: PAGE_SIZE, page_token: pageToken },
     });
     spaces.push(...(page.items ?? []));
-    pageToken = page.has_more ? page.page_token : undefined;
+    pageToken = nextPage(page, seen);
   } while (pageToken);
   return spaces;
 }
 
 export async function listNodes(client: FeishuClient, spaceId: string, parentNodeToken?: string): Promise<WikiNode[]> {
   const nodes: WikiNode[] = [];
+  const seen = new Set<string>();
   let pageToken: string | undefined;
   do {
     const page = await client.json<PageResult<WikiNode>>("GET", `/open-apis/wiki/v2/spaces/${pathSegment(spaceId)}/nodes`, {
       query: { page_size: PAGE_SIZE, parent_node_token: parentNodeToken, page_token: pageToken },
     });
     nodes.push(...(page.items ?? []));
-    pageToken = page.has_more ? page.page_token : undefined;
+    pageToken = nextPage(page, seen);
   } while (pageToken);
   return nodes;
 }
@@ -87,7 +97,7 @@ export async function walkWikiTree(
 
   while (queue.length > 0) {
     const current = queue.shift() as { nodeToken: string | undefined; relDir: string; depth: number };
-    if (current.depth > MAX_DEPTH) continue;
+    if (current.depth > MAX_DEPTH) throw new Error(`知识库目录超过 ${MAX_DEPTH} 层，请选择更小的同步根节点；未执行同步`);
     const nodes = await listNodes(client, spaceId, current.nodeToken);
     for (const node of nodes) {
       const title = (node.title ?? "").trim();

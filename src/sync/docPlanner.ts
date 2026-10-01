@@ -1,3 +1,4 @@
+import { assertSafeVaultPath } from "./scanner";
 import type { RulesFile } from "../convert/rules";
 import { applyRules, publishRulesFingerprint, pullRulesFingerprint, ruleEnabled, sourceFormatWarnings } from "../convert/rules";
 import type { WikiTreeEntry } from "../feishu/wiki";
@@ -121,9 +122,10 @@ export function buildDocRemoteIndex(options: DocIndexOptions): DocRemoteIndex {
   const notes = new Map<string, DocRemoteNote>();
   const seenPaths = new Map<string, string>();
   for (const entry of options.entries) {
-    if (entry.objType !== "docx" || containerTokens.has(entry.nodeToken)) continue;
+    if (entry.objType !== "docx" || (containerTokens.has(entry.nodeToken) && !knownDocumentPaths.has(entry.objToken))) continue;
     const relPath = knownDocumentPaths.get(entry.objToken) ?? deriveRelPath(entry, options, warnings);
     if (!relPath) continue;
+    assertSafeVaultPath(relPath);
     if (options.isExcluded(relPath)) continue;
     // macOS / Windows 的大小写不敏感与 NFC/NFD 差异会让两个不同标题落到同一个物理文件上
     const normalized = relPath.normalize("NFC").toLowerCase();
@@ -330,6 +332,7 @@ export async function buildDocPlan(input: DocPlannerInput): Promise<SyncPlan> {
       items.push(
         item(relPath, remoteNote ? "push" : "create-remote", "强制重推：忽略基线", {
           ...remoteFields,
+          remoteHash: remoteNote ? await fetchedHash(input, remoteNote.documentId) : undefined,
           localSize: localNote.size,
           localMtime: localNote.mtime,
         }),
@@ -462,6 +465,15 @@ export async function buildDocPlan(input: DocPlannerInput): Promise<SyncPlan> {
       continue;
     }
     items.push(conflictItem(relPath, state, "两边都改过且内容不同，已保留双方", extra, localHash, hash ?? localHash));
+  }
+
+  // Bind every action to the local content actually inspected by this preview.
+  for (const entry of items) {
+    const note = local.get(entry.relPath);
+    if (!note || entry.action === "skip") continue;
+    entry.localSize = note.size;
+    entry.localMtime = note.mtime;
+    entry.localHash = await hashLocalCached(input, entry.relPath);
   }
 
   return {

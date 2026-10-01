@@ -8,7 +8,7 @@ import { fileURLToPath } from "node:url";
 import esbuild from "esbuild";
 
 const projectRoot = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
-const outDir = path.join(os.tmpdir(), "feishu-e2e-build");
+const outDir = fs.mkdtempSync(path.join(os.tmpdir(), "feishu-e2e-build-"));
 const outfile = path.join(outDir, "e2e.cjs");
 
 fs.mkdirSync(outDir, { recursive: true });
@@ -30,4 +30,5 @@ if (result.error) {
   console.error(result.error);
   process.exit(1);
 }
-process.exit(result.status ?? 1);
+fs.rmSync(outDir, { recursive: true, force: true });
+process.exitCode = result.status ?? 1;

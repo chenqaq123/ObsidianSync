@@ -1,4 +1,5 @@
 import { Notice, Plugin } from "obsidian";
+import { randomBytes } from "crypto";
 import { AuthManager, openExternal } from "./feishu/auth";
 import { describeError, Logger } from "./log";
 import type { SettingsHost, SyncEngineHandle } from "./settings-tab";
@@ -11,7 +12,6 @@ import { DEFAULT_SETTINGS } from "./sync/types";
 import { AuthCodeModal } from "./ui/auth-modal";
 import { PlanModal } from "./ui/plan-modal";
 import { ReportModal } from "./ui/report-modal";
-import { runRoundtripProbe } from "./ui/roundtrip-command";
 
 const CHANGE_ACTIONS = new Set<SyncAction>(["push", "create-remote", "pull", "create-local", "link", "delete-remote", "delete-local"]);
 
@@ -89,7 +89,6 @@ export default class FeishuWikiSyncPlugin extends Plugin implements SettingsHost
       name: "强制重推（忽略基线，刷新所有本地笔记）",
       callback: () => void this.runSync("push", { forcePush: true }),
     });
-    this.addCommand({ id: "roundtrip-probe", name: "测试：Markdown 往返转换", callback: () => void this.runRoundtrip() });
 
     this.addRibbonIcon("refresh-cw", "Feishu Wiki Sync：双向同步", () => void this.runSync("both"));
 
@@ -121,6 +120,10 @@ export default class FeishuWikiSyncPlugin extends Plugin implements SettingsHost
     };
   }
 
+  isSyncBusy(): boolean {
+    return this.syncInFlight || this.mdEngine?.isSyncing() || this.docEngine?.isSyncing();
+  }
+
   async saveSettings(): Promise<void> {
     await this.saveData(this.settings);
   }
@@ -133,14 +136,14 @@ export default class FeishuWikiSyncPlugin extends Plugin implements SettingsHost
     const minutes = this.settings.autoSyncMinutes;
     if (!minutes || minutes <= 0) return;
     this.autoSyncHandle = window.setInterval(() => {
-      if (this.engine.isSyncing()) return;
+      if (this.isSyncBusy()) return;
       if (this.settings.authMode === "user" && !this.auth.hasValidUserGrant()) return;
       void this.runSync("both", { quiet: true });
     }, minutes * 60_000);
   }
 
   async startAuthorization(): Promise<void> {
-    const state = `${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+    const state = randomBytes(24).toString("hex");
     const server = this.auth.startCallbackServer(state);
     const authorizeUrl = this.auth.buildAuthorizeUrl(state);
     openExternal(authorizeUrl);
@@ -156,7 +159,7 @@ export default class FeishuWikiSyncPlugin extends Plugin implements SettingsHost
   }
 
   async startManualAuthorization(): Promise<void> {
-    const state = `${Math.random().toString(36).slice(2)}${Date.now().toString(36)}`;
+    const state = randomBytes(24).toString("hex");
     const authorizeUrl = this.auth.buildAuthorizeUrl(state);
     openExternal(authorizeUrl);
     await new Promise<void>((resolve) => {
@@ -195,26 +198,33 @@ export default class FeishuWikiSyncPlugin extends Plugin implements SettingsHost
       new Notice("请先在插件设置里填写飞书应用的 App ID 与 App Secret");
       return;
     }
+    if (options.forcePush && this.settings.syncMode !== "doc") {
+      new Notice("强制重推仅用于文档模式；文件镜像模式请使用普通同步");
+      return;
+    }
 
     this.syncInFlight = true;
+    const engine = this.engine;
     const label = this.settings.syncMode === "doc" ? "飞书文档同步" : "飞书文件同步";
-    const wantPreview = options.preview ?? this.settings.showPlanBeforeSync;
+    const wantPreview = !options.quiet && (this.settings.propagateLocalDelete || this.settings.propagateRemoteDelete ||
+      options.forcePush === true || (options.preview ?? this.settings.showPlanBeforeSync));
     const forcePush = options.forcePush === true;
     const notice = new Notice(`${label}：准备中…`, 0);
+    let running: Notice | undefined;
     const progress = (message: string) => setNoticeMessage(notice, `${label}：${message}`);
 
     try {
       if (wantPreview) {
-        const preview = await this.engine.run({ mode, dryRun: true, forcePush, onProgress: progress });
+        const preview = await engine.run({ mode, dryRun: true, forcePush, onProgress: progress });
         notice.hide();
         const decision = await new Promise<PlanDecision>((resolve) => new PlanModal(this.app, preview.plan, resolve).open());
         if (decision === "cancel") return;
-        const running = new Notice(`${label}：执行中…`, 0);
+        running = new Notice(`${label}：执行中…`, 0);
         // 执行的就是用户刚刚确认的那份计划；写盘前执行器还会复核本地是否又有改动
-        const result = await this.engine.run({
+        const result = await engine.run({
           mode,
           preApprovedPlan: preview.plan,
-          onProgress: (message) => setNoticeMessage(running, `${label}：${message}`),
+          onProgress: (message) => setNoticeMessage(running!, `${label}：${message}`),
           confirm: async () => decision,
         });
         running.hide();
@@ -222,13 +232,14 @@ export default class FeishuWikiSyncPlugin extends Plugin implements SettingsHost
         return;
       }
 
-      const result = await this.engine.run({ mode, forcePush, onProgress: progress, confirm: async () => "all" });
+      const result = await engine.run({ mode, forcePush, allowDeletes: !options.quiet, onProgress: progress, confirm: async () => "all" });
       notice.hide();
       const failures = result.report.filter((entry) => !entry.ok).length;
       const conflicts = result.report.filter((entry) => entry.action === "conflict").length;
       const changes = result.report.filter((entry) => entry.ok && CHANGE_ACTIONS.has(entry.action)).length;
-      if (options.quiet && failures === 0 && conflicts === 0 && !result.plan.warnings?.length) {
-        new Notice(`${label}完成：${changes} 项变更`);
+      const pendingDeletes = result.report.some(entry => entry.action === "local-deleted" || entry.action === "remote-deleted");
+      if (options.quiet && failures === 0 && conflicts === 0 && !pendingDeletes && !result.plan.warnings?.length) {
+        if (changes > 0) new Notice(`${label}完成：${changes} 项变更`);
       } else {
         new ReportModal(this.app, result.plan, result.report, result.executed).open();
       }
@@ -237,24 +248,12 @@ export default class FeishuWikiSyncPlugin extends Plugin implements SettingsHost
       this.logger.error(`同步失败：${describeError(error)}`);
       new Notice(`${label}失败：${describeError(error)}`, 12000);
     } finally {
+      running?.hide();
+      notice.hide();
       this.syncInFlight = false;
       await this.logger.flush();
       this.updateStatusBar();
     }
-  }
-
-  /** 只读探测：把当前笔记经 docs_ai 写成飞书文档再取回，报告写进 vault 根目录。旁路，不动同步状态。 */
-  async runRoundtrip(): Promise<void> {
-    if (this.engine.isSyncing() || this.syncInFlight) {
-      new Notice("飞书同步：已有任务在执行中，请稍后再跑往返测试");
-      return;
-    }
-    await runRoundtripProbe({
-      app: this.app,
-      getSettings: () => this.settings,
-      auth: this.auth,
-      logger: this.logger,
-    });
   }
 
   private updateStatusBar(): void {

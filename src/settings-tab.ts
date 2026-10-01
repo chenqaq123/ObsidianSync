@@ -3,8 +3,7 @@ import { FuzzySuggestModal, Notice, PluginSettingTab, Setting, normalizePath } f
 import type { AuthManager } from "./feishu/auth";
 import type { WikiSpace } from "./feishu/wiki";
 import type { Logger } from "./log";
-import { ROUNDTRIP_REPORT_PATH } from "./roundtrip";
-import { CONFLICT_DIR } from "./sync/types";
+import { CONFLICT_DIR, emptyState } from "./sync/types";
 import type { PluginSettings } from "./sync/types";
 import type { RunOptions, RunResult } from "./sync/engine";
 import { defaultRulesFile, loadRules, RULES_PATH, writeRulesFile } from "./convert/rules";
@@ -27,6 +26,7 @@ export interface SettingsHost {
   startManualAuthorization(): Promise<void>;
   revokeAuthorization(): Promise<void>;
   refreshAutoSync(): void;
+  isSyncBusy(): boolean;
 }
 
 class SpacePickerModal extends FuzzySuggestModal<WikiSpace> {
@@ -68,7 +68,7 @@ export class FeishuWikiSyncSettingTab extends PluginSettingTab {
     containerEl.createEl("h2", { text: "Feishu Wiki Sync" });
     containerEl.createEl("p", {
       cls: "setting-item-description",
-      text: "把 vault 与飞书知识库里的原生 Markdown 文件做双向同步。内容按字节往返，双链、frontmatter、代码块都会原样保留。",
+      text: "将当前仓库的 Markdown 笔记与飞书知识库双向同步。文档模式便于在飞书阅读与编辑；文件镜像模式保留原始 Markdown。",
     });
 
     this.renderAuth(containerEl, settings);
@@ -76,7 +76,6 @@ export class FeishuWikiSyncSettingTab extends PluginSettingTab {
     this.renderSyncMode(containerEl, settings);
     this.renderRules(containerEl);
     this.renderBehaviour(containerEl, settings);
-    this.renderProbe(containerEl, settings);
     this.renderState(containerEl, settings);
   }
 
@@ -86,10 +85,8 @@ export class FeishuWikiSyncSettingTab extends PluginSettingTab {
     new Setting(containerEl)
       .setName("笔记同步形态")
       .setDesc(
-        "文件镜像：笔记原样存成知识库里的 .md 文件，字节无损（双链、frontmatter、代码块原样往返），飞书侧渲染朴素。" +
-          "文档模式：笔记存成飞书新版文档，待办/表格/代码/公式/callout 都是原生块，飞书侧编辑能同步回来，但内容会经过飞书格式化（Tab→空格、列表间插空行、公式压成单行、标题变成正文里的 H1），" +
-          "标准 Markdown 图片引用会被飞书丢掉（默认由上行规则先转成 ![[...]]）。" +
-          "切换模式不会覆盖本地：文档模式第一次跑会按「首次对接」重新判定（两边内容一致就只建立映射，不一致则保留双方）。",
+        "文件镜像保留原始 Markdown；文档模式生成可编辑的飞书新版文档，支持图片、列表、代码、表格和公式。" +
+          "文档模式会转换排版，不能保证源码逐字不变；切换模式会重新对接，同名但内容不同则保留双方并报告冲突。",
       )
       .addDropdown((dropdown) =>
         dropdown
@@ -123,7 +120,7 @@ export class FeishuWikiSyncSettingTab extends PluginSettingTab {
       cls: "setting-item-description",
       text:
         `规则文件：${RULES_PATH}，每条规则都有 enabled 开关与 description 说明。上行规则在发给飞书之前作用于本地 Markdown，` +
-        "下行规则在写回本地之前作用于取回的 Markdown。文件不存在时会自动写入一份完整默认规则；加载时与内置默认按 id 合并，改过的以文件为准。上行规则更新后，旧文档会进入刷新计划；飞书有新改动时优先处理改动。原稿格式问题会显示在预览和报告中。",
+        "下行规则在写回本地之前作用于取回的 Markdown。文件不存在时会自动写入一份完整默认规则；加载时与内置默认按 id 合并，改过的以文件为准。上行规则更新后，旧文档会进入刷新计划；飞书有新改动时优先处理改动。原稿格式提示默认关闭，可通过 source-format-diagnostics 开启。",
     });
 
     new Setting(containerEl)
@@ -173,7 +170,7 @@ export class FeishuWikiSyncSettingTab extends PluginSettingTab {
     containerEl.createEl("h3", { text: "飞书应用与授权" });
     containerEl.createEl("p", {
       cls: "setting-item-description",
-      text: "需要一个飞书企业自建应用。建议开通的权限：drive:drive（云空间文件读写）、wiki:wiki（知识库）、docs:document.media:download（下载素材）。用「用户授权」时还要在开放平台登记下方重定向地址，并包含 offline_access 以自动续期。",
+      text: "需要一个飞书企业自建应用。默认授权范围：drive:drive、wiki:wiki、docx:document、docs:document.media:download、docs:document.media:upload；详见 README 的配置步骤。用「用户授权」时还要在开放平台登记下方重定向地址，并包含 offline_access 以自动续期。",
     });
 
     new Setting(containerEl)
@@ -196,6 +193,7 @@ export class FeishuWikiSyncSettingTab extends PluginSettingTab {
       .setDesc("飞书开放平台 → 凭证与基础信息")
       .addText((text) =>
         text.setValue(settings.appId).onChange(async (value) => {
+          if (settings.appId !== value.trim()) settings.userTokens = undefined;
           settings.appId = value.trim();
           await this.host.saveSettings();
         }),
@@ -207,6 +205,7 @@ export class FeishuWikiSyncSettingTab extends PluginSettingTab {
       .addText((text) => {
         text.inputEl.type = "password";
         text.setValue(settings.appSecret).onChange(async (value) => {
+          if (settings.appSecret !== value.trim()) settings.userTokens = undefined;
           settings.appSecret = value.trim();
           await this.host.saveSettings();
         });
@@ -296,7 +295,7 @@ export class FeishuWikiSyncSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("知识空间 space_id")
-      .setDesc("可粘贴知识库链接，也可以直接拉取列表选择")
+      .setDesc("建议用「拉取列表」选择；手填时使用数字 space_id，不要粘贴 /wiki/ 页面链接")
       .addText((text) =>
         text.setValue(settings.spaceId).onChange(async (value) => {
           settings.spaceId = value.trim();
@@ -451,7 +450,7 @@ export class FeishuWikiSyncSettingTab extends PluginSettingTab {
       .setDesc(
         "本地删掉的笔记，同步时把远端对应的文件/文档一起删掉（走云空间接口，删除进飞书回收站，可以恢复）。" +
           "远端自上次同步后被改过、或该路径命中排除规则时，都不会删，仍然按冲突/忽略处理。" +
-          "风险：和「定时自动同步」一起打开，就等于按本地状态无人复核地删远端。",
+          "删除始终需要手动同步确认；定时同步只提示待删除项。",
       )
       .addToggle((toggle) =>
         toggle.setValue(settings.propagateLocalDelete).onChange(async (value) => {
@@ -486,7 +485,7 @@ export class FeishuWikiSyncSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("定时自动同步")
-      .setDesc("单位分钟，0 表示关闭。自动同步不会弹出预览框，冲突仍然只生成副本。")
+      .setDesc("单位分钟，0 表示关闭。自动同步跳过预览、保留冲突副本；删除项留待手动同步确认。")
       .addText((text) =>
         text.setValue(String(settings.autoSyncMinutes)).onChange(async (value) => {
           const parsed = Number.parseInt(value, 10);
@@ -507,38 +506,9 @@ export class FeishuWikiSyncSettingTab extends PluginSettingTab {
       );
   }
 
-  private renderProbe(containerEl: HTMLElement, settings: PluginSettings): void {
-    containerEl.createEl("h3", { text: "Markdown 往返转换实测" });
-
-    new Setting(containerEl)
-      .setName("测试：Markdown 往返转换")
-      .setDesc(
-        "命令面板里的只读探测。取当前打开的笔记（没有打开的笔记时弹列表挑一篇，只读不改），在后面追加一段固定语法样本，" +
-          "用 docs_ai 接口写成飞书新版文档（docx）、立刻取回 Markdown，再用完全一样的内容覆盖更新一次并第二次取回；" +
-          `最后把原始内容 / 实际发送的 content / 两次取回、逐行差异、sha256 与逐条语法核对结果写成 ${ROUNDTRIP_REPORT_PATH}。` +
-          "测试页与测试文档不会自动清理，位置写在报告里。报告是普通笔记，会被下一次同步当作新笔记上传。",
-      );
-
-    containerEl.createEl("p", {
-      cls: "setting-item-description",
-      text: `当前知识空间：${settings.spaceId || "（未配置，命令会直接提示去设置里选）"}`,
-    });
-    containerEl.createEl("p", {
-      cls: "setting-item-description",
-      text:
-        "需要勾选的权限（与官方 CLI 同一套接口一致）：docx:document:create（创建文档）、docx:document:readonly（取回 Markdown）、" +
-        "docx:document:write_only（覆盖更新）；在知识空间里建页面并移动文档还需要 wiki:wiki（或 wiki:node:move + wiki:node:read + wiki:space:read）。" +
-        "权限改动后必须在开放平台重新发布版本，否则新权限不会生效。",
-    });
-    containerEl.createEl("p", {
-      cls: "setting-item-description",
-      text: "本命令不上传本地图片：图片引用会原样发给服务端（官方 CLI 会先把本地图片换成标记再上传绑定，那一步需要 docs:document.media:upload）。",
-    });
-  }
-
   private renderState(containerEl: HTMLElement, settings: PluginSettings): void {
     containerEl.createEl("h3", { text: "状态" });
-    const records = Object.keys(settings.state.records).length;
+    const records = Object.keys(settings.syncMode === "doc" ? settings.state.docRecords : settings.state.records).length;
     const folders = Object.keys(settings.state.folders).length;
 
     containerEl.createEl("p", {
@@ -552,16 +522,14 @@ export class FeishuWikiSyncSettingTab extends PluginSettingTab {
 
     new Setting(containerEl)
       .setName("清空同步状态")
-      .setDesc("清掉映射表。下次同步会按内容重新判定，不会覆盖内容一致的文件。")
+      .setDesc("清掉两种模式的映射、图片缓存与同步时间，保留账号、规则和笔记。下次按首次对接判定；同名但内容不同会报告冲突。")
       .addButton((button) =>
         button.setWarning().setButtonText("清空").onClick(async () => {
-          if (this.host.engine.isSyncing()) {
+          if (this.host.isSyncBusy()) {
             new Notice("同步正在进行中，请等它结束后再清空状态");
             return;
           }
-          settings.state.records = {};
-          settings.state.folders = {};
-          settings.state.conflicts = {};
+          settings.state = emptyState();
           await this.host.saveSettings();
           new Notice("同步状态已清空");
           this.display();

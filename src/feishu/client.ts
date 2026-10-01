@@ -29,9 +29,9 @@ function requestBudget(path: string, multipart: boolean): number {
   return multipart || path.startsWith(SLOW_PATH_PREFIX) ? SLOW_REQUEST_TIMEOUT_MS : REQUEST_TIMEOUT_MS;
 }
 
-async function requestWithBudget(
+export async function requestWithBudget(
   options: Parameters<typeof requestUrl>[0],
-  budgetMs: number,
+  budgetMs: number = budgetOverrideForTest ?? REQUEST_TIMEOUT_MS,
 ): Promise<Awaited<ReturnType<typeof requestUrl>>> {
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
@@ -249,12 +249,16 @@ export class FeishuClient {
   private async send(method: HttpMethod, path: string, options: { query?: Query; body?: unknown; multipart?: MultipartSpec }): Promise<RawResponse> {
     const url = buildUrl(path, options.query);
     let lastError: unknown;
+    let refreshToken = false;
+    // These POST endpoints only read data. All other writes can have committed before a timeout/5xx.
+    const canRetryUncertain = method === "GET" || path.endsWith("/fetch") || path === "/open-apis/drive/v1/metas/batch_query";
 
     for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt += 1) {
       let headers: Record<string, string>;
       let body: ArrayBuffer | string | undefined;
       try {
-        headers = { Authorization: `Bearer ${await this.getToken(attempt > 1)}` };
+        headers = { Authorization: `Bearer ${await this.getToken(refreshToken)}` };
+        refreshToken = false;
       } catch (error) {
         throw error;
       }
@@ -285,12 +289,12 @@ export class FeishuClient {
         const authRelated = raw.status === 401 || (code !== undefined && AUTH_CODES.has(code));
         if (authRelated && attempt < 2) {
           this.log.debug(`${path} 命中鉴权错误，刷新 token 后重试`);
+          refreshToken = true;
           continue;
         }
         // 上传等有副作用的写请求不在"结果不确定"的错误上重试，避免远端留下重复文件
-        const uncertainRetryAllowed = !options.multipart;
         const refusedRetry = raw.status === 429 || (code !== undefined && RETRY_CODES.has(code));
-        const retryable = refusedRetry || ((raw.status >= 500 || raw.status === 429) && uncertainRetryAllowed);
+        const retryable = refusedRetry || (raw.status >= 500 && canRetryUncertain);
         if (retryable && attempt < MAX_ATTEMPTS) {
           const delay = Math.min(8000, 400 * 2 ** (attempt - 1)) + Math.floor(Math.random() * 200);
           this.log.debug(`${path} 命中可重试错误（status=${raw.status} code=${code}），${delay}ms 后重试`);
@@ -300,11 +304,12 @@ export class FeishuClient {
         return raw;
       } catch (error) {
         lastError = error;
-        // multipart 的写请求结果不确定，超时后不重试，直接把失败抛出去
-        if (options.multipart && error instanceof RequestTimeoutError) {
-          throw new FeishuError(`${path} 请求超时：${String(error)}`, { endpoint: path });
+        // A disconnected write can already have committed, just like a timed-out write.
+        if (!canRetryUncertain) {
+          const message = error instanceof RequestTimeoutError ? "请求超时" : "写请求结果不确定";
+          throw new FeishuError(`${path} ${message}：${String(error)}`, { endpoint: path });
         }
-        if (!options.multipart && attempt < MAX_ATTEMPTS) {
+        if (canRetryUncertain && attempt < MAX_ATTEMPTS) {
           const delay = Math.min(8000, 400 * 2 ** (attempt - 1)) + Math.floor(Math.random() * 200);
           this.log.debug(`${path} 网络异常，${delay}ms 后重试：${String(error)}`);
           await sleep(delay);

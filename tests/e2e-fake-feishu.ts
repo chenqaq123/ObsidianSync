@@ -2,11 +2,12 @@
  * 离线端到端测试：本地 vault ↔ 假飞书 Wiki。
  *
  * 除 `requestUrl` 被替换成下面的假服务器外，planner / executor / engine / scanner / state
- * 全部是 src/ 里的真代码，vault 也是真实文件系统（/tmp/feishu-e2e/vault）。
+ * 全部是 src/ 里的真代码，vault 使用系统临时目录中的独立合成样例。
  *
  * 运行：npm run test:e2e
  */
 import fs from "node:fs";
+import os from "node:os";
 import path from "node:path";
 
 import { __setRequestUrlHandler, TFile } from "obsidian";
@@ -16,7 +17,6 @@ import { buildMarkdownContent } from "../src/feishu/docs";
 import { setRequestBudgetForTest } from "../src/feishu/client";
 import { applyRules, defaultRulesFile, normalizeObsidianMath, normalizeRemoteImageUrls, RULES_PATH } from "../src/convert/rules";
 import type { RuleContext } from "../src/convert/rules";
-import { ROUNDTRIP_REPORT_PATH, SYNTAX_CHECKS, SYNTAX_SAMPLE, appendSyntaxSample } from "../src/roundtrip";
 import { DocSyncEngine } from "../src/sync/docEngine";
 import { SyncEngine } from "../src/sync/engine";
 import type { RunOptions, RunResult, SyncMode } from "../src/sync/engine";
@@ -24,24 +24,22 @@ import type { ReportEntry } from "../src/sync/executor";
 import { sha256Hex } from "../src/sync/hash";
 import { DEFAULT_SETTINGS, emptyState } from "../src/sync/types";
 import type { PluginSettings, SyncPlan } from "../src/sync/types";
-import { runRoundtripProbe } from "../src/ui/roundtrip-command";
 
 // ---------------------------------------------------------------- 常量 / 工具
 
-const SRC_VAULT = "/Users/cgx/Desktop/WorkHard/Work";
-const TMP_ROOT = "/tmp/feishu-e2e";
+const TMP_ROOT = fs.mkdtempSync(path.join(os.tmpdir(), "feishu-e2e-"));
 const VAULT_ROOT = path.join(TMP_ROOT, "vault");
 const CONFLICT_DIR_REL = ".obsidian/feishu-sync/conflicts";
 
 const SPACE_ID = "spc_test";
 const ROOT_NODE = "wikcn_root";
 /** 假 vault 的名字，用于断言"根页面标题默认取 vault 名"。 */
-const VAULT_NAME = "Work";
+const VAULT_NAME = "TestVault";
 
-const PUSH_TARGET = "Meetings&Talks/2026.05.25 潘博分享.md";
-const PULL_TARGET = "Research&Learning/2026.08 具身智能.md";
-const CONFLICT_TARGET = "MyPapers/T2V Benchmark/01-FilmBench/01-ICLR 2027.md";
-const EMPTY_DOWNLOAD_TARGET = "FudanLab/info/实验室nas.md";
+const PUSH_TARGET = "会议&分享/上传样例.md";
+const PULL_TARGET = "研究/下载样例.md";
+const CONFLICT_TARGET = "论文/项目/冲突样例.md";
+const EMPTY_DOWNLOAD_TARGET = "资料/配置/空响应样例.md";
 
 function ok(condition: unknown, message: string): asserts condition {
   if (!condition) throw new Error(message);
@@ -335,14 +333,6 @@ class FakeFeishu {
   }
 
   /** 模拟"有人在飞书那边删掉了这篇 md 文件"：文件与节点一起消失 */
-  removeRemoteFile(relPath: string): void {
-    const node = this.fileNodeAt(relPath);
-    ok(node, `removeRemoteFile：远端不存在 ${relPath}`);
-    this.nodes.delete(node.nodeToken);
-    this.files.delete(node.objToken);
-  }
-
-  /** 直接改远端文档内容，模拟"有人在飞书侧编辑了这篇文档" */
   setDocContent(documentId: string, content: string): void {
     const document = this.documents.get(documentId);
     if (!document) throw new Error(`未知 document_id：${documentId}`);
@@ -1268,22 +1258,6 @@ function makeStubLogger(logs: Harness["logs"]): unknown {
   };
 }
 
-function copyMarkdownTree(srcDir: string, destDir: string, out: string[], root: string = VAULT_ROOT): void {
-  fs.mkdirSync(destDir, { recursive: true });
-  for (const entry of fs.readdirSync(srcDir, { withFileTypes: true })) {
-    if (entry.name.startsWith(".")) continue; // .obsidian / .trash 等不算笔记
-    const from = path.join(srcDir, entry.name);
-    const to = path.join(destDir, entry.name);
-    if (entry.isDirectory()) {
-      copyMarkdownTree(from, to, out, root);
-      continue;
-    }
-    if (!entry.isFile() || !entry.name.toLowerCase().endsWith(".md")) continue;
-    fs.copyFileSync(from, to);
-    out.push(path.relative(root, to).split(path.sep).join("/"));
-  }
-}
-
 function createHarness(
   fake: FakeFeishu,
   options: { vaultRoot?: string; vaultName?: string; settings?: Partial<PluginSettings> } = {},
@@ -1379,22 +1353,6 @@ function assertUploads(uploads: UploadRecord[], roundLabel: string, allowFallbac
 
 function childItems(plan: SyncPlan, action: string): string[] {
   return plan.items.filter((entry) => entry.action === action).map((entry) => entry.relPath).sort();
-}
-
-/** 取报告里某个二级标题到下一个二级标题之间的内容。 */
-function sectionOf(text: string, heading: string): string {
-  const start = text.indexOf(heading);
-  if (start < 0) return "";
-  const rest = text.slice(start + heading.length);
-  const next = rest.indexOf("\n## ");
-  return next < 0 ? rest : rest.slice(0, next);
-}
-
-/** 取报告语法核对表里某条语法那一行（只在核对表那一段里找，避免匹配到正文代码块里的同名行）。 */
-function reportRow(report: string, label: string): string {
-  return sectionOf(report, "## 语法样本逐行核对")
-    .split("\n")
-    .find((line) => line.startsWith(`| ${label} `)) ?? "";
 }
 
 function sorted(values: Iterable<string>): string[] {
@@ -1622,9 +1580,21 @@ function dirOf(relPath: string): string {
 function prepareVault(root: string): VaultInfo {
   fs.rmSync(root, { recursive: true, force: true });
   fs.mkdirSync(root, { recursive: true });
-  const copied: string[] = [];
-  copyMarkdownTree(SRC_VAULT, root, copied, root);
-  ok(copied.length > 0, `没有从 ${SRC_VAULT} 复制到任何 .md`);
+  const fixtures = {
+    [PUSH_TARGET]: "# 上传样例\n\n正文与中文。\n",
+    [PULL_TARGET]: "# 下载样例\n\n- 列表\n",
+    [CONFLICT_TARGET]: "# 冲突样例\n\n原始内容。\n",
+    [EMPTY_DOWNLOAD_TARGET]: "# 配置\n\n不能被空响应覆盖。\n",
+    "日记/本地删除样例.md": "日记合成样例。\n",
+    "资料/配置/远端删除样例.md": "删除测试合成样例。\n",
+    "根目录样例.md": "根目录合成样例。\n",
+    "Others/样例.md": "其他笔记合成样例。\n",
+    "首页.md": "---\ntags: [test]\n---\n\n正文 $x + y$。\n",
+    "空笔记.md": "",
+    "代码/围栏.md": "```js\nconst x = 1;\n\nconsole.log(x);\n```\n",
+  };
+  writeDocVault(root, fixtures);
+  const copied = Object.keys(fixtures);
   const emptyFiles = sorted(copied.filter((relPath) => vaultFileSize(relPath, root) === 0));
   const nonEmptyFiles = sorted(copied.filter((relPath) => vaultFileSize(relPath, root) > 0));
   const directDirs = sorted(new Set(nonEmptyFiles.map(dirOf).filter(Boolean)));
@@ -1646,7 +1616,7 @@ async function main(): Promise<void> {
   fs.mkdirSync(TMP_ROOT, { recursive: true });
   const { copied, emptyFiles, nonEmptyFiles, directDirs, requiredDirs } = prepareVault(VAULT_ROOT);
 
-  console.log(`vault 源      : ${SRC_VAULT}`);
+  console.log("vault 数据    : 固定合成样例（不读取个人笔记）");
   console.log(`vault 副本    : ${VAULT_ROOT}`);
   console.log(`笔记总数      : ${copied.length}（非空 ${nonEmptyFiles.length}，0 字节 ${emptyFiles.length}）`);
   console.log(`直属含笔记目录: ${directDirs.length}；需要建的容器节点目录: ${requiredDirs.length}（含中间层）`);
@@ -1984,8 +1954,8 @@ async function main(): Promise<void> {
 
   // ---- 场景 11（附加）：单边删除不会被自动同步（防误删）
   await scenario("11 附加：单边删除不自动同步（不误删另一端）", async () => {
-    const localDeletedTarget = "Diary/2026-07-30.md";
-    const remoteDeletedTarget = "FudanLab/info/实验室服务器.md";
+    const localDeletedTarget = "日记/本地删除样例.md";
+    const remoteDeletedTarget = "资料/配置/远端删除样例.md";
     ok(fs.existsSync(path.join(VAULT_ROOT, localDeletedTarget)), `本地缺少 ${localDeletedTarget}`);
     ok(fake.fileNodeAt(remoteDeletedTarget), `远端缺少 ${remoteDeletedTarget}`);
     const remoteKept = fake.remoteText(remoteDeletedTarget);
@@ -2112,7 +2082,7 @@ async function main(): Promise<void> {
     );
 
     // ---- 第 16 轮：改一篇 vault 根目录下的笔记 → push（覆盖同一个 file_token）
-    const pushTarget = "个人心得.md";
+    const pushTarget = "根目录样例.md";
     ok(rootNotePaths.includes(pushTarget), `vault 根目录下没有 ${pushTarget}`);
     const tokenBefore = th.settings.state.records[pushTarget]?.fileToken;
     ok(tokenBefore, `第 14 轮后没有 ${pushTarget} 的基线记录`);
@@ -2194,7 +2164,6 @@ async function main(): Promise<void> {
   // （或换机器/新装插件指向同一个已存在的知识库）后认不出顶层根页面，根目录笔记的远端路径被算成
   // "<根页面标题>/xxx.md"，于是同一篇笔记在知识库和 vault 里各多出一份。
   // src 已在 walk 之前补了读取侧的按标题查找，下面是修复后的回归断言。
-  const KNOWN_ROOT_PAGE_STATE_LOSS_BUG = false;
   await scenario("13 新模式：清空全部同步状态后重跑（重新对齐，不产生重复）", async () => {
     const clearRoot = path.join(TMP_ROOT, "vault-clearstate");
     const clearInfo = prepareVault(clearRoot);
@@ -2231,12 +2200,6 @@ async function main(): Promise<void> {
     console.log(`  知识库里新增的同名 file 节点：${duplicatedTitles.join(", ") || "（无）"}`);
     console.log(`  vault 里被多写出来的 ${VAULT_NAME}/ 副本：${localGhosts.join(", ") || "（无）"}`);
 
-    if (KNOWN_ROOT_PAGE_STATE_LOSS_BUG) {
-      eq(newDuplicates.length, rootNotePaths.length, "新产生的同名 file 节点数（已知 bug，内容相同的笔记被重复上传）");
-      eq(duplicatedTitles.join("|"), sorted(rootNotePaths).join("|"), "重复节点的标题（全部是 vault 根目录下的笔记）");
-      eq(localGhosts.length, rootNotePaths.length, `本地被多写出来的 ${VAULT_NAME}/ 副本数（已知 bug）`);
-      eq(afterClear.plan.counts.link ?? 0, clearInfo.nonEmptyFiles.length - rootNotePaths.length, "link 数量（目录里的笔记路径没变，正常对上）");
-    } else {
       // 修复后：根目录笔记与目录笔记都应该按内容对上并只更新基线
       eq(newDuplicates.length, 0, "不应出现任何同名 file 节点");
       eq(localGhosts.length, 0, `不应往本地写出 ${VAULT_NAME}/ 副本`);
@@ -2260,185 +2223,11 @@ async function main(): Promise<void> {
         countContainersWithChildren(clearFake) + 2,
         "node_list 次数（walk + 1 次读取侧顶层查找）",
       );
-    }
 
-    return KNOWN_ROOT_PAGE_STATE_LOSS_BUG
-      ? `已知 bug：清空状态后 create-remote=${afterClear.plan.counts["create-remote"] ?? 0}、create-local=${afterClear.plan.counts["create-local"] ?? 0}，知识库多出 ${newDuplicates.length} 个同名节点，本地多出 ${localGhosts.length} 份 ${VAULT_NAME}/ 副本`
-      : `清空状态后重新对齐：link=${afterClear.plan.counts.link ?? 0}，create-remote/create-local=0，重复节点 0，本地副本 0，upload_all=0`;
+    return `清空状态后重新对齐：link=${afterClear.plan.counts.link ?? 0}，create-remote/create-local=0，无重复节点`;
   });
 
-  // ---- 场景 14：Markdown 往返转换实测（docs_ai）
-  await scenario("14 往返转换实测：docs_ai 建文档 → 移入知识库 → fetch → overwrite → fetch → 报告", async () => {
-    const missingNeedles = SYNTAX_CHECKS.filter((check) => !SYNTAX_SAMPLE.includes(check.needle)).map((check) => check.label);
-    eq(missingNeedles.join("|"), "", "语法样本里缺少核对表用的原文");
-
-    const probeRoot = path.join(TMP_ROOT, "vault-probe");
-    fs.rmSync(probeRoot, { recursive: true, force: true });
-    fs.mkdirSync(probeRoot, { recursive: true });
-    const sampleRel = "往返测试样本.md";
-    const sampleText = "# 笔记标题\n\n这是一篇用于往返测试的真实笔记样本。\n\n- 已有双链：[[已有笔记]]\n- 已有标签：#已有标签\n";
-    fs.writeFileSync(path.join(probeRoot, sampleRel), sampleText, "utf8");
-    const reportPath = path.join(probeRoot, ROUNDTRIP_REPORT_PATH);
-
-    const runProbe = async (fake: FakeFeishu, label: string): Promise<{ logs: Harness["logs"]; report: string }> => {
-      __setRequestUrlHandler(fake.handler);
-      const vault = new FakeVault(probeRoot);
-      const app = {
-        vault,
-        workspace: { getActiveFile: () => vault.getAbstractFileByPath(sampleRel), getLeavesOfType: () => [] },
-      };
-      const logs = { infos: [] as string[], warns: [] as string[], errors: [] as string[], debugs: [] as string[] };
-      await runRoundtripProbe({
-        app: app as never,
-        getSettings: () => ({ ...DEFAULT_SETTINGS, appId: "cli_probe", appSecret: "secret", spaceId: SPACE_ID }),
-        auth: { getToken: async () => "fake-token" } as never,
-        logger: makeStubLogger(logs) as never,
-      });
-      eq(logs.errors.length, 0, `${label} 的日志里有 error：${logs.errors.join(" / ")}`);
-      ok(fs.existsSync(reportPath), `${label} 没有写出报告：${reportPath}`);
-      return { logs, report: fs.readFileSync(reportPath, "utf8") };
-    };
-
-    // ---- 第一次：创建走异步任务（task_id 轮询）+ 取回有损失
-    const fakeA = new FakeFeishu();
-    fakeA.docsCreateAsync = true;
-    fakeA.docsFidelityLoss = true;
-    const first = await runProbe(fakeA, "异步创建那一次");
-
-    eq(fakeA.counters.docsCreate, 1, "创建文档次数");
-    ok(fakeA.counters.docsTaskPoll >= 2, `异步任务轮询次数应该 >= 2，实际 ${fakeA.counters.docsTaskPoll}`);
-    eq(fakeA.documents.size, 1, "假服务器里的文档数");
-    const documentId = [...fakeA.documents.keys()][0] ?? "";
-
-    const createRequest = fakeA.docsRequests.find((item) => item.label === "POST /open-apis/docs_ai/v1/documents");
-    ok(createRequest, "没有记录到创建文档请求");
-    const createBody = createRequest.body as { format?: string; content?: string; extra_param?: string; parent_token?: string };
-    eq(createBody.format, "markdown", "创建请求的 format");
-    eq(createBody.extra_param, '{"open_create_async":true}', "创建请求的 extra_param（必须是 JSON 字符串）");
-    eq(createBody.parent_token, undefined, "创建请求不该带 parent_token（文档随后靠 move 进知识库）");
-    const sentContent = String(createBody.content ?? "");
-    ok(sentContent.startsWith("<title>同步往返测试 "), `创建请求的 content 不是以 <title> 开头：${sentContent.slice(0, 40)}`);
-    ok(sentContent.includes("# 笔记标题"), "创建请求的 content 里没有笔记原文");
-    ok(sentContent.endsWith(SYNTAX_SAMPLE), "创建请求的 content 末尾不是语法样本");
-    eq(
-      sentContent,
-      buildMarkdownContent(docTitleOf(sentContent), appendSyntaxSample(sampleText)),
-      "发给飞书的 content 应该是 <title> + 笔记原文 + 语法样本",
-    );
-
-    const fetchRequests = fakeA.docsRequests.filter((item) => item.label.endsWith("/fetch"));
-    eq(fetchRequests.length, 2, "fetch 调用次数");
-    const fetchBody = fetchRequests[0].body as { format?: string; extra_param?: string; export_option?: unknown };
-    eq(fetchBody.format, "markdown", "fetch 请求的 format");
-    eq(
-      fetchBody.extra_param,
-      '{"enable_user_cite_reference_map":true,"include_comments":true,"return_html5_block_data":true}',
-      "fetch 请求的 extra_param",
-    );
-    eq(
-      JSON.stringify(fetchBody.export_option),
-      '{"export_block_id":false,"export_style_attrs":false,"export_cite_extra_data":false}',
-      "fetch 请求的 export_option",
-    );
-
-    const updateRequest = fakeA.docsRequests.find((item) => item.label.startsWith("PUT "));
-    ok(updateRequest, "没有记录到更新请求（更新必须是 PUT）");
-    eq(updateRequest.label, `PUT /open-apis/docs_ai/v1/documents/${documentId}`, "更新请求的路径");
-    const updateBody = updateRequest.body as { format?: string; command?: string; revision_id?: number; content?: string };
-    eq(updateBody.format, "markdown", "更新请求的 format");
-    eq(updateBody.command, "overwrite", "更新请求的 command");
-    eq(updateBody.revision_id, -1, "更新请求的 revision_id");
-    eq(updateBody.content, sentContent, "更新请求的 content 必须与创建时完全一致");
-
-    eq(fakeA.counters.move, 1, "move_docs_to_wiki 调用次数");
-    const moveRequest = fakeA.moveRequests[0];
-    eq(moveRequest?.objType, "docx", "move_docs_to_wiki 的 obj_type");
-    eq(moveRequest?.objToken, documentId, "move_docs_to_wiki 的 obj_token");
-    eq(moveRequest?.apply, true, "move_docs_to_wiki 的 apply");
-    const documentNode = [...fakeA.nodes.values()].find((node) => node.objToken === documentId && node.objType === "docx");
-    ok(documentNode, "文档没有被移进知识库");
-    eq(moveRequest?.parentWikiToken, documentNode.parentNodeToken, "move_docs_to_wiki 的 parent_wiki_token");
-    const containerNode = documentNode.parentNodeToken ? fakeA.nodes.get(documentNode.parentNodeToken) : undefined;
-    ok(containerNode, "找不到容器页面");
-    ok(containerNode.title.startsWith("同步往返测试 "), `容器页面标题不对：${containerNode.title}`);
-    eq(containerNode.parentNodeToken, undefined, "容器页面应该在知识空间顶层");
-    eq(fakeA.unknownRoutes.join("|"), "", "出现了未实现的端点");
-
-    // ---- 报告内容
-    const report = first.report;
-    for (const heading of ["## ① 原始本地内容", "## ② 实际发给飞书的 content", "## ③ 第一次取回", "## ④ 第二次取回"]) {
-      ok(report.includes(heading), `报告缺少段落：${heading}`);
-    }
-    ok(report.includes(appendSyntaxSample(sampleText)), "报告里没有原始本地内容");
-    ok(report.includes(sentContent), "报告里没有实际发给飞书的 content");
-    const sentHash = await sha256Hex(new TextEncoder().encode(sentContent).buffer as ArrayBuffer);
-    ok(report.includes(sentHash), `报告里没有 content 的 sha256（${sentHash}）`);
-    ok(report.includes(`document_id：\`${documentId}\``), "报告里没有 document_id");
-    ok(report.includes("样本笔记原文"), "报告里没有样本笔记原文的指纹");
-    const noteHash = await sha256Hex(new TextEncoder().encode(sampleText).buffer as ArrayBuffer);
-    ok(report.includes(noteHash), `报告里没有笔记原文的 sha256（${noteHash}）`);
-    eq(readVaultFile(sampleRel, probeRoot), sampleText, "往返测试不能改动样本笔记");
-    ok(report.includes(containerNode.nodeToken), "报告里没有容器页面 node_token");
-    ok(report.includes(`https://<你的飞书域名>/wiki/${documentNode.nodeToken}`), "报告里没有知识库节点链接");
-
-    ok(reportRow(report, "待办（未完成）").includes("❌ 未找到"), `待办丢了勾选框却判成保留：${reportRow(report, "待办（未完成）")}`);
-    ok(reportRow(report, "callout").includes("❌ 未找到"), "callout 标记被丢掉却判成保留");
-    ok(reportRow(report, "frontmatter 块").includes("❌ 未找到"), "frontmatter 块被丢掉却判成保留");
-    ok(reportRow(report, "图片（Wiki 嵌入）").includes("❌ 未找到"), "Wiki 嵌入图片被改写却判成保留");
-    for (const label of [
-      "待办（已完成）",
-      "多级列表（第四级）",
-      "加粗 / 斜体 / 删除线",
-      "行内公式",
-      "块级公式",
-      "表格",
-      "代码块（js）",
-      "mermaid 代码块",
-      "双链",
-      "标签",
-      "图片（标准 Markdown）",
-      "脚注",
-    ]) {
-      ok(reportRow(report, label).includes("✅ 第"), `${label} 应该判为逐字保留：${reportRow(report, label)}`);
-    }
-    const keptRows = SYNTAX_CHECKS.filter((check) => reportRow(report, check.label).includes("✅")).length;
-    const lostRows = SYNTAX_CHECKS.filter((check) => reportRow(report, check.label).includes("❌")).length;
-    eq(keptRows + lostRows, SYNTAX_CHECKS.length, "每条语法都要有判定结果");
-
-    const firstDiff = sectionOf(report, "## 逐行差异摘要");
-    ok(firstDiff.includes("- [ ] 待办：确认这一行是否原样回来"), "差异里没有列出被改写的待办行");
-    ok(firstDiff.includes("> [!note] 提示"), "差异里没有列出被丢掉的 callout 标记");
-    ok(!firstDiff.includes("[[往返测试目标笔记]]"), "双链没丢，不该出现在差异里");
-    ok(firstDiff.includes("只有右侧有的行"), "应该标出只属飞书侧的行");
-    ok(firstDiff.includes("两侧行内容一致（按行多重集比较，忽略顺序）"), "③→④ 完全一致时应该给出「一致」结论");
-    ok(report.includes("③ 与 ④ 逐字节一致（更新路径稳定）"), "应该判出更新路径稳定");
-    ok(report.includes("② 与 ③ 不一致（转换有损失，差异见上）"), "应该判出转换有损失");
-
-    // ---- 第二次：同步创建 + 第二次取回漂移
-    const fakeB = new FakeFeishu();
-    fakeB.docsCreateAsync = false;
-    fakeB.docsFidelityLoss = false;
-    fakeB.docsDriftOnSecondFetch = true;
-    const second = await runProbe(fakeB, "同步创建那一次");
-
-    eq(fakeB.counters.docsCreate, 1, "创建文档次数");
-    eq(fakeB.counters.docsTaskPoll, 0, "同步创建路径不该轮询异步任务");
-    eq(fakeB.counters.docsFetch, 2, "fetch 调用次数");
-    ok(second.report.includes("② 与 ③ 逐字节一致（这一趟没有任何损失）"), "无损时应该判出逐字节一致");
-    ok(second.report.includes("③ 与 ④ 不一致（更新后再取回的内容有变化）"), "应该判出第二次取回与第一次不一致");
-    const secondDiff = sectionOf(second.report, "## 逐行差异摘要");
-    ok(secondDiff.includes("服务端第二次取回漂移"), "差异里没有列出第二次取回多出来的行");
-    ok(
-      SYNTAX_CHECKS.every((check) => reportRow(second.report, check.label).includes("✅")),
-      "无损那一次应该每条语法都判 ✅",
-    );
-
-    console.log(`  异步创建轮询 ${fakeA.counters.docsTaskPoll} 次；核对结果 ✅${keptRows} / ❌${lostRows}`);
-    console.log(`  报告：${reportPath}`);
-    return `异步建文档轮询 ${fakeA.counters.docsTaskPoll} 次、语法核对 ✅${keptRows}/❌${lostRows}；同步创建 + 取回漂移那一次也按预期判出不一致`;
-  });
-
-  // ---- 场景 15~20：文档模式（同一份假 vault 与假服务器，从空远端开始）
+  // ---- 文档模式
   const docRoot = path.join(TMP_ROOT, "vault-doc");
   const docFiles: Record<string, string> = {
     "根笔记.md": "根笔记的正文。\n",
@@ -2800,7 +2589,7 @@ async function main(): Promise<void> {
     eq(nonSkipCount(adopt.result.plan), 2, "不该出现 create-remote/push");
     eq(adopt.delta.docsCreate + adopt.delta.docsUpdate + adopt.delta.move + adopt.delta.nodeCreate, 0, "不该有任何写操作");
     eq(docxNodes(fake).length, nodesBefore, "远端不该多出节点");
-    ok(h.logs.warns.some((line) => line.includes("文档模式的同步目标已变更")), `应有目标变更提示：${h.logs.warns.join(" / ")}`);
+    ok(h.logs.warns.some((line) => line.includes("同步目标或模式已变更")), `应有目标变更提示：${h.logs.warns.join(" / ")}`);
 
     // 再模拟一次目标不符，但这次本地内容与远端不一致：必须判成冲突，绝不覆盖、也不新建重复文档
     h.settings.state.target = { spaceId: SPACE_ID, rootNodeToken: "", syncMode: "md" };
@@ -3398,7 +3187,7 @@ async function main(): Promise<void> {
 
     eq(push.result.plan.counts.push ?? 0, 1, "push 数量");
     eq(push.delta.docsUpdate, 1, "PUT 次数");
-    eq(push.delta.docsFetch, 1, "写完取回一次记「取回形态」基线");
+    eq(push.delta.docsFetch, 2, "覆盖前复核一次，写完取回一次记基线");
     eq(push.delta.meta, 2, "计划一次 + 推送后刷新一次元数据");
     ok(metaHarness.settings.state.docRecords["三.md"]?.remoteModifiedTime, "推送后记录里应有新的时间戳");
 
@@ -3717,6 +3506,152 @@ async function main(): Promise<void> {
     return "下行开关独立生效，旧预览不会被套用到新规则";
   });
 
+  for (const mode of ["md", "doc"] as const) {
+    await scenario(`预览保护（${mode}）：普通覆盖前复核两端`, async () => {
+      const root = path.join(TMP_ROOT, `preview-push-${mode}`);
+      writeDocVault(root, { "A.md": "原文\n" });
+      const fake = new FakeFeishu();
+      __setRequestUrlHandler(fake.handler);
+      const h = mode === "doc" ? createDocHarness(fake, root, { rootNodeToken: ROOT_NODE }) : createHarness(fake, { vaultRoot: root });
+      await h.engine.run({ mode: "both" });
+      writeVaultFile("A.md", "本地改动\n", root);
+      const preview = await h.engine.run({ mode: "both", dryRun: true });
+      eq(preview.plan.counts.push, 1, "应计划覆盖");
+      const docId = h.settings.state.docRecords["A.md"]?.documentId;
+      if (docId) fake.setDocContent(docId, "<title>A</title>\n飞书后改\n");
+      else fake.editRemote("A.md", "飞书后改\n");
+      const before = fake.counters.docsUpdate + fake.counters.uploadAll;
+      const result = await h.engine.run({ mode: "both", preApprovedPlan: preview.plan });
+      eq(fake.counters.docsUpdate + fake.counters.uploadAll, before, "不能覆盖新远端内容");
+      ok(result.report.some(entry => !entry.ok && entry.message?.includes("已改变")), "应报告过期内容");
+      eq(readVaultFile("A.md", root), "本地改动\n", "本地保留");
+      return "确认前新增的远端改动保留，零覆盖请求";
+    });
+
+    await scenario(`删除保护（${mode}）：预览后本地修改、恢复、远端修改`, async () => {
+      const root = path.join(TMP_ROOT, `preview-delete-${mode}`);
+      writeDocVault(root, { "A.md": "原文\n", "B.md": "待删除\n" });
+      const fake = new FakeFeishu();
+      __setRequestUrlHandler(fake.handler);
+      const settings = { rootNodeToken: ROOT_NODE, propagateLocalDelete: true, propagateRemoteDelete: true };
+      const h = mode === "doc" ? createDocHarness(fake, root, settings) : createHarness(fake, { vaultRoot: root, settings });
+      await h.engine.run({ mode: "both" });
+      const docId = h.settings.state.docRecords["A.md"]?.documentId;
+      if (docId) fake.removeDocumentNode(docId); else fake.removeRemoteFile("A.md");
+      let preview = await h.engine.run({ mode: "both", dryRun: true });
+      eq(preview.plan.counts["delete-local"], 1, "应计划删除本地");
+      writeVaultFile("A.md", "预览后的新文字\n", root);
+      let result = await h.engine.run({ mode: "both", preApprovedPlan: preview.plan });
+      ok(result.report.some(entry => !entry.ok && entry.action === "delete-local"), "新本地内容应阻止删除");
+      eq(readVaultFile("A.md", root), "预览后的新文字\n", "本地新内容仍存在");
+      fs.unlinkSync(path.join(root, "B.md"));
+      preview = await h.engine.run({ mode: "both", dryRun: true });
+      eq(preview.plan.counts["delete-remote"], 1, "应计划删除远端");
+      writeVaultFile("B.md", "用户恢复\n", root);
+      result = await h.engine.run({ mode: "both", preApprovedPlan: preview.plan });
+      ok(result.report.some(entry => !entry.ok && entry.action === "delete-remote"), "恢复本地应阻止远端删除");
+      fs.unlinkSync(path.join(root, "B.md"));
+      preview = await h.engine.run({ mode: "both", dryRun: true });
+      const bId = h.settings.state.docRecords["B.md"]?.documentId;
+      if (bId) fake.setDocContent(bId, "<title>B</title>\n远端新文字\n"); else fake.editRemote("B.md", "远端新文字\n");
+      result = await h.engine.run({ mode: "both", preApprovedPlan: preview.plan });
+      ok(result.report.some(entry => !entry.ok && entry.action === "delete-remote"), "新远端内容应阻止删除");
+      eq(fake.counters.deleteFile, 0, "未发送任何远端删除请求");
+      return "三种预览后变化均不会误删笔记";
+    });
+
+    await scenario(`状态保护（${mode}）：目标变更使旧预览失效，自动同步不删除`, async () => {
+      const root = path.join(TMP_ROOT, `preview-target-${mode}`);
+      writeDocVault(root, { "A.md": "原文\n" });
+      const fake = new FakeFeishu();
+      __setRequestUrlHandler(fake.handler);
+      const settings = { rootNodeToken: ROOT_NODE, propagateLocalDelete: true };
+      const h = mode === "doc" ? createDocHarness(fake, root, settings) : createHarness(fake, { vaultRoot: root, settings });
+      await h.engine.run({ mode: "both" });
+      fs.unlinkSync(path.join(root, "A.md"));
+      const preview = await h.engine.run({ mode: "both", dryRun: true });
+      h.settings.rootNodeToken = "another-root";
+      let error = "";
+      try { await h.engine.run({ mode: "both", preApprovedPlan: preview.plan }); } catch (caught) { error = String(caught); }
+      ok(error.includes("重新预览"), "目标改变拒绝旧预览");
+      h.settings.rootNodeToken = ROOT_NODE;
+      const automatic = await h.engine.run({ mode: "both", allowDeletes: false });
+      eq(automatic.plan.counts["delete-remote"] ?? 0, 0, "自动同步不执行删除");
+      eq(automatic.plan.counts["local-deleted"], 1, "自动同步给出待处理提示");
+      eq(fake.counters.deleteFile, 0, "远端笔记仍保留");
+      return "旧计划不可写入新目标，定时同步保留待删除项";
+    });
+
+    await scenario(`映射保护（${mode}）：预览后改本地不能误记为已同步`, async () => {
+      const root = path.join(TMP_ROOT, `preview-link-${mode}`);
+      writeDocVault(root, { "A.md": "原文\n" });
+      const fake = new FakeFeishu();
+      __setRequestUrlHandler(fake.handler);
+      const h = mode === "doc" ? createDocHarness(fake, root, { rootNodeToken: ROOT_NODE }) : createHarness(fake, { vaultRoot: root });
+      await h.engine.run({ mode: "both" });
+      h.settings.state.records = {}; h.settings.state.docRecords = {};
+      const preview = await h.engine.run({ mode: "both", dryRun: true });
+      eq(preview.plan.counts.link, 1, "相同内容计划建立映射");
+      writeVaultFile("A.md", "用户新改动\n", root);
+      const result = await h.engine.run({ mode: "both", preApprovedPlan: preview.plan });
+      ok(result.report.some(entry => !entry.ok && entry.action === "link"), "不能把新改动记成同步成功");
+      eq(Object.keys(h.settings.state.records).length + Object.keys(h.settings.state.docRecords).length, 0, "失败不建立基线");
+      return "本地编辑不会被旧 link 计划吞掉";
+    });
+  }
+
+  for (const mode of ["md", "doc"] as const) {
+    await scenario(`删除保护（${mode}）：远端在确认前恢复时保留本地`, async () => {
+      const root = path.join(TMP_ROOT, `remote-restore-${mode}`);
+      writeDocVault(root, { "A.md": "原文\n" });
+      const fake = new FakeFeishu();
+      __setRequestUrlHandler(fake.handler);
+      const settings = { rootNodeToken: ROOT_NODE, propagateRemoteDelete: true };
+      const h = mode === "doc" ? createDocHarness(fake, root, settings) : createHarness(fake, { vaultRoot: root, settings });
+      await h.engine.run({ mode: "both" });
+      const token = mode === "doc" ? h.settings.state.docRecords["A.md"].documentId : h.settings.state.records["A.md"].fileToken;
+      const node = [...fake.nodes.values()].find(node => node.objToken === token)!;
+      fake.nodes.delete(node.nodeToken);
+      const preview = await h.engine.run({ mode: "both", dryRun: true });
+      eq(preview.plan.counts["delete-local"], 1, "应计划删除本地");
+      fake.nodes.set(node.nodeToken, node);
+      const result = await h.engine.run({ mode: "both", preApprovedPlan: preview.plan });
+      ok(result.report.some(entry => !entry.ok && entry.message?.includes("已恢复")), "应拦截远端恢复");
+      eq(readVaultFile("A.md", root), "原文\n", "本地仍存在");
+      return "远端恢复后，旧删除计划不再执行";
+    });
+  }
+
+  await scenario("文件镜像：扁平路径可正确回读并保持稳定", async () => {
+    const root = path.join(TMP_ROOT, "flat-md");
+    writeDocVault(root, { "Folder/A.md": "扁平样例\n" });
+    const fake = new FakeFeishu();
+    __setRequestUrlHandler(fake.handler);
+    const h = createHarness(fake, { vaultRoot: root, settings: { folderMode: "flat" } });
+    await h.engine.run({ mode: "both" });
+    const next = await h.engine.run({ mode: "both" });
+    eq(next.plan.counts.skip, 1, "编码标题应该还原为原路径");
+    eq(fake.counters.uploadAll, 1, "没有重复上传");
+    return "Folder/A.md ↔ Folder__A.md 无重复、无误判删除";
+  });
+
+  await scenario("强制重推：丢失映射时覆盖已有文档而非重复新建", async () => {
+    const root = path.join(TMP_ROOT, "force-adopt");
+    writeDocVault(root, { "A.md": "原文\n" });
+    const fake = new FakeFeishu();
+    __setRequestUrlHandler(fake.handler);
+    const h = createDocHarness(fake, root, { rootNodeToken: ROOT_NODE });
+    await h.engine.run({ mode: "both" });
+    h.settings.state.docRecords = {};
+    writeVaultFile("A.md", "本地选定版本\n", root);
+    const result = await h.engine.run({ mode: "push", forcePush: true });
+    ok(result.report.every(entry => entry.ok), "覆盖应成功");
+    eq(fake.counters.docsCreate, 1, "仅首轮创建一次");
+    eq(fake.counters.docsUpdate, 1, "恢复映射时原位覆盖");
+    eq(fake.duplicateTitles.length, 0, "没有同名重复文档");
+    return "已有 document_id 可恢复映射并原位更新";
+  });
+
   // ---- 汇总
   const failures: string[] = scenarioResults.filter((item) => !item.ok).map((item) => `${item.name}：${item.detail}`);
   if (fake.duplicateTitles.length > 0) failures.push(`同名节点 ${fake.duplicateTitles.length} 个`);
@@ -3768,4 +3703,4 @@ process.on("uncaughtException", (error) => {
 main().catch((error) => {
   console.error("测试直接崩溃：", error);
   process.exitCode = 1;
-});
+}).finally(() => fs.rmSync(TMP_ROOT, { recursive: true, force: true }));

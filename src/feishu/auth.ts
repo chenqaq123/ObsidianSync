@@ -1,7 +1,6 @@
 import type * as NodeHttp from "http";
-import { requestUrl } from "obsidian";
 import type { Logger } from "../log";
-import { API_BASE, parseEnvelope, FeishuAuthRequiredError } from "./client";
+import { API_BASE, parseEnvelope, FeishuAuthRequiredError, requestWithBudget } from "./client";
 
 export type AuthMode = "user" | "tenant";
 
@@ -78,6 +77,8 @@ interface TokenResponse {
 export class AuthManager {
   private tenant?: { token: string; expiresAt: number };
   private callbackServer?: { close: () => void };
+  private userRefresh?: Promise<string>;
+  private tenantKey?: string;
 
   constructor(
     private readonly config: () => AuthSettings,
@@ -102,11 +103,12 @@ export class AuthManager {
 
   private async tenantToken(forceRefresh: boolean): Promise<string> {
     const now = Date.now();
-    if (!forceRefresh && this.tenant && this.tenant.expiresAt - REFRESH_MARGIN_MS > now) {
+    const config = this.config();
+    const key = `${config.appId}:${config.appSecret}`;
+    if (!forceRefresh && this.tenantKey === key && this.tenant && this.tenant.expiresAt - REFRESH_MARGIN_MS > now) {
       return this.tenant.token;
     }
-    const config = this.config();
-    const response = await requestUrl({
+    const response = await requestWithBudget({
       url: `${API_BASE}/open-apis/auth/v3/tenant_access_token/internal`,
       method: "POST",
       headers: { "Content-Type": "application/json; charset=utf-8" },
@@ -119,10 +121,12 @@ export class AuthManager {
     }
     const expiresIn = payload.expire ?? 7200;
     this.tenant = { token: payload.tenant_access_token, expiresAt: Date.now() + expiresIn * 1000 };
+    this.tenantKey = key;
     return this.tenant.token;
   }
 
   private async userToken(forceRefresh: boolean): Promise<string> {
+    if (this.userRefresh) return this.userRefresh;
     const tokens = this.readTokens();
     if (!tokens?.refreshToken) {
       throw new FeishuAuthRequiredError("尚未完成用户授权，请在插件设置里点击「授权飞书账号」");
@@ -134,7 +138,12 @@ export class AuthManager {
     if (tokens.refreshExpiresAt - REFRESH_MARGIN_MS <= now) {
       throw new FeishuAuthRequiredError("用户授权的 refresh token 已过期，请重新授权");
     }
-    return this.refreshUserToken(tokens);
+    this.userRefresh = this.refreshUserToken(tokens);
+    try {
+      return await this.userRefresh;
+    } finally {
+      this.userRefresh = undefined;
+    }
   }
 
   private async refreshUserToken(tokens: UserTokens): Promise<string> {
@@ -146,6 +155,9 @@ export class AuthManager {
       refresh_token: tokens.refreshToken,
     });
     const refreshed = this.toTokens(payload, tokens);
+    if (this.readTokens() !== tokens || this.config().appId !== config.appId || this.config().appSecret !== config.appSecret) {
+      throw new FeishuAuthRequiredError("授权配置在刷新期间已改变，请重新授权");
+    }
     await this.writeTokens(refreshed);
     this.log.debug("已刷新 user_access_token");
     return refreshed.accessToken;
@@ -177,20 +189,18 @@ export class AuthManager {
   }
 
   startCallbackServer(expectedState?: string): { waitForCode: () => Promise<string>; close: () => void } {
+    this.cancelAuthorization();
     const http = loadHttp();
     if (!http) {
       throw new Error("当前环境无法启动本地回调服务，请使用「手动粘贴授权码」方式");
     }
     const config = this.config();
-    let port = 7634;
-    let expectedPath = "/callback";
-    try {
-      const parsed = new URL(config.redirectUri);
-      port = parsed.port ? Number(parsed.port) : parsed.protocol === "https:" ? 443 : 80;
-      expectedPath = parsed.pathname || "/callback";
-    } catch {
-      // keep defaults
+    const redirect = new URL(config.redirectUri);
+    if (redirect.protocol !== "http:" || !["localhost", "127.0.0.1", "[::1]"].includes(redirect.hostname)) {
+      throw new Error("自动授权需要 http://localhost、127.0.0.1 或 [::1] 回调地址；其他地址请用手动授权");
     }
+    const port = redirect.port ? Number(redirect.port) : 80;
+    const expectedPath = redirect.pathname || "/callback";
 
     let resolveCode: (code: string) => void;
     let rejectCode: (error: Error) => void;
@@ -198,6 +208,8 @@ export class AuthManager {
       resolveCode = resolve;
       rejectCode = reject;
     });
+    // Cancellation can happen before waitForCode is attached (for example during plugin unload).
+    void codePromise.catch(() => undefined);
 
     const server = http.createServer((req, res) => {
       const requestUrlValue = req.url ?? "/";
@@ -219,7 +231,7 @@ export class AuthManager {
         res.end("<html><body><h3>授权成功，可以关闭本页面并回到 Obsidian。</h3></body></html>");
         resolveCode(code);
       } else {
-        res.end(`<html><body><h3>授权失败：${error ?? "未收到 code"}</h3></body></html>`);
+        res.end("<html><body><h3>授权未完成，请返回 Obsidian 查看错误。</h3></body></html>");
         rejectCode(new Error(`授权失败：${error ?? "未收到 code"}`));
       }
     });
@@ -227,12 +239,16 @@ export class AuthManager {
     const timeout = window.setTimeout(() => rejectCode(new Error("等待授权超时（5 分钟），请重试")), 5 * 60 * 1000);
     server.on("error", (error) => rejectCode(error instanceof Error ? error : new Error(String(error))));
 
+    let closed = false;
     const close = () => {
+      if (closed) return;
+      closed = true;
       window.clearTimeout(timeout);
       server.close();
+      rejectCode(new Error("授权已取消"));
     };
 
-    server.listen(port);
+    server.listen(port, redirect.hostname === "[::1]" ? "::1" : redirect.hostname);
     this.callbackServer = { close };
 
     return {
@@ -258,7 +274,7 @@ export class AuthManager {
 
   private async postToken(body: Record<string, string>): Promise<TokenResponse> {
     const form = new URLSearchParams(body).toString();
-    const response = await requestUrl({
+    const response = await requestWithBudget({
       url: TOKEN_URL,
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded; charset=utf-8" },

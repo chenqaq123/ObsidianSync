@@ -39,6 +39,7 @@ export interface PlanItem {
 }
 
 export interface SyncPlan {
+  settingsFingerprint?: string;
   items: PlanItem[];
   counts: Record<string, number>;
   localNoteCount: number;
@@ -132,6 +133,9 @@ export interface SyncTarget {
   rootNodeToken: string;
   /** 上次同步用的模式，用于发现模式切换后重按「首次对接」判定 */
   syncMode?: SyncModeSetting;
+  folderMode?: "nodes" | "flat";
+  flatSeparator?: string;
+  rootPageTitle?: string;
 }
 
 export interface SyncState {

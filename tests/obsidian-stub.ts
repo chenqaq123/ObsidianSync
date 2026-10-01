@@ -1,11 +1,10 @@
 /**
  * 离线端到端测试专用的 `obsidian` 替身模块。
  *
- * 只实现 `src/sync/**`、`src/feishu/**` 与 `src/ui/roundtrip-command.ts` 真正 import 到的成员：
+ * 只实现 `src/sync/**`、`src/feishu/**` 真正 import 到的成员：
  *   - `requestUrl`（client.ts 的 HTTP 出口，转交给可注入的 handler）
  *   - `TFile`（engine/executor/scanner 的 `instanceof` 判断）
  *   - `normalizePath`（log.ts）
- *   - `Notice` / `Modal` / `FuzzySuggestModal`（往返转换实测命令）
  * 其余名字（App / DataAdapter 等）在被测代码里都是 `import type`，编译期即被擦除。
  */
 
@@ -57,50 +56,6 @@ export class TFile {
 
 export function normalizePath(path: string): string {
   return path;
-}
-
-/** Notice / FuzzySuggestModal 只在「往返转换实测」命令里用到：测这条命令时才需要它们存在。 */
-export class Notice {
-  constructor(
-    public message = "",
-    public timeout?: number,
-  ) {}
-
-  setMessage(message: string): this {
-    this.message = message;
-    return this;
-  }
-
-  hide(): void {}
-}
-
-export class Modal {
-  containerEl = {} as HTMLElement;
-
-  constructor(public app: unknown) {}
-
-  open(): void {}
-
-  close(): void {}
-}
-
-export abstract class FuzzySuggestModal<T> extends Modal {
-  private placeholder = "";
-
-  setPlaceholder(value: string): this {
-    this.placeholder = value;
-    return this;
-  }
-
-  getPlaceholder(): string {
-    return this.placeholder;
-  }
-
-  abstract getItems(): T[];
-
-  abstract getItemText(item: T): string;
-
-  abstract onChooseItem(item: T, event?: unknown): void;
 }
 
 // client.ts 的重试退避用了 window.setTimeout，Node 下补一个最小实现

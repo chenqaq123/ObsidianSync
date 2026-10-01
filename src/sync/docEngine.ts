@@ -1,5 +1,5 @@
+import { assertPlanCurrent, deferDeletes, filterPlan, isEditorDirty, planFingerprint, prepareTarget, validateSettings, validateLocalPaths } from "./guards";
 import type { App } from "obsidian";
-import { TFile } from "obsidian";
 import type { AuthManager } from "../feishu/auth";
 import { FeishuClient } from "../feishu/client";
 import { fetchDocumentMarkdown } from "../feishu/docs";
@@ -13,12 +13,12 @@ import type { DocPlanCache, DocRemoteIndex } from "./docPlanner";
 import { buildDocPlan, buildDocRemoteIndex, createDocPlanCache } from "./docPlanner";
 import type { DocExecutionContext } from "./docExecutor";
 import { executeDocPlan, readLocalText } from "./docExecutor";
-import type { PlanDecision, RunOptions, RunResult, SyncMode } from "./engine";
+import type { PlanDecision, RunOptions, RunResult } from "./engine";
 import { parseTokenFromInput } from "./engine";
 import { sha256Hex } from "./hash";
 import type { ReportEntry } from "./executor";
 import { PathFilter, readLocalBytes, scanLocalNotes } from "./scanner";
-import type { LocalNote, PlanItem, PluginSettings, SyncPlan } from "./types";
+import type { LocalNote, PluginSettings, SyncPlan } from "./types";
 import { basenameOf, dirnameOf } from "./types";
 
 export interface DocEngineDeps {
@@ -59,6 +59,7 @@ export class DocSyncEngine {
   private async runInternal(options: RunOptions): Promise<RunResult> {
     const settings = this.deps.getSettings();
     const logger = this.deps.logger;
+    validateSettings(settings);
     const spaceId = parseTokenFromInput(settings.spaceId);
     // 留空表示以知识空间顶层为同步根：vault 的一级目录会成为知识库的一级页面
     const rootNodeToken = parseTokenFromInput(settings.rootNodeToken) || undefined;
@@ -67,21 +68,9 @@ export class DocSyncEngine {
     const client = this.createClient();
     const filter = new PathFilter(settings.excludePatterns);
 
-    const previousTarget = settings.state.target;
-    if (
-      !previousTarget ||
-      previousTarget.spaceId !== spaceId ||
-      previousTarget.rootNodeToken !== (rootNodeToken ?? "") ||
-      previousTarget.syncMode !== "doc"
-    ) {
-      if (previousTarget) {
-        logger.warn(
-          `文档模式的同步目标已变更（${previousTarget.spaceId}/${previousTarget.rootNodeToken || "顶层"}/${previousTarget.syncMode ?? "md"} → ${spaceId}/${rootNodeToken ?? "顶层"}/doc），已清空文档映射表，本轮按"首次对接"重新判定，不会直接覆盖本地`,
-        );
-        settings.state.docRecords = {};
-        settings.state.conflicts = {};
-      }
-      settings.state.target = { spaceId, rootNodeToken: rootNodeToken ?? "", syncMode: "doc" };
+    if (options.preApprovedPlan) assertPlanCurrent(options.preApprovedPlan, settings);
+    if (prepareTarget(settings, spaceId, rootNodeToken ?? "", "doc")) {
+      logger.warn("同步目标或模式已变更，已清空旧映射，本轮按首次对接判定");
     }
 
     try {
@@ -106,12 +95,13 @@ export class DocSyncEngine {
             logger.info(`识别到已有的知识库顶层页面「${title}」，复用它存放 vault 根目录下的笔记`);
           }
         } catch (error) {
-          logger.warn(`查找知识库顶层页面失败，根目录下的笔记可能被识别成新文档：${String(error)}`);
+          throw new Error(`读取知识库顶层页面失败，已停止同步以避免重复创建：${String(error)}`);
         }
       }
 
       options.onProgress?.("扫描本地笔记…");
       const local: Map<string, LocalNote> = scanLocalNotes(this.deps.app, filter);
+      validateLocalPaths(local.keys(), settings);
 
       options.onProgress?.("读取飞书知识库节点树…");
       const entries = await walkWikiTree(client, spaceId, rootNodeToken, {
@@ -128,7 +118,7 @@ export class DocSyncEngine {
         rootContainerNode: settings.state.folders[""]?.nodeToken,
         isExcluded: (relPath) => filter.isExcluded(relPath),
       });
-      for (const warning of index.warnings) logger.warn(`文档模式：${warning}`);
+      if (index.warnings.length) throw new Error(`远端路径存在歧义，请先处理再同步：${index.warnings.join("；")}`);
       // 认出目录节点就登记下来，后续轮次不必再靠结构推断，也不会重复建页面
       if (settings.folderMode === "nodes") {
         for (const [relDir, container] of index.containers) {
@@ -178,8 +168,9 @@ export class DocSyncEngine {
       );
       // Baselines, including timestamps, are updated only after the approved action succeeds.
       // 与 md 模式一致：先按本次模式过滤计划，预览/报告里只出现真的会执行的动作
-      const plan = filterPlan(planned, options.mode);
+      const plan = deferDeletes(filterPlan(planned, options.mode), options.allowDeletes);
 
+      plan.settingsFingerprint = planFingerprint(settings);
       if (options.dryRun) {
         return { plan, report: [], executed: false };
       }
@@ -247,6 +238,7 @@ export class DocSyncEngine {
       }
     }
 
+    assertPlanCurrent(plan, context.settings);
     const cache = context.cache ?? createDocPlanCache();
     const local: Map<string, LocalNote> = scanLocalNotes(this.deps.app, context.filter);
     // 建文档时要避开与容器（目录页面）撞名：远端已认出的容器 + 状态里的目录 + 本地目录名
@@ -280,7 +272,7 @@ export class DocSyncEngine {
       const report: ReportEntry[] = await executeDocPlan(planForRun, execContext, {
         allowPush,
         allowPull,
-        isEditorDirty: (relPath) => this.isEditorDirty(relPath),
+        isEditorDirty: (relPath) => isEditorDirty(this.deps.app, relPath),
         onProgress: (message, done, total) => options.onProgress?.(`${message}（${done}/${total}）`),
       });
       // 触碰过的文档刷新一次修改时间，下一轮才能走快路径
@@ -333,22 +325,7 @@ export class DocSyncEngine {
     }
   }
 
-  private async isEditorDirty(relPath: string): Promise<boolean> {
-    for (const leaf of this.deps.app.workspace.getLeavesOfType("markdown")) {
-      const view = leaf.view as unknown as { file?: { path: string }; editor?: { getValue(): string } };
-      if (view?.file?.path !== relPath || !view.editor) continue;
-      const value = view.editor.getValue();
-      const file = this.deps.app.vault.getAbstractFileByPath(relPath);
-      if (file instanceof TFile) {
-        const disk = await this.deps.app.vault.cachedRead(file);
-        return value !== disk;
-      }
-      return value.length > 0;
-    }
-    return false;
-  }
 }
-
 /** 本轮真的动过（写远端或写本地）的笔记：这些文档的修改时间需要刷新 */
 function touchedRelPaths(report: ReportEntry[]): Set<string> {
   const touched = new Set<string>();
@@ -357,15 +334,4 @@ function touchedRelPaths(report: ReportEntry[]): Set<string> {
     if (["push", "create-remote", "pull", "create-local", "link"].includes(entry.action)) touched.add(entry.relPath);
   }
   return touched;
-}
-
-function filterPlan(plan: SyncPlan, mode: SyncMode): SyncPlan {
-  if (mode === "both") return plan;
-  const items: PlanItem[] = plan.items.filter((entry) => {
-    if (mode === "pull") return entry.action !== "push" && entry.action !== "create-remote" && entry.action !== "delete-remote";
-    return entry.action !== "pull" && entry.action !== "create-local" && entry.action !== "delete-local";
-  });
-  const counts: Record<string, number> = {};
-  for (const entry of items) counts[entry.action] = (counts[entry.action] ?? 0) + 1;
-  return { ...plan, items, counts };
 }

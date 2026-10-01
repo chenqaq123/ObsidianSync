@@ -1,3 +1,4 @@
+import { assertRemoteAbsent } from "./guards";
 import type { App } from "obsidian";
 import { TFile } from "obsidian";
 import type { LocalImageUpload, RemoteImageRef, ResolvedImage, RuleContext, RulesFile } from "../convert/rules";
@@ -17,7 +18,7 @@ import { deleteDriveFile } from "../feishu/files";
 import type { FeishuClient } from "../feishu/client";
 import { createContainerNode, getNodeByToken, listNodes, moveDocToWiki } from "../feishu/wiki";
 import type { Logger } from "../log";
-import { ensureFolder } from "../log";
+import { describeError, ensureFolder } from "../log";
 import type { DocPlanCache } from "./docPlanner";
 import { documentTitleFor, uniqueDocumentTitle } from "./docPlanner";
 import type { ReportEntry } from "./executor";
@@ -52,14 +53,6 @@ export interface DocExecutionOptions {
   allowPull: boolean;
   isEditorDirty: (relPath: string) => Promise<boolean>;
   onProgress?: (message: string, done: number, total: number) => void;
-}
-
-function describeError(error: unknown): string {
-  if (error instanceof Error) {
-    const withDescribe = error as Error & { describe?: () => string };
-    return typeof withDescribe.describe === "function" ? withDescribe.describe() : error.message;
-  }
-  return String(error);
 }
 
 function two(value: number): string {
@@ -108,7 +101,7 @@ export async function executeDocPlan(
       return rootContainerToken;
     }
     const title = settings.rootPageTitle.trim() || ctx.app.vault.getName();
-    const topLevel = await listNodes(ctx.client, ctx.spaceId).catch(() => []);
+    const topLevel = await listNodes(ctx.client, ctx.spaceId);
     const found = topLevel.find((node) => node.title === title && node.obj_type !== "file");
     if (found?.node_token) {
       state.folders[""] = { nodeToken: found.node_token };
@@ -147,7 +140,7 @@ export async function executeDocPlan(
   const fetchFresh = async (documentId: string): Promise<string> => {
     const fetched = await fetchDocumentMarkdown(ctx.client, documentId);
     ctx.cache.fetched.set(documentId, fetched);
-    ctx.cache.fetchedHash.set(documentId, await ctx.hashText(fetched));
+    ctx.cache.fetchedHash.set(documentId, await ctx.hashFetched(fetched));
     return fetched;
   };
 
@@ -196,11 +189,16 @@ export async function executeDocPlan(
           const statBefore = localStat(ctx.app, entry.relPath);
           const localText = await readLocalText(ctx.app, entry.relPath);
           const record = state.docRecords[entry.relPath];
-          if (entry.rulesRefresh && record) {
-            if (await options.isEditorDirty(entry.relPath)) throw new Error("笔记正在编辑，请保存后重新预览规则刷新计划");
-            if (await ctx.hashText(localText) !== entry.localHash) throw new Error("预览后本地正文已改变，请重新预览规则刷新计划");
-            const remoteNow = await fetchFresh(record.documentId);
-            if (await ctx.hashFetched(remoteNow) !== entry.remoteHash) throw new Error("预览后飞书正文已改变，已停止覆盖，请重新同步处理远端改动");
+          if (await options.isEditorDirty(entry.relPath)) throw new Error("笔记正在编辑，请保存后重新预览");
+          if (entry.localHash !== undefined && await ctx.hashText(localText) !== entry.localHash) {
+            throw new Error("预览后本地正文已改变，请重新预览");
+          }
+          const existingDocumentId = entry.action === "push" ? (entry.documentId ?? record?.documentId) : undefined;
+          if (existingDocumentId) {
+            const remoteNow = await fetchFresh(existingDocumentId);
+            if (await ctx.hashFetched(remoteNow) !== (entry.remoteHash ?? record?.baseRemoteHash)) {
+              throw new Error("预览后飞书正文已改变，已停止覆盖，请重新同步处理远端改动");
+            }
           }
           const decided = record?.documentTitle
             ? { title: record.documentTitle, renamed: false }
@@ -220,9 +218,9 @@ export async function executeDocPlan(
           let documentId: string;
           let newBlocks: DocNewBlock[] = [];
           let revisionId: number | undefined;
-          if (entry.action === "push" && record) {
-            const updated = await updateDocumentFromMarkdown(ctx.client, record.documentId, { title: decided.title, markdown: sent });
-            documentId = record.documentId;
+          if (existingDocumentId) {
+            const updated = await updateDocumentFromMarkdown(ctx.client, existingDocumentId, { title: decided.title, markdown: sent });
+            documentId = existingDocumentId;
             newBlocks = updated.newBlocks;
             revisionId = updated.revisionId;
           } else {
@@ -267,8 +265,8 @@ export async function executeDocPlan(
             documentTitle: decided.title,
             baseLocalHash: await ctx.hashText(localText),
             baseRemoteHash: remoteHash,
-            publishRulesFingerprint: publishRulesFingerprint(ctx.rules),
-            remoteModifiedTime: entry.remoteModifiedTime,
+            publishRulesFingerprint: images.failures.length ? undefined : publishRulesFingerprint(ctx.rules),
+            remoteModifiedTime: undefined,
             localSize: stable ? statAfter.size : -1,
             localMtime: stable ? statAfter.mtime : -1,
             lastSyncedAt: Date.now(),
@@ -277,7 +275,7 @@ export async function executeDocPlan(
           reports.push({
             relPath: entry.relPath,
             action: entry.action,
-            ok: true,
+            ok: images.failures.length === 0,
             message: buildUploadMessage(localText, images, ruleContext.warnings ?? []),
           });
           tick(`上传 ${entry.relPath}`);
@@ -387,6 +385,11 @@ export async function executeDocPlan(
             return;
           }
 
+          const presentNow = existsLocally(ctx.app, entry.relPath);
+          if (presentNow !== present || (presentNow && (await options.isEditorDirty(entry.relPath) ||
+              (entry.localHash !== undefined && await ctx.hashText(await readLocalText(ctx.app, entry.relPath)) !== entry.localHash)))) {
+            throw new Error("下载期间本地笔记已改变，未覆盖，请重新同步");
+          }
           // 纯排版差异保留本地布局，仅修复 Obsidian 必需的公式空白与转义。
           if (
             present &&
@@ -489,6 +492,10 @@ export async function executeDocPlan(
         const stable = statAfter.size === statBefore.size && statAfter.mtime === statBefore.mtime;
         const existing = state.docRecords[entry.relPath];
         const documentId = entry.documentId ?? existing?.documentId ?? "";
+        if (await options.isEditorDirty(entry.relPath) || await ctx.hashText(localText) !== entry.localHash ||
+            await ctx.hashFetched(await fetchFresh(documentId)) !== entry.remoteHash) {
+          throw new Error("预览后内容已改变，未更新映射，请重新同步");
+        }
         state.docRecords[entry.relPath] = {
           documentId,
           nodeToken: entry.nodeToken ?? existing?.nodeToken,
@@ -535,7 +542,7 @@ export async function executeDocPlan(
       }
       try {
         const fetched = await fetchedFor(documentId);
-        const remoteHash = await ctx.hashText(fetched);
+        const remoteHash = await ctx.hashFetched(fetched);
         const present = existsLocally(ctx.app, entry.relPath);
         const localText = present ? await readLocalText(ctx.app, entry.relPath) : "";
         const localHash = present ? await ctx.hashText(localText) : "";
@@ -584,6 +591,16 @@ export async function executeDocPlan(
         continue;
       }
       try {
+        if (existsLocally(ctx.app, entry.relPath) || await options.isEditorDirty(entry.relPath)) {
+          throw new Error("本地笔记已恢复或正在编辑，未删除远端，请重新预览");
+        }
+        const remoteHashNow = await ctx.hashFetched(await fetchFresh(documentId));
+        if (!record || remoteHashNow !== record.baseRemoteHash) {
+          throw new Error("飞书内容在预览后已改变，未删除，请重新同步");
+        }
+        if (existsLocally(ctx.app, entry.relPath) || await options.isEditorDirty(entry.relPath)) {
+          throw new Error("检查期间本地笔记已恢复，未删除远端");
+        }
         await deleteDriveFile(ctx.client, documentId, "docx");
         delete state.docRecords[entry.relPath];
         delete state.conflicts[entry.relPath];
@@ -609,6 +626,10 @@ export async function executeDocPlan(
       try {
         const file = existsLocally(ctx.app, entry.relPath) ? ctx.app.vault.getAbstractFileByPath(entry.relPath) : null;
         if (file) {
+          await assertRemoteAbsent(ctx.client, ctx.spaceId, ctx.rootNodeToken, state.docRecords[entry.relPath]?.documentId);
+          if (await options.isEditorDirty(entry.relPath) || !entry.localHash || await ctx.hashText(await readLocalText(ctx.app, entry.relPath)) !== entry.localHash) {
+            throw new Error("本地笔记在预览后已改变，未删除，请重新同步");
+          }
           await ctx.app.vault.trash(file, false);
         }
         delete state.docRecords[entry.relPath];
@@ -765,7 +786,7 @@ function bytesEqual(left: ArrayBuffer, right: ArrayBuffer): boolean {
 
 function attachmentName(token: string, alt: string, ext: string): string {
   const altName = alt.trim();
-  if (altName && !altName.includes("/") && /\.(png|jpe?g|gif|bmp|webp|tiff?|svg)$/i.test(altName)) return altName;
+  if (altName && !/[\\/:\x00-\x1f\[\]|]/.test(altName) && /\.(png|jpe?g|gif|bmp|webp|tiff?|svg)$/i.test(altName)) return altName;
   return `image-${token.slice(-8)}${ext}`;
 }
 
@@ -799,12 +820,10 @@ async function resolveAttachmentPath(
 }
 
 /** 按内容哈希找一份已经在本地的等价文件（下载过的附件，或上传用的原图）。 */
-function knownImagePath(ctx: DocExecutionContext, hash: string): string | undefined {
-  for (const record of Object.values(ctx.state.images)) {
-    if (record.hash === hash && record.path && existsLocally(ctx.app, record.path)) return record.path;
-  }
-  for (const record of Object.values(ctx.state.imageUploads)) {
-    if (record.hash === hash && record.path && existsLocally(ctx.app, record.path)) return record.path;
+async function knownImagePath(ctx: DocExecutionContext, hash: string): Promise<string | undefined> {
+  for (const record of [...Object.values(ctx.state.images), ...Object.values(ctx.state.imageUploads)]) {
+    if (record.hash === hash && record.path && existsLocally(ctx.app, record.path) &&
+        await ctx.hashBytes(await ctx.readBinary(record.path)) === hash) return record.path;
   }
   return undefined;
 }
@@ -821,7 +840,7 @@ async function downloadRemoteImage(
     }
     const hash = await ctx.hashBytes(downloaded.bytes);
     // 同一份内容（本地已经上传过或之前下载过）直接复用已有文件，别再存一份副本
-    const known = knownImagePath(ctx, hash);
+    const known = await knownImagePath(ctx, hash);
     if (known) {
       ctx.state.images[options.token] = { path: known, token: options.token, hash, at: Date.now() };
       ctx.logger.debug(`远端图片 ${options.token} 与本地已有文件内容一致，复用 ${known}`);
@@ -884,7 +903,7 @@ async function prepareRemoteImages(
     let localPath = pathByToken.get(token);
     if (!localPath) {
       const known = ctx.state.images[token];
-      if (known && existsLocally(ctx.app, known.path)) {
+      if (known?.hash && existsLocally(ctx.app, known.path) && await ctx.hashBytes(await ctx.readBinary(known.path)) === known.hash) {
         localPath = known.path;
       } else {
         localPath = await downloadRemoteImage(ctx, { token, alt: ref.alt, url: ref.url, warnings: options.warnings });

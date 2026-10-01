@@ -192,6 +192,15 @@ export async function buildPlan(input: PlannerInput): Promise<SyncPlan> {
     );
   }
 
+  // Bind every action to the local content actually inspected by this preview.
+  for (const entry of items) {
+    const note = local.get(entry.relPath);
+    if (!note || entry.action === "skip") continue;
+    entry.localSize = note.size;
+    entry.localMtime = note.mtime;
+    entry.localHash = await input.hashLocal(entry.relPath);
+  }
+
   return {
     items,
     counts: summarize(items),

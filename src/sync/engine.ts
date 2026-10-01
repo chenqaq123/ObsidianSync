@@ -1,5 +1,5 @@
+import { assertPlanCurrent, deferDeletes, filterPlan, isEditorDirty, planFingerprint, prepareTarget, validateSettings, validateLocalPaths } from "./guards";
 import type { App } from "obsidian";
-import { TFile } from "obsidian";
 import type { AuthManager } from "../feishu/auth";
 import { FeishuClient } from "../feishu/client";
 import { batchQueryMetas, downloadFile } from "../feishu/files";
@@ -10,8 +10,8 @@ import type { ReportEntry } from "./executor";
 import { executePlan } from "./executor";
 import { sha256Hex } from "./hash";
 import { buildPlan } from "./planner";
-import { PathFilter, readLocalBytes, scanLocalNotes } from "./scanner";
-import type { LocalNote, PlanItem, PluginSettings, RemoteNote, SyncPlan } from "./types";
+import { PathFilter, assertSafeVaultPath, readLocalBytes, scanLocalNotes } from "./scanner";
+import type { LocalNote, PluginSettings, RemoteNote, SyncPlan } from "./types";
 import { joinPath } from "./types";
 
 export type SyncMode = "both" | "pull" | "push";
@@ -28,6 +28,8 @@ export interface EngineDeps {
 export interface RunOptions {
   mode: SyncMode;
   dryRun?: boolean;
+  /** 定时同步只提示删除，手动预览确认后才执行。 */
+  allowDeletes?: boolean;
   preApprovedPlan?: SyncPlan;
   /** 强制重推：忽略本地/远端基线，把本地有内容的笔记再发一遍（改了上行规则后刷新历史文档用） */
   forcePush?: boolean;
@@ -84,6 +86,7 @@ export class SyncEngine {
 
   private async runInternal(options: RunOptions): Promise<RunResult> {
     const settings = this.deps.getSettings();
+    validateSettings(settings);
     const spaceId = parseTokenFromInput(settings.spaceId);
     // 留空表示以知识空间顶层为同步根：vault 的一级目录会成为知识库的一级页面
     const rootNodeToken = parseTokenFromInput(settings.rootNodeToken) || undefined;
@@ -93,17 +96,9 @@ export class SyncEngine {
     const logger = this.deps.logger;
     const filter = new PathFilter(settings.excludePatterns);
 
-    const previousTarget = settings.state.target;
-    if (!previousTarget || previousTarget.spaceId !== spaceId || previousTarget.rootNodeToken !== (rootNodeToken ?? "")) {
-      if (previousTarget) {
-        logger.warn(
-          `同步目标已变更（${previousTarget.spaceId}/${previousTarget.rootNodeToken || "顶层"} → ${spaceId}/${rootNodeToken ?? "顶层"}），已清空映射表，本轮按"首次对接"重新判定，不会直接覆盖本地`,
-        );
-        settings.state.records = {};
-        settings.state.folders = {};
-        settings.state.conflicts = {};
-      }
-      settings.state.target = { spaceId, rootNodeToken: rootNodeToken ?? "" };
+    if (options.preApprovedPlan) assertPlanCurrent(options.preApprovedPlan, settings);
+    if (prepareTarget(settings, spaceId, rootNodeToken ?? "", "md")) {
+      logger.warn("同步目标或模式已变更，已清空旧映射，本轮按首次对接判定");
     }
 
     try {
@@ -124,12 +119,13 @@ export class SyncEngine {
               logger.info(`识别到已有的知识库顶层页面「${title}」，复用它存放 vault 根目录下的笔记`);
             }
           } catch (error) {
-            logger.warn(`查找知识库顶层页面失败，根目录下的笔记可能被识别成新文件：${String(error)}`);
+            throw new Error(`读取知识库顶层页面失败，已停止同步以避免重复创建：${String(error)}`);
           }
         }
 
         options.onProgress?.("扫描本地笔记…");
         const local: Map<string, LocalNote> = scanLocalNotes(this.deps.app, filter);
+      validateLocalPaths(local.keys(), settings);
 
         options.onProgress?.("读取飞书知识库节点树…");
         const tree = await walkWikiTree(client, spaceId, rootNodeToken, {
@@ -147,25 +143,20 @@ export class SyncEngine {
           const raw = joinPath(entry.relDir, entry.title);
           const relPath = settings.folderMode === "flat" ? raw.split(settings.flatSeparator).join("/") : raw;
           if (filter.isExcluded(relPath)) continue;
+          assertSafeVaultPath(relPath);
 
           if (relPath.split("/").some((segment) => segment === ".." || segment === "." || segment === "")) {
             logger.warn(`远端标题包含非法路径片段，已跳过：${raw}`);
-            continue;
-          }
-          if (settings.folderMode === "flat" && entry.title.includes(settings.flatSeparator)) {
-            logger.warn(`远端标题里含有扁平分隔符 "${settings.flatSeparator}"，无法还原路径，已跳过：${entry.title}`);
             continue;
           }
           // macOS / Windows 的大小写不敏感与 NFC/NFD 差异会让两个不同标题落到同一个物理文件上
           const normalized = relPath.normalize("NFC").toLowerCase();
           const clash = seenPaths.get(normalized);
           if (clash === relPath) {
-            logger.warn(`远端存在多个同名节点，只处理其中一个：${relPath}（可能是覆盖未生效留下的重复文件，建议在知识库里清理）`);
-            continue;
+            throw new Error(`远端存在多个同名节点，已停止同步，请先在知识库中处理：${relPath}`);
           }
           if (clash && clash !== relPath) {
-            logger.warn(`远端存在仅大小写或 Unicode 形式不同的同名文件，已跳过其中一个：${relPath}（与 ${clash} 冲突）`);
-            continue;
+            throw new Error(`远端路径存在大小写或 Unicode 歧义，已停止同步：${relPath} / ${clash}`);
           }
           seenPaths.set(normalized, relPath);
           remote.set(relPath, { relPath, entry });
@@ -219,6 +210,8 @@ export class SyncEngine {
         plan = filterPlan(plan, options.mode);
       }
 
+      plan = deferDeletes(plan, options.allowDeletes);
+      plan.settingsFingerprint = planFingerprint(settings);
       if (options.dryRun) {
         return { plan, report: [], executed: false };
       }
@@ -235,6 +228,7 @@ export class SyncEngine {
         }
       }
 
+      assertPlanCurrent(plan, settings);
       try {
         const report = await executePlan(
           planForRun,
@@ -250,7 +244,7 @@ export class SyncEngine {
           {
             allowPush,
             allowPull,
-            isEditorDirty: (relPath) => this.isEditorDirty(relPath),
+            isEditorDirty: (relPath) => isEditorDirty(this.deps.app, relPath),
             onProgress: (message, done, total) => options.onProgress?.(`${message}（${done}/${total}）`),
           },
         );
@@ -265,29 +259,4 @@ export class SyncEngine {
     }
   }
 
-  private async isEditorDirty(relPath: string): Promise<boolean> {
-    for (const leaf of this.deps.app.workspace.getLeavesOfType("markdown")) {
-      const view = leaf.view as unknown as { file?: { path: string }; editor?: { getValue(): string } };
-      if (view?.file?.path !== relPath || !view.editor) continue;
-      const value = view.editor.getValue();
-      const file = this.deps.app.vault.getAbstractFileByPath(relPath);
-      if (file instanceof TFile) {
-        const disk = await this.deps.app.vault.cachedRead(file);
-        return value !== disk;
-      }
-      return value.length > 0;
-    }
-    return false;
-  }
-}
-
-function filterPlan(plan: SyncPlan, mode: SyncMode): SyncPlan {
-  if (mode === "both") return plan;
-  const items: PlanItem[] = plan.items.filter((entry) => {
-    if (mode === "pull") return entry.action !== "push" && entry.action !== "create-remote" && entry.action !== "delete-remote";
-    return entry.action !== "pull" && entry.action !== "create-local" && entry.action !== "delete-local";
-  });
-  const counts: Record<string, number> = {};
-  for (const entry of items) counts[entry.action] = (counts[entry.action] ?? 0) + 1;
-  return { ...plan, items, counts };
 }

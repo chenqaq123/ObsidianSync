@@ -3,6 +3,7 @@ import { Modal, Setting } from "obsidian";
 
 export class AuthCodeModal extends Modal {
   private value = "";
+  private submitted = false;
 
   constructor(
     app: App,
@@ -36,7 +37,6 @@ export class AuthCodeModal extends Modal {
     new Setting(contentEl)
       .addButton((button) =>
         button.setButtonText("取消").onClick(() => {
-          this.onCancel();
           this.close();
         }),
       )
@@ -47,6 +47,8 @@ export class AuthCodeModal extends Modal {
           .onClick(async () => {
             const raw = this.value.trim();
             if (!raw) return;
+            if (this.submitted) return;
+            this.submitted = true;
             const code = extractCode(raw);
             await this.onSubmit(code);
             this.close();
@@ -55,6 +57,7 @@ export class AuthCodeModal extends Modal {
   }
 
   onClose(): void {
+    if (!this.submitted) this.onCancel();
     this.contentEl.empty();
   }
 }

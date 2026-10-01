@@ -130,6 +130,8 @@ export async function uploadMarkdownToWiki(
     if (error instanceof FeishuError && error.authRelated) throw error;
     // 覆盖已有文件时不能换位置，兜底只会产生重复文件
     if (options.fileToken) throw error;
+    // Only an explicit parameter rejection proves that the first upload did not commit.
+    if (!(error instanceof FeishuError) || ![200, 400].includes(error.status) || ![1061002, 1061006].includes(error.code)) throw error;
     onFallback?.(error instanceof Error ? error.message : String(error));
     return driveThenMove();
   }

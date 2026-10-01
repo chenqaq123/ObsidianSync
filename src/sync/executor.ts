@@ -1,10 +1,11 @@
+import { assertRemoteAbsent } from "./guards";
 import type { App } from "obsidian";
 import { TFile } from "obsidian";
 import type { FeishuClient } from "../feishu/client";
 import { batchQueryMetas, deleteDriveFile, downloadFile, uploadMarkdownToWiki } from "../feishu/files";
 import { createContainerNode, getNodeByToken, listNodes } from "../feishu/wiki";
 import type { Logger } from "../log";
-import { ensureFolder } from "../log";
+import { describeError, ensureFolder } from "../log";
 import { sha256Hex } from "./hash";
 import { localStat, readLocalBytes, writeLocalBytes } from "./scanner";
 import type { FileRecord, PlanItem, PluginSettings, SyncAction, SyncPlan, SyncState } from "./types";
@@ -34,14 +35,6 @@ export interface ExecutionOptions {
   allowPull: boolean;
   isEditorDirty: (relPath: string) => Promise<boolean>;
   onProgress?: (message: string, done: number, total: number) => void;
-}
-
-function describeError(error: unknown): string {
-  if (error instanceof Error) {
-    const withDescribe = error as Error & { describe?: () => string };
-    return typeof withDescribe.describe === "function" ? withDescribe.describe() : error.message;
-  }
-  return String(error);
 }
 
 function two(value: number): string {
@@ -83,7 +76,7 @@ export async function executePlan(plan: SyncPlan, ctx: ExecutionContext, options
       return rootContainerToken;
     }
     const title = settings.rootPageTitle.trim() || ctx.app.vault.getName();
-    const topLevel = await listNodes(ctx.client, ctx.spaceId).catch(() => []);
+    const topLevel = await listNodes(ctx.client, ctx.spaceId);
     const found = topLevel.find((node) => node.title === title && node.obj_type !== "file");
     if (found?.node_token) {
       state.folders[""] = { nodeToken: found.node_token };
@@ -159,6 +152,17 @@ export async function executePlan(plan: SyncPlan, ctx: ExecutionContext, options
         try {
           const statBefore = localStat(ctx.app, entry.relPath);
           const bytes = await readLocalBytes(ctx.app, entry.relPath);
+          if (await options.isEditorDirty(entry.relPath) ||
+              (entry.localHash !== undefined && await sha256Hex(bytes) !== entry.localHash)) {
+            throw new Error("预览后本地正文已改变，请保存后重新预览");
+          }
+          if (entry.action === "push") {
+            const previous = state.records[entry.relPath];
+            const token = entry.fileToken ?? previous?.fileToken;
+            if (!token || await sha256Hex(await downloadFile(ctx.client, token)) !== (entry.remoteHash ?? previous?.baseHash)) {
+              throw new Error("预览后飞书正文已改变，已停止覆盖，请重新同步");
+            }
+          }
           const parentNode = await resolveFolderNode(entry.parentDir, true);
           const record = state.records[entry.relPath];
           const previousToken = entry.action === "push" ? record?.fileToken : undefined;
@@ -291,6 +295,11 @@ export async function executePlan(plan: SyncPlan, ctx: ExecutionContext, options
             }
           }
 
+          const presentNow = existsLocally(ctx.app, entry.relPath);
+          if (presentNow !== present || (presentNow && (await options.isEditorDirty(entry.relPath) ||
+              (entry.localHash !== undefined && await hashLocalFile(ctx.app, entry.relPath) !== entry.localHash)))) {
+            throw new Error("下载期间本地笔记已改变，未覆盖，请重新同步");
+          }
           await writeLocalBytes(ctx.app, entry.relPath, bytes);
           const hash = await sha256Hex(bytes);
           const stat = localStat(ctx.app, entry.relPath);
@@ -326,6 +335,11 @@ export async function executePlan(plan: SyncPlan, ctx: ExecutionContext, options
         const statAfter = localStat(ctx.app, entry.relPath);
         const stable = statAfter.size === statBefore.size && statAfter.mtime === statBefore.mtime;
         const existing = state.records[entry.relPath];
+        const fileToken = entry.fileToken ?? existing?.fileToken;
+        if (!fileToken || await options.isEditorDirty(entry.relPath) || hash !== entry.localHash ||
+            await sha256Hex(await downloadFile(ctx.client, fileToken)) !== entry.remoteHash) {
+          throw new Error("预览后内容已改变，未更新映射，请重新同步");
+        }
         state.records[entry.relPath] = {
           fileToken: entry.fileToken ?? existing?.fileToken ?? "",
           nodeToken: entry.nodeToken ?? existing?.nodeToken,
@@ -417,6 +431,16 @@ export async function executePlan(plan: SyncPlan, ctx: ExecutionContext, options
         continue;
       }
       try {
+        if (existsLocally(ctx.app, entry.relPath) || await options.isEditorDirty(entry.relPath)) {
+          throw new Error("本地笔记已恢复或正在编辑，未删除远端，请重新预览");
+        }
+        const remoteHashNow = await sha256Hex(await downloadFile(ctx.client, fileToken));
+        if (!record || remoteHashNow !== record.baseHash) {
+          throw new Error("飞书内容在预览后已改变，未删除，请重新同步");
+        }
+        if (existsLocally(ctx.app, entry.relPath) || await options.isEditorDirty(entry.relPath)) {
+          throw new Error("检查期间本地笔记已恢复，未删除远端");
+        }
         await deleteDriveFile(ctx.client, fileToken, "file");
         delete state.records[entry.relPath];
         delete state.conflicts[entry.relPath];
@@ -442,6 +466,10 @@ export async function executePlan(plan: SyncPlan, ctx: ExecutionContext, options
       try {
         const file = existsLocally(ctx.app, entry.relPath) ? ctx.app.vault.getAbstractFileByPath(entry.relPath) : null;
         if (file) {
+          await assertRemoteAbsent(ctx.client, ctx.spaceId, ctx.rootNodeToken, state.records[entry.relPath]?.fileToken);
+          if (await options.isEditorDirty(entry.relPath) || !entry.localHash || await hashLocalFile(ctx.app, entry.relPath) !== entry.localHash) {
+            throw new Error("本地笔记在预览后已改变，未删除，请重新同步");
+          }
           await ctx.app.vault.trash(file, false);
         }
         delete state.records[entry.relPath];
