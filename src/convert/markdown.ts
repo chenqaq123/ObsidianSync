@@ -1,5 +1,5 @@
 /** Small, lossless scanner: only paired math delimiters outside code are transformed. */
-export interface MathSpan {
+interface MathSpan {
   start: number;
   end: number;
   body: string;

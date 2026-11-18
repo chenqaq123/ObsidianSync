@@ -1,9 +1,8 @@
 import type { App } from "obsidian";
 import { TFile } from "obsidian";
 import type { LocalNote } from "./types";
-import { CONFLICT_DIR } from "./types";
 
-export const ALWAYS_EXCLUDED = [".obsidian/**", ".trash/**", `${CONFLICT_DIR}/**`, "**/.DS_Store"];
+const ALWAYS_EXCLUDED = [".obsidian/**", ".trash/**", "**/.DS_Store"];
 
 export function assertSafeVaultPath(relPath: string): void {
   if (!relPath || /[\\\x00-\x1f:]/.test(relPath) || relPath.split("/").some(part => !part || part === "." || part === "..")) {

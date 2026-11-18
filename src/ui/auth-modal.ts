@@ -62,7 +62,7 @@ export class AuthCodeModal extends Modal {
   }
 }
 
-export function extractCode(input: string): string {
+function extractCode(input: string): string {
   const value = input.trim();
   if (!/^https?:\/\//i.test(value)) return value;
   try {

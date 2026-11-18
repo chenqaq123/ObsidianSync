@@ -1,4 +1,3 @@
-import { assertRemoteAbsent } from "./guards";
 import type { App } from "obsidian";
 import { TFile } from "obsidian";
 import type { LocalImageUpload, RemoteImageRef, ResolvedImage, RuleContext, RulesFile } from "../convert/rules";
@@ -15,16 +14,20 @@ import {
   uploadDocImage,
 } from "../feishu/docImages";
 import { deleteDriveFile } from "../feishu/files";
+import { getNodeByToken, moveDocToWiki } from "../feishu/wiki";
 import type { FeishuClient } from "../feishu/client";
-import { createContainerNode, getNodeByToken, listNodes, moveDocToWiki } from "../feishu/wiki";
 import type { Logger } from "../log";
-import { describeError, ensureFolder } from "../log";
+import { describeError } from "../log";
+import { assertRemoteAbsent } from "./guards";
 import type { DocPlanCache } from "./docPlanner";
 import { documentTitleFor, uniqueDocumentTitle } from "./docPlanner";
+import type { FolderResolver } from "./folders";
+import { createFolderResolver } from "./folders";
+import { existsLocally } from "./plan-shared";
+import { mapConcurrent } from "./concurrency";
 import type { ReportEntry } from "./executor";
 import { localStat, writeLocalBytes } from "./scanner";
 import type { PluginSettings, SyncPlan, SyncState } from "./types";
-import { CONFLICT_DIR, basenameOf, dirnameOf } from "./types";
 
 export interface DocExecutionContext {
   app: App;
@@ -40,7 +43,7 @@ export interface DocExecutionContext {
   /** 已经被容器占用的标题：笔记标题撞名时加后缀 */
   containerTitles: Set<string>;
   hashText: (text: string) => Promise<string>;
-  /** 远端形态（图片 URL 归一化后）的哈希，必须与计划期用同一套口径 */
+  /** 远端形态（图片 URL 归一化后）的哈希，必须与计划期同一口径 */
   hashFetched: (text: string) => Promise<string>;
   hashBytes: (bytes: ArrayBuffer) => Promise<string>;
   /** 上行：把 vault 内图片引用解析成真实文件 */
@@ -48,25 +51,14 @@ export interface DocExecutionContext {
   readBinary: (vaultPath: string) => Promise<ArrayBuffer>;
 }
 
-export interface DocExecutionOptions {
+interface DocExecutionOptions {
   allowPush: boolean;
   allowPull: boolean;
   isEditorDirty: (relPath: string) => Promise<boolean>;
   onProgress?: (message: string, done: number, total: number) => void;
 }
 
-function two(value: number): string {
-  return String(value).padStart(2, "0");
-}
-
-function conflictCopyRelPath(relPath: string): string {
-  const now = new Date();
-  const stamp = `${now.getFullYear()}${two(now.getMonth() + 1)}${two(now.getDate())}-${two(now.getHours())}${two(now.getMinutes())}${two(now.getSeconds())}-${String(now.getMilliseconds()).padStart(3, "0")}`;
-  const base = relPath.replace(/\.md$/i, "");
-  return `${CONFLICT_DIR}/${base}.${stamp}.md`;
-}
-
-export function encodeText(text: string): ArrayBuffer {
+function encodeText(text: string): ArrayBuffer {
   return new TextEncoder().encode(text).buffer as ArrayBuffer;
 }
 
@@ -74,10 +66,6 @@ export async function readLocalText(app: App, relPath: string): Promise<string> 
   const file = app.vault.getAbstractFileByPath(relPath);
   if (!(file instanceof TFile)) throw new Error(`找不到本地文件：${relPath}`);
   return app.vault.read(file);
-}
-
-function existsLocally(app: App, relPath: string): boolean {
-  return app.vault.getAbstractFileByPath(relPath) instanceof TFile;
 }
 
 export async function executeDocPlan(
@@ -88,54 +76,18 @@ export async function executeDocPlan(
   const reports: ReportEntry[] = [];
   const { state, settings } = ctx;
 
-  const folderNodes = new Map<string, string>();
-  let rootContainerToken: string | undefined;
+  const folders: FolderResolver = createFolderResolver({
+    app: ctx.app,
+    client: ctx.client,
+    state,
+    settings,
+    spaceId: ctx.spaceId,
+    rootNodeToken: ctx.rootNodeToken,
+    logger: ctx.logger,
+  });
 
-  /** 笔记必须挂在某个页面节点下；未指定同步根节点时，在空间顶层按需建一个页面存放 vault 根目录下的笔记。 */
-  const ensureRootContainer = async (): Promise<string> => {
-    if (ctx.rootNodeToken) return ctx.rootNodeToken;
-    if (rootContainerToken) return rootContainerToken;
-    const cached = state.folders[""];
-    if (cached?.nodeToken) {
-      rootContainerToken = cached.nodeToken;
-      return rootContainerToken;
-    }
-    const title = settings.rootPageTitle.trim() || ctx.app.vault.getName();
-    const topLevel = await listNodes(ctx.client, ctx.spaceId);
-    const found = topLevel.find((node) => node.title === title && node.obj_type !== "file");
-    if (found?.node_token) {
-      state.folders[""] = { nodeToken: found.node_token };
-      rootContainerToken = found.node_token;
-      ctx.logger.info(`复用知识库顶层页面「${title}」存放 vault 根目录下的笔记`);
-      return rootContainerToken;
-    }
-    const node = await createContainerNode(ctx.client, ctx.spaceId, undefined, title);
-    state.folders[""] = { nodeToken: node.node_token };
-    rootContainerToken = node.node_token;
-    ctx.logger.info(`在知识库顶层创建页面「${title}」存放 vault 根目录下的笔记`);
-    return rootContainerToken;
-  };
-
-  const resolveFolderNode = async (relDir: string, needNoteParent: boolean): Promise<string | undefined> => {
-    // needNoteParent=false 只用于建目录节点：未指定根节点时目录直接挂空间顶层
-    if (settings.folderMode === "flat" || relDir === "") {
-      return needNoteParent ? ensureRootContainer() : ctx.rootNodeToken;
-    }
-    const cached = folderNodes.get(relDir);
-    if (cached) return cached;
-    const existing = state.folders[relDir];
-    if (existing?.nodeToken) {
-      folderNodes.set(relDir, existing.nodeToken);
-      return existing.nodeToken;
-    }
-    const parentDir = dirnameOf(relDir);
-    const parentNode = await resolveFolderNode(parentDir, false);
-    const node = await createContainerNode(ctx.client, ctx.spaceId, parentNode, basenameOf(relDir));
-    state.folders[relDir] = { nodeToken: node.node_token, parentNodeToken: parentNode };
-    folderNodes.set(relDir, node.node_token);
-    ctx.logger.info(`创建知识库目录节点 ${relDir} -> ${node.node_token}`);
-    return node.node_token;
-  };
+  // 文档要挂到目录节点下；未指定根节点时先建/认根容器
+  const resolveFolderNode = (relDir: string) => folders.resolveFolderNode(relDir, true);
 
   const fetchFresh = async (documentId: string): Promise<string> => {
     const fetched = await fetchDocumentMarkdown(ctx.client, documentId);
@@ -148,14 +100,6 @@ export async function executeDocPlan(
     const cached = ctx.cache.fetched.get(documentId);
     if (cached !== undefined) return cached;
     return fetchFresh(documentId);
-  };
-
-  const writeConflictCopy = async (relPath: string, remoteText: string, localHash: string, remoteHash: string): Promise<string> => {
-    const copyPath = conflictCopyRelPath(relPath);
-    await ensureFolder(ctx.app.vault.adapter, dirnameOf(copyPath));
-    await ctx.app.vault.adapter.write(copyPath, remoteText);
-    state.conflicts[relPath] = { remoteHash, localHash, copyPath, at: Date.now() };
-    return copyPath;
   };
 
   const pulls = plan.items.filter((entry) => entry.action === "pull" || entry.action === "create-local");
@@ -194,7 +138,8 @@ export async function executeDocPlan(
             throw new Error("预览后本地正文已改变，请重新预览");
           }
           const existingDocumentId = entry.action === "push" ? (entry.documentId ?? record?.documentId) : undefined;
-          if (existingDocumentId) {
+          if (existingDocumentId && !entry.forceOverwrite) {
+            // 覆盖前仍重新读取远端，防止预览后他人修改；缓存只用于拉取和映射，不用于写前安全校验。
             const remoteNow = await fetchFresh(existingDocumentId);
             if (await ctx.hashFetched(remoteNow) !== (entry.remoteHash ?? record?.baseRemoteHash)) {
               throw new Error("预览后飞书正文已改变，已停止覆盖，请重新同步处理远端改动");
@@ -213,7 +158,7 @@ export async function executeDocPlan(
             warnings: [],
           };
           const sent = applyRules("toFeishu", localText, ruleContext, ctx.rules);
-          const parentNode = await resolveFolderNode(entry.parentDir, true);
+          const parentNode = await resolveFolderNode(entry.parentDir);
 
           let documentId: string;
           let newBlocks: DocNewBlock[] = [];
@@ -224,12 +169,12 @@ export async function executeDocPlan(
             newBlocks = updated.newBlocks;
             revisionId = updated.revisionId;
           } else {
+            // docs_ai 建出来的是云空间文档，要先建再 move 进知识库
             const created = await createDocumentFromMarkdown(ctx.client, {
               title: decided.title,
               markdown: sent,
               onProgress: reportProgress,
             });
-            // 先建文档再挂到目录节点下：docs_ai 建出来的是云空间文档，要 move 进知识库
             await moveDocToWiki(ctx.client, ctx.spaceId, parentNode, created.documentId, "docx");
             documentId = created.documentId;
             newBlocks = created.newBlocks;
@@ -335,27 +280,20 @@ export async function executeDocPlan(
           const remoteHash = await ctx.hashFetched(fetched);
           for (const warning of imageWarnings) ctx.logger.warn(`图片：${entry.relPath} ${warning}`);
 
-          // 计划生成到写盘之间用户可能已经保存了新改动，写盘前必须复核
+          // 计划生成到写盘之间用户可能已保存新改动，写盘前必须复核
           if (present && (entry.localSize !== undefined || entry.localMtime !== undefined)) {
             const before = localStat(ctx.app, entry.relPath);
             const movedSincePlan = before.size !== entry.localSize || before.mtime !== entry.localMtime;
             if (movedSincePlan) {
               const currentText = await readLocalText(ctx.app, entry.relPath);
               if (currentText !== pulled) {
-                const copyPath = await writeConflictCopy(
-                  entry.relPath,
-                  fetched,
-                  await ctx.hashText(currentText),
-                  remoteHash,
-                );
                 reports.push({
                   relPath: entry.relPath,
                   action: "conflict",
                   ok: true,
-                  message: "计划生成后本地又有新改动，已改为保留双方，本地与远端都未改动",
-                  copyPath,
+                  message: "计划生成后本地又有新改动，已转为等待手动合并，本地与远端都未改动",
                 });
-                ctx.logger.warn(`拉取前发现本地已改动，转为冲突：${entry.relPath}`);
+                ctx.logger.warn(`拉取前发现本地已改动，转为手动合并：${entry.relPath}`);
                 tick(`冲突 ${entry.relPath}`);
                 return;
               }
@@ -390,7 +328,7 @@ export async function executeDocPlan(
               (entry.localHash !== undefined && await ctx.hashText(await readLocalText(ctx.app, entry.relPath)) !== entry.localHash)))) {
             throw new Error("下载期间本地笔记已改变，未覆盖，请重新同步");
           }
-          // 纯排版差异保留本地布局，仅修复 Obsidian 必需的公式空白与转义。
+          // 纯排版差异保留本地布局，仅修复 Obsidian 必需的公式空白与转义
           if (
             present &&
             localTextBefore !== pulled &&
@@ -405,7 +343,6 @@ export async function executeDocPlan(
               ctx.rules,
             )
           ) {
-            // Keep the author's layout, but do not keep math that Obsidian cannot render.
             const localText = normalizeObsidianMath(localTextBefore, ctx.rules);
             const repaired = localText !== localTextBefore;
             if (repaired) await writeLocalBytes(ctx.app, entry.relPath, encodeText(localText));
@@ -433,18 +370,11 @@ export async function executeDocPlan(
           if (entry.action === "create-local" && present) {
             const currentText = await readLocalText(ctx.app, entry.relPath);
             if (currentText !== pulled) {
-              const copyPath = await writeConflictCopy(
-                entry.relPath,
-                fetched,
-                await ctx.hashText(currentText),
-                remoteHash,
-              );
               reports.push({
                 relPath: entry.relPath,
                 action: "conflict",
                 ok: true,
-                message: "本地在计划生成后出现了同名文件且内容不同，已保留双方",
-                copyPath,
+                message: "本地在计划生成后出现了同名文件且内容不同，等待手动合并，两边均未改动",
               });
               tick(`冲突 ${entry.relPath}`);
               return;
@@ -521,63 +451,21 @@ export async function executeDocPlan(
 
   for (const entry of conflicts) {
     steps.push(async () => {
+      // 手动合并不是同步完成：保留基线与冲突标记，下轮仍提示，直到用户明确推送或拉取。
       const record = state.docRecords[entry.relPath];
-      const documentId = entry.documentId ?? record?.documentId;
-      const previous = state.conflicts[entry.relPath];
-      if (entry.duplicateConflict && previous) {
-        reports.push({
-          relPath: entry.relPath,
-          action: "conflict",
-          ok: true,
-          message: "仍是上次未处理的冲突，未重复生成副本",
-          copyPath: previous.copyPath,
-        });
-        tick(`冲突 ${entry.relPath}`);
-        return;
-      }
-      if (!documentId) {
-        reports.push({ relPath: entry.relPath, action: "conflict", ok: false, message: "缺少远端 document_id，无法取出冲突版本" });
-        tick(`冲突 ${entry.relPath}`);
-        return;
-      }
-      try {
-        const fetched = await fetchedFor(documentId);
-        const remoteHash = await ctx.hashFetched(fetched);
-        const present = existsLocally(ctx.app, entry.relPath);
-        const localText = present ? await readLocalText(ctx.app, entry.relPath) : "";
-        const localHash = present ? await ctx.hashText(localText) : "";
-        if (previous && previous.remoteHash === remoteHash && previous.localHash === localHash) {
-          reports.push({
-            relPath: entry.relPath,
-            action: "conflict",
-            ok: true,
-            message: "仍是上次未处理的冲突，未重复生成副本",
-            copyPath: previous.copyPath,
-          });
-          tick(`冲突 ${entry.relPath}`);
-          return;
-        }
-        const copyPath = await writeConflictCopy(entry.relPath, fetched, localHash, remoteHash);
-        if (record) record.conflict = true;
-        reports.push({
-          relPath: entry.relPath,
-          action: "conflict",
-          ok: true,
-          message: "远端版本已另存为副本，本地与远端都未改动",
-          copyPath,
-        });
-        ctx.logger.warn(`冲突：${entry.relPath} -> ${copyPath}`);
-        tick(`冲突 ${entry.relPath}`);
-      } catch (error) {
-        reports.push({ relPath: entry.relPath, action: "conflict", ok: false, message: describeError(error) });
-        tick(`冲突处理失败 ${entry.relPath}`);
-      }
+      if (record) record.conflict = true;
+      reports.push({
+        relPath: entry.relPath,
+        action: "conflict",
+        ok: true,
+        message: "等待手动合并，本地与远端均未改动",
+      });
+      ctx.logger.warn(`等待手动合并：${entry.relPath}`);
+      tick(`等待手动合并 ${entry.relPath}`);
     });
   }
 
-  for (const step of steps) {
-    await step();
-  }
+  await mapConcurrent(steps, 3, (step) => step());
 
   // 删除放在上传/拉取之后：先删后建会在远端留下同名冲突
   if (options.allowPush) {
@@ -658,6 +546,7 @@ export async function executeDocPlan(
   }
 
   state.lastSyncAt = Date.now();
+  // 时间戳校验通过的文档把时间戳写回记录，下一轮走快路径
   for (const entry of plan.items) {
     const record = state.docRecords[entry.relPath];
     if (entry.action === "skip" && record && entry.remoteModifiedTime && entry.remoteHash === record.baseRemoteHash) {
@@ -709,7 +598,7 @@ async function finalizeDocumentImages(
       const cacheKey = `${hash}:${options.documentId}`;
       const cached = ctx.state.imageUploads[cacheKey];
       if (cached?.fileToken) {
-        // 复用前必须回读确认：token 可能已失效或不属于这个块，确认不了就重新上传
+        // 复用前必须回读确认 token 真的绑上了，确认不了就重新上传
         try {
           await bindDocImages(ctx.client, options.documentId, [{ blockId, fileToken: cached.fileToken }]);
           const bound = await getDocBlockToken(ctx.client, options.documentId, blockId);
@@ -731,7 +620,7 @@ async function finalizeDocumentImages(
       });
       await bindDocImages(ctx.client, options.documentId, [{ blockId, fileToken }]);
       ctx.state.imageUploads[cacheKey] = { fileToken, documentId: options.documentId, hash, path: upload.vaultPath, at: Date.now() };
-      // 上传的素材就是本地这个文件：记下 token ↔ 本地路径，之后取回同一张图不用再下载一遍
+      // 记下 token ↔ 本地路径，之后取回同一张图不用再下载
       ctx.state.images[fileToken] = { path: upload.vaultPath, token: fileToken, hash, at: Date.now() };
       result.uploaded += 1;
     } catch (error) {
@@ -839,7 +728,7 @@ async function downloadRemoteImage(
       return undefined;
     }
     const hash = await ctx.hashBytes(downloaded.bytes);
-    // 同一份内容（本地已经上传过或之前下载过）直接复用已有文件，别再存一份副本
+    // 同一份内容直接复用已有文件，别再存一份副本
     const known = await knownImagePath(ctx, hash);
     if (known) {
       ctx.state.images[options.token] = { path: known, token: options.token, hash, at: Date.now() };

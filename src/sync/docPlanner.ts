@@ -1,11 +1,13 @@
 import { assertSafeVaultPath } from "./scanner";
+import { mapConcurrent } from "./concurrency";
 import type { RulesFile } from "../convert/rules";
 import { applyRules, publishRulesFingerprint, pullRulesFingerprint, ruleEnabled, sourceFormatWarnings } from "../convert/rules";
 import type { WikiTreeEntry } from "../feishu/wiki";
 import type { LocalNote, PlanItem, SyncPlan, SyncState } from "./types";
 import { basenameOf, dirnameOf, joinPath, summarize } from "./types";
+import { conflictItem, item } from "./plan-shared";
 
-export interface DocRemoteNote {
+interface DocRemoteNote {
   relPath: string;
   documentId: string;
   nodeToken: string;
@@ -13,7 +15,7 @@ export interface DocRemoteNote {
   title: string;
 }
 
-export interface DocRemoteContainer {
+interface DocRemoteContainer {
   nodeToken: string;
   title: string;
   parentNodeToken?: string;
@@ -28,7 +30,7 @@ export interface DocRemoteIndex {
   warnings: string[];
 }
 
-export interface DocIndexOptions {
+interface DocIndexOptions {
   entries: WikiTreeEntry[];
   state: SyncState;
   folderMode: "nodes" | "flat";
@@ -84,8 +86,8 @@ function deriveRelPath(entry: WikiTreeEntry, options: DocIndexOptions, warnings:
 
 /**
  * 把 wiki 树里的 docx 节点分成容器与候选笔记。
- * 容器判定：在 state.folders 里（我们建过的目录节点），或者是树里某个节点的父节点
- * （知识库里"有子页面的页面"就是目录；状态被清空后也能靠这条认出目录，不会把目录当笔记拉下来）。
+ * 容器判定：在 state.folders 里（我们建过的），或树里某个节点的父节点（有子页面的页面就是目录；
+ * 状态被清空后也能靠这条认出目录，不会把目录当笔记拉下来）。
  */
 export function buildDocRemoteIndex(options: DocIndexOptions): DocRemoteIndex {
   const warnings: string[] = [];
@@ -120,6 +122,7 @@ export function buildDocRemoteIndex(options: DocIndexOptions): DocRemoteIndex {
   }
 
   const notes = new Map<string, DocRemoteNote>();
+  // 大小写不敏感与 NFC/NFD 差异会让两个不同标题落到同一个物理文件上
   const seenPaths = new Map<string, string>();
   for (const entry of options.entries) {
     if (entry.objType !== "docx" || (containerTokens.has(entry.nodeToken) && !knownDocumentPaths.has(entry.objToken))) continue;
@@ -127,7 +130,6 @@ export function buildDocRemoteIndex(options: DocIndexOptions): DocRemoteIndex {
     if (!relPath) continue;
     assertSafeVaultPath(relPath);
     if (options.isExcluded(relPath)) continue;
-    // macOS / Windows 的大小写不敏感与 NFC/NFD 差异会让两个不同标题落到同一个物理文件上
     const normalized = relPath.normalize("NFC").toLowerCase();
     const clash = seenPaths.get(normalized);
     if (clash === relPath) {
@@ -171,7 +173,7 @@ export function createDocPlanCache(): DocPlanCache {
   };
 }
 
-export interface DocPlannerInput {
+interface DocPlannerInput {
   state: SyncState;
   local: Map<string, LocalNote>;
   remote: DocRemoteIndex;
@@ -195,29 +197,7 @@ export interface DocPlannerInput {
   forcePush: boolean;
 }
 
-function item(relPath: string, action: PlanItem["action"], reason?: string, extra: Partial<PlanItem> = {}): PlanItem {
-  return { relPath, action, reason, parentDir: dirnameOf(relPath), ...extra };
-}
-
-function conflictItem(
-  relPath: string,
-  state: SyncState,
-  reason: string,
-  extra: Partial<PlanItem>,
-  localHash: string,
-  remoteHash: string,
-): PlanItem {
-  const previous = state.conflicts[relPath];
-  const duplicate = !!previous && previous.remoteHash === remoteHash && previous.localHash === localHash;
-  return item(relPath, "conflict", duplicate ? "与上次相同的冲突，未重复生成副本" : reason, {
-    ...extra,
-    localHash,
-    remoteHash,
-    duplicateConflict: duplicate,
-  });
-}
-
-export async function readLocalCached(input: DocPlannerInput, relPath: string): Promise<string> {
+async function readLocalCached(input: DocPlannerInput, relPath: string): Promise<string> {
   const cached = input.cache.localText.get(relPath);
   if (cached !== undefined) return cached;
   const text = await input.readLocal(relPath);
@@ -233,7 +213,7 @@ async function hashLocalCached(input: DocPlannerInput, relPath: string): Promise
   return hash;
 }
 
-export async function fetchCached(input: DocPlannerInput, documentId: string): Promise<string> {
+async function fetchCached(input: DocPlannerInput, documentId: string): Promise<string> {
   const cached = input.cache.fetched.get(documentId);
   if (cached !== undefined) return cached;
   input.cache.fetchCount += 1;
@@ -243,7 +223,7 @@ export async function fetchCached(input: DocPlannerInput, documentId: string): P
 }
 
 /**
- * 远端是否变了：先用批量元数据的时间戳快路径判断，时间戳对得上就不取回；
+ * 远端是否变了：先用批量元数据的时间戳快路径，时间戳对得上就不取回；
  * 时间戳缺失/不一致/被安全阀关掉时才取回算哈希。
  */
 async function remoteChangedState(
@@ -257,7 +237,7 @@ async function remoteChangedState(
     if (metaTime !== undefined && metaTime === record.remoteModifiedTime) return { changed: false, metaTime };
   }
   const hash = await fetchedHash(input, documentId);
-  // 取回校验过的文档：把当前时间戳带出去，执行后写回记录，下一轮才能走快路径
+  // 取回校验过的文档把当前时间戳带出去，执行后写回记录，下一轮才能走快路径
   return { changed: hash !== record.baseRemoteHash, hash, metaTime };
 }
 
@@ -270,7 +250,7 @@ async function fetchedHash(input: DocPlannerInput, documentId: string): Promise<
 }
 
 /** 取回内容过「下行规则」之后的样子——这正是 pull 会写进本地的内容。 */
-export async function pulledContent(
+async function pulledContent(
   input: DocPlannerInput,
   relPath: string,
   remoteNote: DocRemoteNote,
@@ -304,8 +284,7 @@ async function isLocalChanged(
 
 /**
  * 文档模式的四态判定。两条基线分开记：baseLocalHash 是本地笔记的哈希，baseRemoteHash 是 fetch
- * 回来那份 Markdown 的哈希（飞书会规范化格式，同一份内容发上去取回来不等于本地原文，
- * 拿本地形态当远端基线会永远判定"远端变了"，反复来回拉扯）。
+ * 回来那份 Markdown 的哈希——飞书会规范化格式，拿本地形态当远端基线会永远判定"远端变了"。
  */
 export async function buildDocPlan(input: DocPlannerInput): Promise<SyncPlan> {
   const { state, local, remote } = input;
@@ -314,8 +293,9 @@ export async function buildDocPlan(input: DocPlannerInput): Promise<SyncPlan> {
   const warnings: { relPath: string; message: string }[] = [];
   const relPaths = new Set<string>([...local.keys(), ...remote.notes.keys(), ...Object.keys(state.docRecords)]);
 
-  for (const relPath of Array.from(relPaths).sort()) {
-    if (input.isExcluded(relPath)) continue;
+  const planned = await mapConcurrent(Array.from(relPaths).sort(), 6, async (relPath): Promise<PlanItem[]> => {
+    const items: PlanItem[] = [];
+    if (input.isExcluded(relPath)) return items;
 
     const localNote = local.get(relPath);
     const remoteNote = remote.notes.get(relPath);
@@ -327,7 +307,7 @@ export async function buildDocPlan(input: DocPlannerInput): Promise<SyncPlan> {
       ? { remoteTitle: remoteNote.title, nodeToken: remoteNote.nodeToken, documentId: remoteNote.documentId }
       : {};
 
-    // 强制重推：只看本地有没有内容，忽略两边基线（改了上行规则后用来刷新历史文档）
+    // 强制重推：只看本地有没有内容，忽略两边基线
     if (input.forcePush && localNote && localNote.size > 0) {
       items.push(
         item(relPath, remoteNote ? "push" : "create-remote", "强制重推：忽略基线", {
@@ -337,7 +317,7 @@ export async function buildDocPlan(input: DocPlannerInput): Promise<SyncPlan> {
           localMtime: localNote.mtime,
         }),
       );
-      continue;
+      return items;
     }
 
     if (!record) {
@@ -352,9 +332,9 @@ export async function buildDocPlan(input: DocPlannerInput): Promise<SyncPlan> {
         if (pulled === localText) {
           items.push(item(relPath, "link", "两边内容一致，只建立映射", extra));
         } else {
-          items.push(conflictItem(relPath, state, "首次对接：同名文档两边内容不同，已保留双方", extra, localHash, hash));
+          items.push(conflictItem(relPath, state, "首次对接：同名文档两边内容不同，等待手动合并", extra, localHash, hash));
         }
-        continue;
+        return items;
       }
       if (localNote) {
         items.push(
@@ -364,17 +344,17 @@ export async function buildDocPlan(input: DocPlannerInput): Promise<SyncPlan> {
             localNote.size === 0 ? "空笔记在文档模式下也会同步（<title> 保证 content 非空）" : undefined,
           ),
         );
-        continue;
+        return items;
       }
       if (remoteNote) {
         items.push(item(relPath, "create-local", undefined, remoteFields));
       }
-      continue;
+      return items;
     }
 
     if (!localNote && !remoteNote) {
       items.push(item(relPath, "forget", "两边都已不存在，清理映射"));
-      continue;
+      return items;
     }
 
     if (!localNote) {
@@ -402,7 +382,7 @@ export async function buildDocPlan(input: DocPlannerInput): Promise<SyncPlan> {
       } else {
         items.push(item(relPath, "local-deleted", "本地已删除、远端未变（未自动删除远端）", { ...remoteFields, ...stamp }));
       }
-      continue;
+      return items;
     }
 
     if (!remoteNote) {
@@ -423,12 +403,12 @@ export async function buildDocPlan(input: DocPlannerInput): Promise<SyncPlan> {
       } else {
         items.push(item(relPath, "remote-deleted", "远端已删除、本地有修改：为避免误恢复，未自动重建"));
       }
-      continue;
+      return items;
     }
 
     const localChanged = await isLocalChanged(input, record, localNote);
     const rulesChanged = record.publishRulesFingerprint !== fingerprint;
-    // Rules upgrades must not trust second-resolution timestamps before overwriting old documents.
+    // 规则升级后不能信时间戳快路径，必须取回校验再覆盖旧文档
     const remoteState = await remoteChangedState(input, record, remoteNote.documentId, rulesChanged);
     const remoteChanged = remoteState.changed;
     const hash = remoteState.hash;
@@ -446,15 +426,15 @@ export async function buildDocPlan(input: DocPlannerInput): Promise<SyncPlan> {
       items.push(rulesChanged
         ? item(relPath, "push", "转换规则已更新：刷新飞书排版，本地正文不变", { ...extra, rulesRefresh: true })
         : item(relPath, "skip", undefined, extra));
-      continue;
+      return items;
     }
     if (localChanged && !remoteChanged) {
       items.push(item(relPath, "push", undefined, extra));
-      continue;
+      return items;
     }
     if (!localChanged && remoteChanged) {
       items.push(item(relPath, "pull", undefined, extra));
-      continue;
+      return items;
     }
     const [pulled, localText] = await Promise.all([
       pulledContent(input, relPath, remoteNote, localNote),
@@ -462,10 +442,13 @@ export async function buildDocPlan(input: DocPlannerInput): Promise<SyncPlan> {
     ]);
     if (pulled === localText) {
       items.push(item(relPath, "link", "两边内容一致，只更新基线", extra));
-      continue;
+      return items;
     }
-    items.push(conflictItem(relPath, state, "两边都改过且内容不同，已保留双方", extra, localHash, hash ?? localHash));
-  }
+    items.push(conflictItem(relPath, state, "两边都改过且内容不同，等待手动合并", extra, localHash, hash ?? localHash));
+    return items;
+  });
+  for (const group of planned) items.push(...group);
+  warnings.sort((a, b) => a.relPath.localeCompare(b.relPath));
 
   // Bind every action to the local content actually inspected by this preview.
   for (const entry of items) {

@@ -1,23 +1,308 @@
-.feishu-sync-plan-item {
-  display: flex;
-  gap: 8px;
-  align-items: baseline;
-  padding: 2px 0;
+/* 飞书同步弹窗：标准复选框列表 + 顶部批量操作，全部跟随 Obsidian 主题变量。 */
+
+.feishu-sync-modal {
+  width: min(820px, 94vw);
 }
 
-.feishu-sync-plan-item .feishu-sync-reason {
+.feishu-sync-modal .modal-content {
+  padding: 20px;
+}
+
+.feishu-sync-heading {
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
+
+.feishu-sync-heading-icon {
+  display: flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  background: var(--background-secondary);
+  color: var(--text-accent);
+}
+
+.feishu-sync-heading-icon svg {
+  width: 17px;
+  height: 17px;
+}
+
+.feishu-sync-heading-text {
+  min-width: 0;
+}
+
+.feishu-sync-title {
+  margin: 0;
+  color: var(--text-normal);
+  font-size: 17px;
+  font-weight: var(--font-semibold);
+  line-height: 1.3;
+  letter-spacing: 0.01em;
+}
+
+.feishu-sync-subtitle {
+  margin-top: 2px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  line-height: 1.4;
+}
+
+/* ── 计划概览 ───────────────────────────────────────── */
+
+.feishu-sync-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin: 12px 0;
+}
+
+.feishu-sync-chip {
+  border-radius: var(--radius-s);
+  padding: 3px 8px;
+  background: var(--background-secondary);
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  line-height: 1.4;
+}
+
+.feishu-sync-chip.is-push {
+  color: var(--text-success);
+}
+
+.feishu-sync-chip.is-pull {
+  color: var(--text-accent);
+}
+
+.feishu-sync-chip.is-conflict {
+  color: var(--text-error);
+}
+
+.feishu-sync-chip.is-delete {
+  color: var(--text-warning);
+}
+
+/* ── 选择与批量操作：不随文件列表滚动 ───────────────── */
+
+.feishu-sync-toolbar {
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  background: var(--background-secondary);
+}
+
+.feishu-sync-toolbar-line {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-height: 28px;
+}
+
+.feishu-sync-toolbar-line + .feishu-sync-toolbar-line {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.feishu-sync-selected-count {
+  min-width: 6em;
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-medium);
+}
+
+.feishu-sync-text-button {
+  padding: 2px 5px;
+  border: 0;
+  background: transparent;
+  box-shadow: none;
+  color: var(--text-accent);
+  font-size: var(--font-ui-smaller);
+  cursor: pointer;
+}
+
+.feishu-sync-text-button:hover {
+  background: var(--background-modifier-hover);
+  color: var(--text-accent-hover);
+}
+
+.feishu-sync-toolbar-label {
+  margin-right: 4px;
   color: var(--text-muted);
   font-size: var(--font-ui-smaller);
 }
 
-.feishu-sync-badge {
-  display: inline-block;
-  min-width: 4.5em;
-  text-align: center;
-  border-radius: var(--radius-s);
-  padding: 0 6px;
-  font-size: var(--font-ui-smaller);
+.feishu-sync-bulk-button {
+  min-width: 58px;
+  margin: 0;
+  padding: 4px 12px;
   border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-s);
+  background: var(--background-primary);
+  box-shadow: none;
+  color: var(--text-normal);
+  font-size: var(--font-ui-small);
+  line-height: 1.5;
+  cursor: pointer;
+}
+
+.feishu-sync-bulk-button:not(:disabled):hover {
+  border-color: var(--interactive-accent);
+  background: var(--background-modifier-hover);
+  color: var(--text-normal);
+}
+
+.feishu-sync-bulk-button:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+}
+
+.feishu-sync-bulk-button.is-active {
+  border-color: var(--interactive-accent);
+  background: var(--interactive-accent);
+  color: var(--text-on-accent);
+}
+
+.feishu-sync-bulk-button.is-active:hover {
+  border-color: var(--interactive-accent-hover);
+  background: var(--interactive-accent-hover);
+  color: var(--text-on-accent);
+}
+
+/* ── 可滚动分组列表 ─────────────────────────────────── */
+
+.feishu-sync-groups {
+  max-height: min(52vh, 560px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  padding-right: 3px;
+}
+
+.feishu-sync-section {
+  margin-bottom: 8px;
+  overflow: hidden;
+  border: 1px solid var(--background-modifier-border);
+  border-radius: var(--radius-m);
+  background: var(--background-primary);
+}
+
+.feishu-sync-group-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 38px;
+  padding: 6px 12px;
+  background: var(--background-secondary);
+}
+
+.feishu-sync-group-name {
+  display: flex;
+  flex: 1;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  color: var(--text-normal);
+  text-align: left;
+}
+
+.feishu-sync-group-title {
+  font-size: var(--font-ui-small);
+  font-weight: var(--font-medium);
+}
+
+.feishu-sync-group-count {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  font-variant-numeric: tabular-nums;
+}
+
+.feishu-sync-group-count::before {
+  content: "(";
+}
+
+.feishu-sync-group-count::after {
+  content: ")";
+}
+
+.feishu-sync-list {
+  padding: 3px 0;
+}
+
+.feishu-sync-more {
+  padding: 6px 12px;
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+}
+
+/* ── 文件行：复选框只负责选择，不改变同步动作 ───────── */
+
+.feishu-sync-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  min-height: 30px;
+  margin: 0;
+  padding: 3px 12px;
+  color: var(--text-normal);
+  cursor: pointer;
+  user-select: none;
+}
+
+.feishu-sync-row:hover {
+  background: var(--background-modifier-hover);
+}
+
+.feishu-sync-row.is-selected {
+  background: var(--background-modifier-hover);
+  box-shadow: inset 2px 0 0 var(--interactive-accent);
+}
+
+.feishu-sync-row.is-plain {
+  cursor: default;
+}
+
+.feishu-sync-row.is-static {
+  cursor: default;
+  opacity: 0.65;
+}
+
+.feishu-sync-row.is-skipped .feishu-sync-path,
+.feishu-sync-row.is-skipped .feishu-sync-badge {
+  opacity: 0.42;
+}
+
+.feishu-sync-checkbox {
+  flex: none;
+  width: 14px;
+  height: 14px;
+  margin: 0;
+  accent-color: var(--interactive-accent);
+  cursor: pointer;
+}
+
+.feishu-sync-checkbox:disabled {
+  cursor: default;
+}
+
+.feishu-sync-badge {
+  flex: none;
+  min-width: 54px;
+  padding: 1px 5px;
+  border-radius: var(--radius-s);
+  background: var(--background-secondary);
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: center;
 }
 
 .feishu-sync-badge.is-push {
@@ -36,20 +321,96 @@
   color: var(--text-warning);
 }
 
-.feishu-sync-summary {
-  margin-bottom: 12px;
-}
-
-.feishu-sync-section {
-  margin-bottom: 16px;
-}
-
-.feishu-sync-list {
-  max-height: 40vh;
-  overflow-y: auto;
-}
-
 .feishu-sync-path {
-  font-family: var(--font-monospace);
-  word-break: break-all;
+  display: flex;
+  flex: 1 1 auto;
+  min-width: 0;
+  color: var(--text-normal);
+  font-size: var(--font-ui-smaller);
+  line-height: 1.6;
+  white-space: nowrap;
+}
+
+.feishu-sync-dir {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  color: var(--text-muted);
+  text-overflow: ellipsis;
+}
+
+.feishu-sync-filename {
+  flex: 1 1 auto;
+  min-width: 4em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.feishu-sync-override {
+  flex: none;
+  min-width: 66px;
+  padding: 1px 6px;
+  border-radius: var(--radius-s);
+  background: var(--background-secondary);
+  color: var(--text-muted);
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.feishu-sync-override:empty {
+  visibility: hidden;
+}
+
+.feishu-sync-override.is-push {
+  color: var(--text-success);
+}
+
+.feishu-sync-override.is-pull {
+  color: var(--text-accent);
+}
+
+/* ── 底部：一个主按钮统一执行 ───────────────────────── */
+
+.feishu-sync-footer.setting-item {
+  margin-top: 14px;
+  padding: 14px 0 0;
+  border-top: 1px solid var(--background-modifier-border);
+}
+
+.feishu-sync-footer .setting-item-info {
+  display: none;
+}
+
+.feishu-sync-footer .setting-item-control {
+  justify-content: flex-end;
+  width: 100%;
+}
+
+/* 同步结果弹窗沿用紧凑列表。 */
+.feishu-sync-plan-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 10px;
+}
+
+.feishu-sync-reason {
+  color: var(--text-muted);
+  font-size: var(--font-ui-smaller);
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 600px) {
+  .feishu-sync-modal .modal-content {
+    padding: 14px;
+  }
+
+  .feishu-sync-badge {
+    min-width: 46px;
+  }
+
+  .feishu-sync-override {
+    min-width: 58px;
+  }
 }

@@ -348,7 +348,7 @@ var REFRESH_MARGIN_MS = 12e4;
 function oauthErrorHint(code, message) {
   const hints = {
     20010: "\u5F53\u524D\u98DE\u4E66\u8D26\u53F7\u4E0D\u5728\u8FD9\u4E2A\u5E94\u7528\u7684\u53EF\u7528\u8303\u56F4\u5185\uFF1A\u8BF7\u5230\u5F00\u53D1\u8005\u540E\u53F0\u7684\u300C\u5E94\u7528\u53D1\u5E03 \u2192 \u7248\u672C\u7BA1\u7406\u4E0E\u53D1\u5E03\u300D\u628A\u53EF\u7528\u8303\u56F4\u8BBE\u4E3A\u5168\u5458\u6216\u5305\u542B\u4F60\u81EA\u5DF1\uFF0C\u5E76\u53D1\u5E03\u7248\u672C",
-    20027: "\u8BF7\u6C42\u4E86\u5E94\u7528\u5C1A\u672A\u5F00\u901A\u7684\u6743\u9650\uFF1A\u8BF7\u5230\u5F00\u53D1\u8005\u540E\u53F0\u300C\u6743\u9650\u7BA1\u7406\u300D\u5F00\u901A drive:drive\u3001wiki:wiki\u3001docs:document.media:download\u3001offline_access\uFF0C\u5E76\u786E\u8BA4\u63D2\u4EF6\u91CC\u7684\u6388\u6743\u8303\u56F4\u4E0E\u4E4B\u4E00\u81F4",
+    20027: "\u8BF7\u6C42\u4E86\u5E94\u7528\u5C1A\u672A\u5F00\u901A\u7684\u6743\u9650\uFF1A\u8BF7\u5230\u5F00\u53D1\u8005\u540E\u53F0\u300C\u6743\u9650\u7BA1\u7406\u300D\u5F00\u901A drive:drive\u3001wiki:wiki\u3001offline_access\uFF08\u6587\u6863\u6A21\u5F0F\u53E6\u9700 docx:document\uFF09\uFF0C\u5E76\u786E\u8BA4\u63D2\u4EF6\u91CC\u7684\u6388\u6743\u8303\u56F4\u4E0E\u4E4B\u4E00\u81F4",
     20029: "\u91CD\u5B9A\u5411 URL \u4E0D\u5339\u914D\uFF1A\u8BF7\u786E\u8BA4\u5F00\u53D1\u8005\u540E\u53F0\u300C\u5B89\u5168\u8BBE\u7F6E \u2192 \u91CD\u5B9A\u5411 URL\u300D\u91CC\u767B\u8BB0\u7684\u5730\u5740\u4E0E\u63D2\u4EF6\u8BBE\u7F6E\u91CC\u7684\u5B8C\u5168\u4E00\u81F4"
   };
   const hinted = code === void 0 ? void 0 : hints[code];
@@ -686,12 +686,24 @@ var ACTION_LABELS = {
 function emptyState() {
   return { records: {}, folders: {}, conflicts: {}, docRecords: {}, images: {}, imageUploads: {} };
 }
-var CONFLICT_DIR = ".obsidian/feishu-sync/conflicts";
+var OAUTH_SCOPE_PRESETS = {
+  md: "wiki:wiki drive:drive offline_access",
+  doc: "wiki:wiki drive:drive docx:document offline_access"
+};
+var LEGACY_OAUTH_SCOPE = "drive:drive wiki:wiki docs:document.media:download docs:document.media:upload docx:document offline_access";
+function defaultScopeForMode(mode) {
+  return OAUTH_SCOPE_PRESETS[mode];
+}
+function isManagedScope(value) {
+  const trimmed = value.trim();
+  return trimmed === LEGACY_OAUTH_SCOPE || Object.values(OAUTH_SCOPE_PRESETS).includes(trimmed);
+}
+var LEGACY_CONFLICT_DIR = ".obsidian/feishu-sync/conflicts";
 var DEFAULT_SETTINGS = {
   authMode: "user",
   appId: "",
   appSecret: "",
-  oauthScope: "drive:drive wiki:wiki docs:document.media:download docs:document.media:upload docx:document offline_access",
+  oauthScope: OAUTH_SCOPE_PRESETS.md,
   redirectUri: "http://localhost:7634/callback",
   spaceId: "",
   rootNodeToken: "",
@@ -713,8 +725,8 @@ var DEFAULT_SETTINGS = {
 };
 function summarize(items) {
   const counts = {};
-  for (const item3 of items) {
-    counts[item3.action] = (counts[item3.action] ?? 0) + 1;
+  for (const item2 of items) {
+    counts[item2.action] = (counts[item2.action] ?? 0) + 1;
   }
   return counts;
 }
@@ -847,7 +859,7 @@ async function bindDocImages(client, documentId, requests) {
     `/open-apis/docx/v1/documents/${pathSegment(documentId)}/blocks/batch_update`,
     {
       query: { client_token: newClientToken() },
-      body: { requests: requests.map((item3) => ({ block_id: item3.blockId, replace_image: { token: item3.fileToken } })) }
+      body: { requests: requests.map((item2) => ({ block_id: item2.blockId, replace_image: { token: item2.fileToken } })) }
     }
   );
 }
@@ -1118,7 +1130,7 @@ function encodeFeishuMath(markdown) {
 
 // src/convert/rules.ts
 var RULES_PATH = ".obsidian/feishu-sync/rules.json";
-var RULES_VERSION = 3;
+var RULES_VERSION = 4;
 var PUBLISH_RULES_REVISION = 3;
 var IMAGE_LINK = /!\[[^\]]*\]\(([^)\s]+)(?:\s+"[^"]*")?\)/g;
 var FENCE = /^\s*(```|~~~)/;
@@ -1131,6 +1143,39 @@ function mapOutsideFences(text, transform) {
   const code = codeLineMask(lines, false);
   return lines.map((line, index) => code[index] ? line : transform(line)).join("\n");
 }
+function formatFrontmatterValue(value) {
+  if (value === null || value === void 0)
+    return "";
+  if (Array.isArray(value))
+    return `[${value.map((item2) => String(item2)).join(", ")}]`;
+  if (typeof value === "object")
+    return JSON.stringify(value);
+  return String(value);
+}
+var frontmatterQuote = {
+  id: "frontmatter-quote",
+  description: "\u4E0A\u884C\uFF1A\u628A\u7B14\u8BB0\u5C5E\u6027\uFF08YAML frontmatter\uFF09\u8F6C\u6210\u5F15\u7528\u5757\u5C55\u793A\uFF0C\u907F\u514D\u5C5E\u6027\u6587\u672C\u88AB\u5F53\u6210\u6B63\u6587\u53D1\u5230\u98DE\u4E66\u3002\u672C\u5730 frontmatter \u4E0D\u52A8\uFF0C\u4E0B\u6B21\u540C\u6B65\u4ECD\u6309\u5C5E\u6027\u89E3\u6790\uFF1B\u4ECE\u98DE\u4E66\u62C9\u56DE\u7684\u5F15\u7528\u5757\u4F1A\u4FDD\u7559\u4E3A\u6B63\u6587\uFF08\u4E0B\u884C\u4E0D\u8FD8\u539F\uFF09\u3002",
+  defaultEnabled: true,
+  apply: (input) => {
+    const match = /^---\r?\n(?:([\s\S]*?)\r?\n)?---(?:\r?\n|$)/.exec(input);
+    if (!match)
+      return input;
+    let parsed;
+    const body = match[1] ?? "";
+    try {
+      parsed = body.trim() ? (0, import_obsidian3.parseYaml)(body) : {};
+    } catch {
+      return input;
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed))
+      return input;
+    const lines = Object.entries(parsed).map(([key, value]) => `> ${key}: ${formatFrontmatterValue(value)}`);
+    const rest = input.slice(match[0].length).replace(/^\r?\n/, "");
+    return lines.length === 0 ? rest : `${lines.join("\n")}
+
+${rest}`;
+  }
+};
 var imageRefNormalize = {
   id: "image-ref-normalize",
   description: "\u4E0A\u884C\uFF1A\u628A\u6807\u51C6 Markdown \u56FE\u7247 ![alt](\u76F8\u5BF9\u8DEF\u5F84) \u6362\u6210 Obsidian \u7684 ![[\u76F8\u5BF9\u8DEF\u5F84]]\u3002\u5B9E\u6D4B\u6807\u51C6\u56FE\u7247\u5F15\u7528\u4F1A\u88AB\u98DE\u4E66\u6574\u884C\u4E22\u5F03\uFF0C![[...]] \u80FD\u539F\u6837\u4FDD\u7559\u3002http(s) \u56FE\u7247\u5730\u5740\u4E0D\u6539\u3002",
@@ -1355,12 +1400,6 @@ var dropTitleHeading = {
     return rest.join("\n");
   }
 };
-var restoreImageRef = {
-  id: "restore-image-ref",
-  description: "\u4E0B\u884C\uFF1A\u628A\u98DE\u4E66\u4FA7\u7684\u56FE\u7247\u8FD8\u539F\u6210\u6807\u51C6 Markdown \u56FE\u7247\u5F15\u7528\u3002\u7B49\u56FE\u7247\u4E0A\u4F20\u94FE\u8DEF\uFF08medias/upload_all + reference_map\uFF09\u505A\u597D\u540E\u518D\u542F\u7528\uFF0C\u73B0\u5728\u6253\u5F00\u4E5F\u662F\u7A7A\u64CD\u4F5C\u3002",
-  defaultEnabled: false,
-  apply: (input) => input
-};
 function escapeXmlAttr(value) {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&#34;");
 }
@@ -1402,7 +1441,7 @@ function rewriteLocalImageLine(line, ctx) {
 }
 var imageUpload = {
   id: "image-upload",
-  description: "\u4E0A\u884C\uFF1A\u628A vault \u5185\u7684\u672C\u5730\u56FE\u7247\uFF08![[x.png]] \u6216 ![alt](attachments/x.png)\uFF09\u6362\u6210\u5B98\u65B9\u7684\u5360\u4F4D\u6807\u8BB0\uFF0C\u5EFA/\u66F4\u65B0\u6587\u6863\u540E\u4E0A\u4F20\u7D20\u6750\u5E76\u7ED1\u5B9A\u6210\u771F\u6B63\u7684\u56FE\u7247\u5757\u3002\u9700\u8981 docs:document.media:upload \u6743\u9650\uFF1Bhttp(s) \u5916\u94FE\u4E0E vault \u91CC\u627E\u4E0D\u5230\u7684\u6587\u4EF6\u4FDD\u6301\u539F\u6837\uFF08\u4F1A\u5728\u62A5\u544A\u91CC\u5217\u51FA\uFF09\u3002",
+  description: "\u4E0A\u884C\uFF1A\u628A vault \u5185\u7684\u672C\u5730\u56FE\u7247\uFF08![[x.png]] \u6216 ![alt](attachments/x.png)\uFF09\u6362\u6210\u5B98\u65B9\u7684\u5360\u4F4D\u6807\u8BB0\uFF0C\u5EFA/\u66F4\u65B0\u6587\u6863\u540E\u4E0A\u4F20\u7D20\u6750\u5E76\u7ED1\u5B9A\u6210\u771F\u6B63\u7684\u56FE\u7247\u5757\u3002\u9700\u8981 docs:document.media:upload\uFF08\u6216 drive:drive\uFF09\u6743\u9650\uFF1Bhttp(s) \u5916\u94FE\u4E0E vault \u91CC\u627E\u4E0D\u5230\u7684\u6587\u4EF6\u4FDD\u6301\u539F\u6837\uFF08\u4F1A\u5728\u62A5\u544A\u91CC\u5217\u51FA\uFF09\u3002",
   defaultEnabled: true,
   apply: (input, ctx) => mapOutsideFences(input, (line) => rewriteLocalImageLine(line, ctx))
 };
@@ -1475,7 +1514,7 @@ var unescapeImageMarkup = {
 };
 var imageDownload = {
   id: "image-download",
-  description: "\u4E0B\u884C\uFF1A\u628A\u53D6\u56DE\u5185\u5BB9\u91CC\u7684\u98DE\u4E66\u56FE\u7247\u4E0B\u8F7D\u5230\u672C\u5730\u9644\u4EF6\u76EE\u5F55\uFF0C\u5E76\u628A\u5F15\u7528\u6539\u5199\u6210 ![[\u9644\u4EF6\u76EE\u5F55/\u6587\u4EF6\u540D]]\u3002\u9700\u8981 docs:document.media:download \u6743\u9650\uFF1B\u4E0B\u8F7D\u5931\u8D25\u65F6\u4FDD\u7559\u539F\u59CB\u5F15\u7528\u5E76\u5728\u62A5\u544A\u91CC\u8BF4\u660E\uFF0C\u4E0D\u4F1A\u8BA9\u6574\u6B21\u62C9\u53D6\u5931\u8D25\u3002",
+  description: "\u4E0B\u884C\uFF1A\u628A\u53D6\u56DE\u5185\u5BB9\u91CC\u7684\u98DE\u4E66\u56FE\u7247\u4E0B\u8F7D\u5230\u672C\u5730\u9644\u4EF6\u76EE\u5F55\uFF0C\u5E76\u628A\u5F15\u7528\u6539\u5199\u6210 ![[\u9644\u4EF6\u76EE\u5F55/\u6587\u4EF6\u540D]]\u3002\u9700\u8981 docs:document.media:download\uFF08\u6216 drive:drive\uFF09\u6743\u9650\uFF1B\u4E0B\u8F7D\u5931\u8D25\u65F6\u4FDD\u7559\u539F\u59CB\u5F15\u7528\u5E76\u5728\u62A5\u544A\u91CC\u8BF4\u660E\uFF0C\u4E0D\u4F1A\u8BA9\u6574\u6B21\u62C9\u53D6\u5931\u8D25\u3002",
   defaultEnabled: true,
   apply: (input, ctx) => {
     const downloads = ctx.imageDownloads;
@@ -1493,6 +1532,7 @@ var imageDownload = {
 };
 var BUILT_IN_RULES = {
   toFeishu: [
+    frontmatterQuote,
     sourceDiagnostics,
     imageRefNormalize,
     tabIndentToSpaces,
@@ -1505,8 +1545,9 @@ var BUILT_IN_RULES = {
     footnoteDowngrade,
     imageUpload
   ],
-  toObsidian: [unescapeImageMarkup, dropTitleHeading, restoreNativeMath, mathEscapeHash, mathTrimInlineSpaces, imageDownload, restoreImageRef]
+  toObsidian: [unescapeImageMarkup, dropTitleHeading, restoreNativeMath, mathEscapeHash, mathTrimInlineSpaces, imageDownload]
 };
+var REMOVED_RULE_IDS = /* @__PURE__ */ new Set(["restore-image-ref"]);
 function entryOf(rule) {
   return { id: rule.id, enabled: rule.defaultEnabled, description: rule.description };
 }
@@ -1523,9 +1564,11 @@ function mergeDirection(direction, raw, warnings) {
   const merged = [];
   const seen = /* @__PURE__ */ new Set();
   if (Array.isArray(raw)) {
-    for (const item3 of raw) {
-      const id = typeof item3?.id === "string" ? item3.id : "";
+    for (const item2 of raw) {
+      const id = typeof item2?.id === "string" ? item2.id : "";
       if (!id)
+        continue;
+      if (REMOVED_RULE_IDS.has(id))
         continue;
       const builtIn = byId.get(id);
       if (!builtIn) {
@@ -1535,7 +1578,7 @@ function mergeDirection(direction, raw, warnings) {
       if (seen.has(id))
         continue;
       seen.add(id);
-      const enabled = typeof item3.enabled === "boolean" ? item3.enabled : builtIn.defaultEnabled;
+      const enabled = typeof item2.enabled === "boolean" ? item2.enabled : builtIn.defaultEnabled;
       merged.push({ id, enabled, description: builtIn.description });
     }
   }
@@ -1688,11 +1731,20 @@ var FeishuWikiSyncSettingTab = class extends import_obsidian4.PluginSettingTab {
         if (next === settings.syncMode)
           return;
         settings.syncMode = next;
+        let scopeFollowed = false;
+        if (isManagedScope(settings.oauthScope) && settings.oauthScope !== defaultScopeForMode(next)) {
+          settings.oauthScope = defaultScopeForMode(next);
+          scopeFollowed = true;
+        }
         await this.host.saveSettings();
         this.host.refreshAutoSync();
-        new import_obsidian4.Notice(
-          next === "doc" ? "\u5DF2\u5207\u5230\u6587\u6863\u6A21\u5F0F\uFF1A\u4E0B\u4E00\u6B21\u540C\u6B65\u6309\u300C\u9996\u6B21\u5BF9\u63A5\u300D\u5224\u5B9A\uFF0C\u4E0D\u4F1A\u76F4\u63A5\u8986\u76D6\u672C\u5730" : "\u5DF2\u5207\u5230\u6587\u4EF6\u955C\u50CF\u6A21\u5F0F\uFF1A\u4E0B\u4E00\u6B21\u540C\u6B65\u6309\u300C\u9996\u6B21\u5BF9\u63A5\u300D\u5224\u5B9A\uFF0C\u4E0D\u4F1A\u76F4\u63A5\u8986\u76D6\u672C\u5730"
-        );
+        const base = next === "doc" ? "\u5DF2\u5207\u5230\u6587\u6863\u6A21\u5F0F\uFF1A\u4E0B\u4E00\u6B21\u540C\u6B65\u6309\u300C\u9996\u6B21\u5BF9\u63A5\u300D\u5224\u5B9A\uFF0C\u4E0D\u4F1A\u76F4\u63A5\u8986\u76D6\u672C\u5730" : "\u5DF2\u5207\u5230\u6587\u4EF6\u955C\u50CF\u6A21\u5F0F\uFF1A\u4E0B\u4E00\u6B21\u540C\u6B65\u6309\u300C\u9996\u6B21\u5BF9\u63A5\u300D\u5224\u5B9A\uFF0C\u4E0D\u4F1A\u76F4\u63A5\u8986\u76D6\u672C\u5730";
+        const hints = [];
+        if (scopeFollowed)
+          hints.push(`\u6388\u6743\u8303\u56F4\u5DF2\u81EA\u52A8\u6362\u6210\u300C${settings.oauthScope}\u300D`);
+        if (next === "doc")
+          hints.push("\u6587\u6863\u6A21\u5F0F\u9700\u8981 docx:document \u6743\u9650\uFF0C\u82E5\u540E\u53F0\u672A\u5F00\u901A\u8BF7\u5148\u5F00\u901A\u5E76\u91CD\u65B0\u6388\u6743");
+        new import_obsidian4.Notice(hints.length > 0 ? `${base}\uFF1B${hints.join("\uFF1B")}` : base, 1e4);
         this.display();
       })
     );
@@ -1749,7 +1801,7 @@ var FeishuWikiSyncSettingTab = class extends import_obsidian4.PluginSettingTab {
     new import_obsidian4.Setting(containerEl).setName("\u98DE\u4E66\u5E94\u7528\u4E0E\u6388\u6743").setHeading();
     containerEl.createEl("p", {
       cls: "setting-item-description",
-      text: "\u9700\u8981\u4E00\u4E2A\u98DE\u4E66\u4F01\u4E1A\u81EA\u5EFA\u5E94\u7528\u3002\u9ED8\u8BA4\u6388\u6743\u8303\u56F4\uFF1Adrive:drive\u3001wiki:wiki\u3001docx:document\u3001docs:document.media:download\u3001docs:document.media:upload\uFF1B\u8BE6\u89C1 README \u7684\u914D\u7F6E\u6B65\u9AA4\u3002\u7528\u300C\u7528\u6237\u6388\u6743\u300D\u65F6\u8FD8\u8981\u5728\u5F00\u653E\u5E73\u53F0\u767B\u8BB0\u4E0B\u65B9\u91CD\u5B9A\u5411\u5730\u5740\uFF0C\u5E76\u5305\u542B offline_access \u4EE5\u81EA\u52A8\u7EED\u671F\u3002"
+      text: "\u9700\u8981\u4E00\u4E2A\u98DE\u4E66\u4F01\u4E1A\u81EA\u5EFA\u5E94\u7528\u3002\u9ED8\u8BA4\u6388\u6743\u8303\u56F4\u6309\u540C\u6B65\u6A21\u5F0F\u53D6\u6700\u5C0F\u96C6\u5408\uFF1A\u6587\u4EF6\u955C\u50CF = wiki:wiki\u3001drive:drive\u3001offline_access\uFF1B\u6587\u6863\u6A21\u5F0F = \u53E6\u52A0 docx:document\u3002\u56FE\u7247\u7D20\u6750\u63A5\u53E3\u63A5\u53D7 drive:drive \u8986\u76D6\uFF0C\u65E0\u9700\u5355\u72EC\u7533\u8BF7 docs:document.media:*\u3002\u8BE6\u89C1 README \u7684\u914D\u7F6E\u6B65\u9AA4\u3002\u7528\u300C\u7528\u6237\u6388\u6743\u300D\u65F6\u8FD8\u8981\u5728\u5F00\u653E\u5E73\u53F0\u767B\u8BB0\u4E0B\u65B9\u91CD\u5B9A\u5411\u5730\u5740\uFF1Boffline_access \u7528\u4E8E\u6388\u6743\u81EA\u52A8\u7EED\u671F\u3002"
     });
     new import_obsidian4.Setting(containerEl).setName("\u8EAB\u4EFD\u6A21\u5F0F").setDesc("\u7528\u6237\u6388\u6743\uFF1A\u4EE5\u4F60\u672C\u4EBA\u7684\u8EAB\u4EFD\u8BBF\u95EE\u4E2A\u4EBA\u77E5\u8BC6\u5E93\uFF08\u63A8\u8350\uFF09\u3002\u5E94\u7528\u8EAB\u4EFD\uFF1A\u9700\u8981\u628A\u5E94\u7528\u6DFB\u52A0\u4E3A\u77E5\u8BC6\u5E93\u6210\u5458\u3002").addDropdown(
       (dropdown) => dropdown.addOption("user", "\u7528\u6237\u6388\u6743\uFF08user_access_token\uFF09").addOption("tenant", "\u5E94\u7528\u8EAB\u4EFD\uFF08tenant_access_token\uFF09").setValue(settings.authMode).onChange(async (value) => {
@@ -1782,15 +1834,17 @@ var FeishuWikiSyncSettingTab = class extends import_obsidian4.PluginSettingTab {
           await this.host.saveSettings();
         })
       );
-      new import_obsidian4.Setting(containerEl).setName("\u6388\u6743\u8303\u56F4").setDesc("\u7A7A\u683C\u5206\u9694\uFF0C\u5FC5\u987B\u90FD\u662F\u5E94\u7528\u5DF2\u5F00\u901A\u7684\u6743\u9650\uFF1Boffline_access \u7528\u4E8E\u81EA\u52A8\u7EED\u671F").addText(
+      new import_obsidian4.Setting(containerEl).setName("\u6388\u6743\u8303\u56F4").setDesc("\u7A7A\u683C\u5206\u9694\uFF0C\u5FC5\u987B\u90FD\u662F\u5E94\u7528\u5DF2\u5F00\u901A\u7684\u6743\u9650\uFF1Boffline_access \u7528\u4E8E\u81EA\u52A8\u7EED\u671F\u3002\u5207\u6362\u540C\u6B65\u6A21\u5F0F\u65F6\uFF0C\u672A\u4FEE\u6539\u8FC7\u7684\u9ED8\u8BA4\u8303\u56F4\u4F1A\u81EA\u52A8\u6362\u6210\u5BF9\u5E94\u6A21\u5F0F\u7684\u6700\u5C0F\u96C6\u5408\u3002").addText(
         (text) => text.setValue(settings.oauthScope).onChange(async (value) => {
           settings.oauthScope = value.trim();
           await this.host.saveSettings();
         })
       );
       const tokens = settings.userTokens;
+      const grantedScopes = new Set((tokens?.scope ?? "").split(/[\s,]+/).filter(Boolean));
+      const missingScopes = tokens?.refreshToken ? defaultScopeForMode(settings.syncMode).split(" ").filter((scope) => scope !== "offline_access" && !grantedScopes.has(scope)) : [];
       new import_obsidian4.Setting(containerEl).setName("\u6388\u6743\u72B6\u6001").setDesc(
-        tokens?.refreshToken ? `\u5DF2\u6388\u6743\uFF0Crefresh token \u6709\u6548\u81F3 ${new Date(tokens.refreshExpiresAt).toLocaleString()}` : "\u5C1A\u672A\u6388\u6743"
+        tokens?.refreshToken ? `\u5DF2\u6388\u6743\uFF0Crefresh token \u6709\u6548\u81F3 ${new Date(tokens.refreshExpiresAt).toLocaleString()}` + (missingScopes.length > 0 ? `\uFF1B\u5F53\u524D\u6388\u6743\u7F3A\u5C11 ${missingScopes.join("\u3001")}\uFF0C\u8BF7\u91CD\u65B0\u6388\u6743` : "") : "\u5C1A\u672A\u6388\u6743"
       ).addButton(
         (button) => button.setButtonText(tokens?.refreshToken ? "\u91CD\u65B0\u6388\u6743" : "\u6388\u6743\u98DE\u4E66\u8D26\u53F7").setCta().onClick(async () => {
           try {
@@ -1977,7 +2031,7 @@ var FeishuWikiSyncSettingTab = class extends import_obsidian4.PluginSettingTab {
     });
     containerEl.createEl("p", {
       cls: "setting-item-description",
-      text: `\u51B2\u7A81\u526F\u672C\u76EE\u5F55\uFF1A${CONFLICT_DIR}/\uFF08\u672C\u5730\u4E0E\u8FDC\u7AEF\u90FD\u4E0D\u6539\u52A8\uFF0C\u526F\u672C\u4EC5\u4F5C\u53C2\u8003\uFF09`
+      text: "\u51B2\u7A81\u5904\u7406\uFF1A\u7B49\u5F85\u624B\u52A8\u5408\u5E76\u65F6\u672C\u5730\u4E0E\u8FDC\u7AEF\u90FD\u4E0D\u6539\u52A8\uFF0C\u4E5F\u4E0D\u751F\u6210\u526F\u672C\uFF1B\u6574\u7406\u540E\u9009\u62E9\u63A8\u9001\u6216\u62C9\u53D6\u3002"
     });
     new import_obsidian4.Setting(containerEl).setName("\u6E05\u7A7A\u540C\u6B65\u72B6\u6001").setDesc("\u6E05\u6389\u4E24\u79CD\u6A21\u5F0F\u7684\u6620\u5C04\u3001\u56FE\u7247\u7F13\u5B58\u4E0E\u540C\u6B65\u65F6\u95F4\uFF0C\u4FDD\u7559\u8D26\u53F7\u3001\u89C4\u5219\u548C\u7B14\u8BB0\u3002\u4E0B\u6B21\u6309\u9996\u6B21\u5BF9\u63A5\u5224\u5B9A\uFF1B\u540C\u540D\u4F46\u5185\u5BB9\u4E0D\u540C\u4F1A\u62A5\u544A\u51B2\u7A81\u3002").addButton(
       (button) => button.setWarning().setButtonText("\u6E05\u7A7A").onClick(async () => {
@@ -1996,92 +2050,27 @@ var FeishuWikiSyncSettingTab = class extends import_obsidian4.PluginSettingTab {
     list.createEl("li", { text: "\u98DE\u4E66\u4E0D\u63A5\u53D7 0 \u5B57\u8282 Markdown\uFF0C\u7A7A\u6587\u4EF6\u5728\u6587\u4EF6\u955C\u50CF\u6A21\u5F0F\u4E0B\u4F1A\u88AB\u8DF3\u8FC7\u5E76\u63D0\u793A\uFF1B\u6587\u6863\u6A21\u5F0F\u4E0B\u7A7A\u7B14\u8BB0\u4E5F\u4F1A\u540C\u6B65\uFF08\u6B63\u6587\u4E3A\u7A7A\uFF0C\u98DE\u4E66\u4FA7\u53EA\u6709\u6807\u9898\uFF09\u3002" });
     list.createEl("li", { text: "\u6587\u6863\u6A21\u5F0F\u4F1A\u4E0A\u4F20\u672C\u5730\u56FE\u7247\uFF08\u5199\u8FDB\u6587\u6863\u7684\u56FE\u7247\u5757\uFF09\u5E76\u4E0B\u8F7D\u98DE\u4E66\u91CC\u7684\u56FE\u7247\u5230\u9644\u4EF6\u76EE\u5F55\uFF1B\u89C4\u5219\u6587\u4EF6\u91CC image-upload / image-download \u53EF\u5173\u3002\u6587\u4EF6\u955C\u50CF\u6A21\u5F0F\u4E0D\u505A\u56FE\u7247\u5904\u7406\uFF0C\u56FE\u7247\u53EA\u662F\u7B14\u8BB0\u91CC\u7684\u6587\u672C\u3002" });
     list.createEl("li", { text: "\u5220\u9664\u9ED8\u8BA4\u4E0D\u4F1A\u4F20\u64AD\uFF0C\u53EA\u5728\u7ED3\u679C\u91CC\u63D0\u793A\uFF1B\u8981\u4F20\u64AD\u5C31\u5728\u4E0A\u9762\u6253\u5F00\u5BF9\u5E94\u7684\u5220\u9664\u5F00\u5173\uFF08\u8FDC\u7AEF\u5220\u9664\u8FDB\u98DE\u4E66\u56DE\u6536\u7AD9\uFF0C\u672C\u5730\u5220\u9664\u8FDB .trash\uFF09\u3002" });
-    list.createEl("li", { text: "\u4E24\u8FB9\u540C\u65F6\u4FEE\u6539\u540C\u4E00\u7BC7\u65F6\u6309\u51B2\u7A81\u5904\u7406\uFF1A\u8FDC\u7AEF\u7248\u672C\u53E6\u5B58\u4E3A\u526F\u672C\uFF0C\u672C\u5730\u4E0E\u8FDC\u7AEF\u90FD\u4E0D\u52A8\u3002" });
+    list.createEl("li", { text: "\u4E24\u8FB9\u540C\u65F6\u4FEE\u6539\u540C\u4E00\u7BC7\u65F6\u7B49\u5F85\u624B\u52A8\u5408\u5E76\uFF1A\u672C\u5730\u4E0E\u8FDC\u7AEF\u90FD\u4E0D\u52A8\uFF0C\u4E0D\u751F\u6210\u526F\u672C\uFF1B\u6574\u7406\u540E\u9009\u62E9\u63A8\u9001\u6216\u62C9\u53D6\u3002" });
   }
 };
 
-// src/sync/guards.ts
-var import_crypto = require("crypto");
-var import_obsidian6 = require("obsidian");
-
-// src/sync/scanner.ts
-var import_obsidian5 = require("obsidian");
-var ALWAYS_EXCLUDED = [".obsidian/**", ".trash/**", `${CONFLICT_DIR}/**`, "**/.DS_Store"];
-function assertSafeVaultPath(relPath) {
-  if (!relPath || /[\\\x00-\x1f:]/.test(relPath) || relPath.split("/").some((part) => !part || part === "." || part === "..")) {
-    throw new Error(`\u65E0\u6548\u7684\u4ED3\u5E93\u76F8\u5BF9\u8DEF\u5F84\uFF1A${relPath}`);
-  }
-}
-function globToRegExp(pattern) {
-  let source = "^";
-  for (let index = 0; index < pattern.length; index += 1) {
-    const char = pattern[index];
-    if (char === "*") {
-      if (pattern[index + 1] === "*") {
-        if (pattern[index + 2] === "/") {
-          source += "(?:.*/)?";
-          index += 2;
-        } else {
-          source += ".*";
-          index += 1;
-        }
-      } else {
-        source += "[^/]*";
-      }
-    } else if (char === "?") {
-      source += "[^/]";
-    } else if ("\\^$.|+()[]{}".includes(char)) {
-      source += `\\${char}`;
-    } else {
-      source += char;
+// src/sync/concurrency.ts
+async function mapConcurrent(values, limit, mapper) {
+  if (values.length === 0)
+    return [];
+  const results = new Array(values.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(Math.max(1, limit), values.length) }, async () => {
+    for (; ; ) {
+      const index = next;
+      next += 1;
+      if (index >= values.length)
+        return;
+      results[index] = await mapper(values[index], index);
     }
-  }
-  return new RegExp(`${source}$`);
-}
-var PathFilter = class {
-  constructor(userPatterns) {
-    const raw = userPatterns.split("\n").map((line) => line.trim()).filter((line) => line && !line.startsWith("#")).map((line) => line.endsWith("/") ? `${line}**` : line).map((line) => line.replace(/^\.\//, "").replace(/^\//, ""));
-    this.patterns = [...ALWAYS_EXCLUDED, ...raw].map(globToRegExp);
-  }
-  isExcluded(relPath) {
-    return this.patterns.some((pattern) => pattern.test(relPath));
-  }
-};
-function scanLocalNotes(app, filter) {
-  const notes = /* @__PURE__ */ new Map();
-  for (const file of app.vault.getMarkdownFiles()) {
-    if (filter.isExcluded(file.path))
-      continue;
-    const stat = file.stat;
-    notes.set(file.path, { relPath: file.path, size: stat?.size ?? 0, mtime: stat?.mtime ?? 0 });
-  }
-  return notes;
-}
-async function readLocalBytes(app, relPath) {
-  const file = app.vault.getAbstractFileByPath(relPath);
-  if (!(file instanceof import_obsidian5.TFile)) {
-    throw new Error(`\u627E\u4E0D\u5230\u672C\u5730\u6587\u4EF6\uFF1A${relPath}`);
-  }
-  return app.vault.readBinary(file);
-}
-function localStat(app, relPath) {
-  const file = app.vault.getAbstractFileByPath(relPath);
-  if (!(file instanceof import_obsidian5.TFile))
-    return { size: 0, mtime: 0 };
-  return { size: file.stat?.size ?? 0, mtime: file.stat?.mtime ?? 0 };
-}
-async function writeLocalBytes(app, relPath, data) {
-  assertSafeVaultPath(relPath);
-  const existing = app.vault.getAbstractFileByPath(relPath);
-  if (existing instanceof import_obsidian5.TFile) {
-    await app.vault.modifyBinary(existing, data);
-    return;
-  }
-  const dir = relPath.includes("/") ? relPath.slice(0, relPath.lastIndexOf("/")) : "";
-  if (dir && !app.vault.getAbstractFileByPath(dir)) {
-    await app.vault.createFolder(dir).catch(() => void 0);
-  }
-  await app.vault.createBinary(relPath, data);
+  });
+  await Promise.all(workers);
+  return results;
 }
 
 // src/feishu/wiki.ts
@@ -2131,24 +2120,40 @@ async function getNodeByToken(client, token, objType) {
 }
 async function walkWikiTree(client, spaceId, rootNodeToken, options = {}) {
   const entries = [];
-  const queue = [{ nodeToken: rootNodeToken, relDir: "", depth: 0 }];
+  const pending = [{ nodeToken: rootNodeToken, relDir: "", depth: 0 }];
   const visited = new Set(rootNodeToken ? [rootNodeToken] : []);
   const onProgress = options.onProgress;
-  while (queue.length > 0) {
-    const current = queue.shift();
-    if (current.depth > MAX_DEPTH)
-      throw new Error(`\u77E5\u8BC6\u5E93\u76EE\u5F55\u8D85\u8FC7 ${MAX_DEPTH} \u5C42\uFF0C\u8BF7\u9009\u62E9\u66F4\u5C0F\u7684\u540C\u6B65\u6839\u8282\u70B9\uFF1B\u672A\u6267\u884C\u540C\u6B65`);
-    const nodes = await listNodes(client, spaceId, current.nodeToken);
-    for (const node of nodes) {
-      const title = (node.title ?? "").trim();
-      if (node.node_type === "shortcut")
-        continue;
-      if (visited.has(node.node_token))
-        continue;
-      visited.add(node.node_token);
-      if (node.obj_type === "file") {
-        if (!/\.md$/i.test(title))
+  while (pending.length > 0) {
+    const level = pending.splice(0);
+    for (const current of level) {
+      if (current.depth > MAX_DEPTH)
+        throw new Error(`\u77E5\u8BC6\u5E93\u76EE\u5F55\u8D85\u8FC7 ${MAX_DEPTH} \u5C42\uFF0C\u8BF7\u9009\u62E9\u66F4\u5C0F\u7684\u540C\u6B65\u6839\u8282\u70B9\uFF1B\u672A\u6267\u884C\u540C\u6B65`);
+    }
+    const pages = await mapConcurrent(level, 6, (current) => listNodes(client, spaceId, current.nodeToken));
+    for (let index = 0; index < level.length; index += 1) {
+      const current = level[index];
+      for (const node of pages[index]) {
+        const title = (node.title ?? "").trim();
+        if (node.node_type === "shortcut")
           continue;
+        if (visited.has(node.node_token))
+          continue;
+        visited.add(node.node_token);
+        if (node.obj_type === "file") {
+          if (!/\.md$/i.test(title))
+            continue;
+          entries.push({
+            nodeToken: node.node_token,
+            objToken: node.obj_token,
+            objType: node.obj_type,
+            parentNodeToken: node.parent_node_token,
+            title,
+            relDir: current.relDir,
+            depth: current.depth + 1
+          });
+          continue;
+        }
+        const childDir = node.node_token === options.rootContainerNode ? "" : current.relDir ? `${current.relDir}/${title}` : title;
         entries.push({
           nodeToken: node.node_token,
           objToken: node.obj_token,
@@ -2158,23 +2163,12 @@ async function walkWikiTree(client, spaceId, rootNodeToken, options = {}) {
           relDir: current.relDir,
           depth: current.depth + 1
         });
-        continue;
+        if (node.has_child === false)
+          continue;
+        pending.push({ nodeToken: node.node_token, relDir: childDir, depth: current.depth + 1 });
       }
-      const childDir = node.node_token === options.rootContainerNode ? "" : current.relDir ? `${current.relDir}/${title}` : title;
-      entries.push({
-        nodeToken: node.node_token,
-        objToken: node.obj_token,
-        objType: node.obj_type,
-        parentNodeToken: node.parent_node_token,
-        title,
-        relDir: current.relDir,
-        depth: current.depth + 1
-      });
-      if (node.has_child === false)
-        continue;
-      queue.push({ nodeToken: node.node_token, relDir: childDir, depth: current.depth + 1 });
+      onProgress?.(entries.length, current.relDir);
     }
-    onProgress?.(entries.length, current.relDir);
   }
   return entries;
 }
@@ -2201,88 +2195,6 @@ async function moveDocToWiki(client, spaceId, parentNodeToken, objToken, objType
   if (parentNodeToken)
     body.parent_wiki_token = parentNodeToken;
   await client.json("POST", `/open-apis/wiki/v2/spaces/${pathSegment(spaceId)}/nodes/move_docs_to_wiki`, { body });
-}
-
-// src/sync/guards.ts
-async function assertRemoteAbsent(client, spaceId, rootNodeToken, token) {
-  if (!token)
-    throw new Error("\u7F3A\u5C11\u539F\u6709\u8FDC\u7AEF\u6620\u5C04\uFF0C\u672A\u5220\u9664\u672C\u5730\u7B14\u8BB0");
-  const entries = await walkWikiTree(client, spaceId, rootNodeToken);
-  if (entries.some((entry) => entry.objToken === token)) {
-    throw new Error("\u8FDC\u7AEF\u7B14\u8BB0\u5728\u9884\u89C8\u540E\u5DF2\u6062\u590D\uFF0C\u672A\u5220\u9664\u672C\u5730\uFF0C\u8BF7\u91CD\u65B0\u540C\u6B65");
-  }
-}
-function planFingerprint(settings) {
-  const { state, userTokens: _tokens, debugLog: _debug, autoSyncMinutes: _timer, showPlanBeforeSync: _preview, ...config } = settings;
-  const { lastSyncAt: _lastRun, ...mappings } = state;
-  return (0, import_crypto.createHash)("sha256").update(JSON.stringify([config, mappings])).digest("hex");
-}
-function validateSettings(settings) {
-  assertSafeVaultPath(settings.attachmentFolder);
-  if (settings.attachmentFolder.startsWith(".obsidian") || settings.attachmentFolder.startsWith(".trash")) {
-    throw new Error("\u9644\u4EF6\u76EE\u5F55\u4E0D\u80FD\u653E\u5728 .obsidian \u6216 .trash \u4E2D");
-  }
-  if (settings.folderMode === "flat" && (!settings.flatSeparator || /[\\/:\x00-\x1f]/.test(settings.flatSeparator))) {
-    throw new Error("\u6241\u5E73\u5206\u9694\u7B26\u4E0D\u80FD\u4E3A\u7A7A\uFF0C\u4E5F\u4E0D\u80FD\u5305\u542B\u8DEF\u5F84\u5206\u9694\u7B26");
-  }
-  if (/\/wiki\//i.test(settings.spaceId))
-    throw new Error("space_id \u9700\u8981\u77E5\u8BC6\u7A7A\u95F4 ID\uFF1B\u8BF7\u7528\u300C\u62C9\u53D6\u5217\u8868\u300D\u9009\u62E9\uFF0C\u9875\u9762\u94FE\u63A5\u586B\u5165\u540C\u6B65\u6839\u8282\u70B9");
-}
-function validateLocalPaths(paths, settings) {
-  for (const path of paths) {
-    assertSafeVaultPath(path);
-    if (settings.folderMode === "flat" && path.includes(settings.flatSeparator)) {
-      throw new Error(`\u7B14\u8BB0\u8DEF\u5F84\u5305\u542B\u6241\u5E73\u5206\u9694\u7B26 ${settings.flatSeparator}\uFF0C\u65E0\u6CD5\u65E0\u6B67\u4E49\u8FD8\u539F\uFF1A${path}\uFF1B\u8BF7\u4F7F\u7528\u955C\u50CF\u76EE\u5F55\u6A21\u5F0F`);
-    }
-  }
-}
-function assertPlanCurrent(plan, settings) {
-  if (plan.settingsFingerprint !== planFingerprint(settings)) {
-    throw new Error("\u9884\u89C8\u540E\u540C\u6B65\u8BBE\u7F6E\u6216\u6620\u5C04\u72B6\u6001\u53D1\u751F\u53D8\u5316\uFF0C\u8BF7\u91CD\u65B0\u9884\u89C8\u540C\u6B65\u8BA1\u5212");
-  }
-}
-function prepareTarget(settings, spaceId, rootNodeToken, syncMode) {
-  const previous = settings.state.target;
-  const changed = !!previous && (previous.spaceId !== spaceId || previous.rootNodeToken !== rootNodeToken || (previous.syncMode ?? "md") !== syncMode || previous.folderMode !== void 0 && previous.folderMode !== settings.folderMode || previous.flatSeparator !== void 0 && previous.flatSeparator !== settings.flatSeparator || previous.rootPageTitle !== void 0 && previous.rootPageTitle !== settings.rootPageTitle);
-  if (changed)
-    settings.state = emptyState();
-  settings.state.target = {
-    spaceId,
-    rootNodeToken,
-    syncMode,
-    folderMode: settings.folderMode,
-    flatSeparator: settings.flatSeparator,
-    rootPageTitle: settings.rootPageTitle
-  };
-  return changed;
-}
-function filterPlan(plan, mode) {
-  if (mode === "both")
-    return plan;
-  const items = plan.items.filter((entry) => mode === "pull" ? !["push", "create-remote", "delete-remote"].includes(entry.action) : !["pull", "create-local", "delete-local"].includes(entry.action));
-  return { ...plan, items, counts: summarize(items) };
-}
-async function isEditorDirty(app, relPath) {
-  for (const leaf of app.workspace.getLeavesOfType("markdown")) {
-    const view = leaf.view;
-    if (view?.file?.path !== relPath || !view.editor)
-      continue;
-    const file = app.vault.getAbstractFileByPath(relPath);
-    const disk = file instanceof import_obsidian6.TFile ? await app.vault.read(file) : "";
-    if (view.editor.getValue() !== disk)
-      return true;
-  }
-  return false;
-}
-function deferDeletes(plan, allowDeletes = true) {
-  if (allowDeletes)
-    return plan;
-  const items = plan.items.map((entry) => entry.action === "delete-local" || entry.action === "delete-remote" ? {
-    ...entry,
-    action: entry.action === "delete-local" ? "remote-deleted" : "local-deleted",
-    reason: "\u5220\u9664\u7B49\u5F85\u624B\u52A8\u540C\u6B65\u786E\u8BA4\uFF0C\u5B9A\u65F6\u540C\u6B65\u672A\u6267\u884C\u5220\u9664"
-  } : entry);
-  return { ...plan, items, counts: summarize(items) };
 }
 
 // src/feishu/files.ts
@@ -2384,8 +2296,288 @@ async function uploadMarkdownToWiki(client, options, onFallback) {
   }
 }
 
-// src/sync/executor.ts
+// src/sync/guards.ts
+var import_crypto = require("crypto");
+var import_obsidian6 = require("obsidian");
+
+// src/sync/scanner.ts
+var import_obsidian5 = require("obsidian");
+var ALWAYS_EXCLUDED = [".obsidian/**", ".trash/**", "**/.DS_Store"];
+function assertSafeVaultPath(relPath) {
+  if (!relPath || /[\\\x00-\x1f:]/.test(relPath) || relPath.split("/").some((part) => !part || part === "." || part === "..")) {
+    throw new Error(`\u65E0\u6548\u7684\u4ED3\u5E93\u76F8\u5BF9\u8DEF\u5F84\uFF1A${relPath}`);
+  }
+}
+function globToRegExp(pattern) {
+  let source = "^";
+  for (let index = 0; index < pattern.length; index += 1) {
+    const char = pattern[index];
+    if (char === "*") {
+      if (pattern[index + 1] === "*") {
+        if (pattern[index + 2] === "/") {
+          source += "(?:.*/)?";
+          index += 2;
+        } else {
+          source += ".*";
+          index += 1;
+        }
+      } else {
+        source += "[^/]*";
+      }
+    } else if (char === "?") {
+      source += "[^/]";
+    } else if ("\\^$.|+()[]{}".includes(char)) {
+      source += `\\${char}`;
+    } else {
+      source += char;
+    }
+  }
+  return new RegExp(`${source}$`);
+}
+var PathFilter = class {
+  constructor(userPatterns) {
+    const raw = userPatterns.split("\n").map((line) => line.trim()).filter((line) => line && !line.startsWith("#")).map((line) => line.endsWith("/") ? `${line}**` : line).map((line) => line.replace(/^\.\//, "").replace(/^\//, ""));
+    this.patterns = [...ALWAYS_EXCLUDED, ...raw].map(globToRegExp);
+  }
+  isExcluded(relPath) {
+    return this.patterns.some((pattern) => pattern.test(relPath));
+  }
+};
+function scanLocalNotes(app, filter) {
+  const notes = /* @__PURE__ */ new Map();
+  for (const file of app.vault.getMarkdownFiles()) {
+    if (filter.isExcluded(file.path))
+      continue;
+    const stat = file.stat;
+    notes.set(file.path, { relPath: file.path, size: stat?.size ?? 0, mtime: stat?.mtime ?? 0 });
+  }
+  return notes;
+}
+async function readLocalBytes(app, relPath) {
+  const file = app.vault.getAbstractFileByPath(relPath);
+  if (!(file instanceof import_obsidian5.TFile)) {
+    throw new Error(`\u627E\u4E0D\u5230\u672C\u5730\u6587\u4EF6\uFF1A${relPath}`);
+  }
+  return app.vault.readBinary(file);
+}
+function localStat(app, relPath) {
+  const file = app.vault.getAbstractFileByPath(relPath);
+  if (!(file instanceof import_obsidian5.TFile))
+    return { size: 0, mtime: 0 };
+  return { size: file.stat?.size ?? 0, mtime: file.stat?.mtime ?? 0 };
+}
+async function writeLocalBytes(app, relPath, data) {
+  assertSafeVaultPath(relPath);
+  const existing = app.vault.getAbstractFileByPath(relPath);
+  if (existing instanceof import_obsidian5.TFile) {
+    await app.vault.modifyBinary(existing, data);
+    return;
+  }
+  const dir = relPath.includes("/") ? relPath.slice(0, relPath.lastIndexOf("/")) : "";
+  if (dir && !app.vault.getAbstractFileByPath(dir)) {
+    await app.vault.createFolder(dir).catch(() => void 0);
+  }
+  await app.vault.createBinary(relPath, data);
+}
+
+// src/sync/guards.ts
+async function assertRemoteAbsent(client, spaceId, rootNodeToken, token) {
+  if (!token)
+    throw new Error("\u7F3A\u5C11\u539F\u6709\u8FDC\u7AEF\u6620\u5C04\uFF0C\u672A\u5220\u9664\u672C\u5730\u7B14\u8BB0");
+  const entries = await walkWikiTree(client, spaceId, rootNodeToken);
+  if (entries.some((entry) => entry.objToken === token)) {
+    throw new Error("\u8FDC\u7AEF\u7B14\u8BB0\u5728\u9884\u89C8\u540E\u5DF2\u6062\u590D\uFF0C\u672A\u5220\u9664\u672C\u5730\uFF0C\u8BF7\u91CD\u65B0\u540C\u6B65");
+  }
+}
+function planFingerprint(settings) {
+  const { state, userTokens: _tokens, debugLog: _debug, autoSyncMinutes: _timer, showPlanBeforeSync: _preview, ...config } = settings;
+  const { lastSyncAt: _lastRun, ...mappings } = state;
+  return (0, import_crypto.createHash)("sha256").update(JSON.stringify([config, mappings])).digest("hex");
+}
+function validateSettings(settings) {
+  assertSafeVaultPath(settings.attachmentFolder);
+  if (settings.attachmentFolder.startsWith(".obsidian") || settings.attachmentFolder.startsWith(".trash")) {
+    throw new Error("\u9644\u4EF6\u76EE\u5F55\u4E0D\u80FD\u653E\u5728 .obsidian \u6216 .trash \u4E2D");
+  }
+  if (settings.folderMode === "flat" && (!settings.flatSeparator || /[\\/:\x00-\x1f]/.test(settings.flatSeparator))) {
+    throw new Error("\u6241\u5E73\u5206\u9694\u7B26\u4E0D\u80FD\u4E3A\u7A7A\uFF0C\u4E5F\u4E0D\u80FD\u5305\u542B\u8DEF\u5F84\u5206\u9694\u7B26");
+  }
+  if (/\/wiki\//i.test(settings.spaceId))
+    throw new Error("space_id \u9700\u8981\u77E5\u8BC6\u7A7A\u95F4 ID\uFF1B\u8BF7\u7528\u300C\u62C9\u53D6\u5217\u8868\u300D\u9009\u62E9\uFF0C\u9875\u9762\u94FE\u63A5\u586B\u5165\u540C\u6B65\u6839\u8282\u70B9");
+}
+function validateLocalPaths(paths, settings) {
+  for (const path of paths) {
+    assertSafeVaultPath(path);
+    if (settings.folderMode === "flat" && path.includes(settings.flatSeparator)) {
+      throw new Error(`\u7B14\u8BB0\u8DEF\u5F84\u5305\u542B\u6241\u5E73\u5206\u9694\u7B26 ${settings.flatSeparator}\uFF0C\u65E0\u6CD5\u65E0\u6B67\u4E49\u8FD8\u539F\uFF1A${path}\uFF1B\u8BF7\u4F7F\u7528\u955C\u50CF\u76EE\u5F55\u6A21\u5F0F`);
+    }
+  }
+}
+function assertPlanCurrent(plan, settings) {
+  if (plan.settingsFingerprint !== planFingerprint(settings)) {
+    throw new Error("\u9884\u89C8\u540E\u540C\u6B65\u8BBE\u7F6E\u6216\u6620\u5C04\u72B6\u6001\u53D1\u751F\u53D8\u5316\uFF0C\u8BF7\u91CD\u65B0\u9884\u89C8\u540C\u6B65\u8BA1\u5212");
+  }
+}
+function prepareTarget(settings, spaceId, rootNodeToken, syncMode) {
+  const previous = settings.state.target;
+  const changed = !!previous && (previous.spaceId !== spaceId || previous.rootNodeToken !== rootNodeToken || (previous.syncMode ?? "md") !== syncMode || previous.folderMode !== void 0 && previous.folderMode !== settings.folderMode || previous.flatSeparator !== void 0 && previous.flatSeparator !== settings.flatSeparator || previous.rootPageTitle !== void 0 && previous.rootPageTitle !== settings.rootPageTitle);
+  if (changed)
+    settings.state = emptyState();
+  settings.state.target = {
+    spaceId,
+    rootNodeToken,
+    syncMode,
+    folderMode: settings.folderMode,
+    flatSeparator: settings.flatSeparator,
+    rootPageTitle: settings.rootPageTitle
+  };
+  return changed;
+}
+function filterPlan(plan, mode) {
+  if (mode === "both")
+    return plan;
+  const items = plan.items.filter((entry) => mode === "pull" ? !["push", "create-remote", "delete-remote"].includes(entry.action) : !["pull", "create-local", "delete-local"].includes(entry.action));
+  return { ...plan, items, counts: summarize(items) };
+}
+function applyPlanOverrides(plan, actions) {
+  if (Object.keys(actions).length === 0)
+    return plan;
+  const items = [];
+  for (const entry of plan.items) {
+    const choice = actions[entry.relPath];
+    if (!choice) {
+      items.push(entry);
+      continue;
+    }
+    if (choice === "skip")
+      continue;
+    if (choice === "pull") {
+      if (entry.fileToken)
+        items.push({ ...entry, action: "pull" });
+      continue;
+    }
+    if (entry.localHash !== void 0)
+      items.push({ ...entry, action: "push", forceOverwrite: true });
+  }
+  return { ...plan, items, counts: summarize(items) };
+}
+async function isEditorDirty(app, relPath) {
+  for (const leaf of app.workspace.getLeavesOfType("markdown")) {
+    const view = leaf.view;
+    if (view?.file?.path !== relPath || !view.editor)
+      continue;
+    const file = app.vault.getAbstractFileByPath(relPath);
+    const disk = file instanceof import_obsidian6.TFile ? await app.vault.read(file) : "";
+    if (view.editor.getValue() !== disk)
+      return true;
+  }
+  return false;
+}
+function deferDeletes(plan, allowDeletes = true) {
+  if (allowDeletes)
+    return plan;
+  const items = plan.items.map((entry) => entry.action === "delete-local" || entry.action === "delete-remote" ? {
+    ...entry,
+    action: entry.action === "delete-local" ? "remote-deleted" : "local-deleted",
+    reason: "\u5220\u9664\u7B49\u5F85\u624B\u52A8\u540C\u6B65\u786E\u8BA4\uFF0C\u5B9A\u65F6\u540C\u6B65\u672A\u6267\u884C\u5220\u9664"
+  } : entry);
+  return { ...plan, items, counts: summarize(items) };
+}
+
+// src/sync/folders.ts
+function createFolderResolver(deps) {
+  const { state, settings } = deps;
+  const folderNodes = /* @__PURE__ */ new Map();
+  const pendingFolders = /* @__PURE__ */ new Map();
+  let rootContainerToken;
+  let pendingRootContainer;
+  const ensureRootContainer = async () => {
+    if (deps.rootNodeToken)
+      return deps.rootNodeToken;
+    if (rootContainerToken)
+      return rootContainerToken;
+    if (pendingRootContainer)
+      return pendingRootContainer;
+    const resolving = (async () => {
+      const cached = state.folders[""];
+      if (cached?.nodeToken) {
+        rootContainerToken = cached.nodeToken;
+        return rootContainerToken;
+      }
+      const title = settings.rootPageTitle.trim() || deps.app.vault.getName();
+      const topLevel = await listNodes(deps.client, deps.spaceId);
+      const found = topLevel.find((node2) => node2.title === title && node2.obj_type !== "file");
+      if (found?.node_token) {
+        state.folders[""] = { nodeToken: found.node_token };
+        rootContainerToken = found.node_token;
+        deps.logger.info(`\u590D\u7528\u77E5\u8BC6\u5E93\u9876\u5C42\u9875\u9762\u300C${title}\u300D\u5B58\u653E vault \u6839\u76EE\u5F55\u4E0B\u7684\u7B14\u8BB0`);
+        return rootContainerToken;
+      }
+      const node = await createContainerNode(deps.client, deps.spaceId, void 0, title);
+      state.folders[""] = { nodeToken: node.node_token };
+      rootContainerToken = node.node_token;
+      deps.logger.info(`\u5728\u77E5\u8BC6\u5E93\u9876\u5C42\u521B\u5EFA\u9875\u9762\u300C${title}\u300D\u5B58\u653E vault \u6839\u76EE\u5F55\u4E0B\u7684\u7B14\u8BB0`);
+      return rootContainerToken;
+    })();
+    pendingRootContainer = resolving;
+    try {
+      return await resolving;
+    } finally {
+      pendingRootContainer = void 0;
+    }
+  };
+  const resolveFolderNode = async (relDir, needFileParent) => {
+    if (settings.folderMode === "flat" || relDir === "") {
+      return needFileParent ? ensureRootContainer() : deps.rootNodeToken;
+    }
+    const cached = folderNodes.get(relDir);
+    if (cached)
+      return cached;
+    const pending = pendingFolders.get(relDir);
+    if (pending)
+      return pending;
+    const resolving = (async () => {
+      const existing = state.folders[relDir];
+      if (existing?.nodeToken) {
+        folderNodes.set(relDir, existing.nodeToken);
+        return existing.nodeToken;
+      }
+      const parentDir = dirnameOf(relDir);
+      const parentNode = await resolveFolderNode(parentDir, false);
+      const node = await createContainerNode(deps.client, deps.spaceId, parentNode, basenameOf(relDir));
+      state.folders[relDir] = { nodeToken: node.node_token, parentNodeToken: parentNode };
+      folderNodes.set(relDir, node.node_token);
+      deps.logger.info(`\u521B\u5EFA\u77E5\u8BC6\u5E93\u76EE\u5F55\u8282\u70B9 ${relDir} -> ${node.node_token}`);
+      return node.node_token;
+    })();
+    pendingFolders.set(relDir, resolving);
+    try {
+      return await resolving;
+    } finally {
+      pendingFolders.delete(relDir);
+    }
+  };
+  return { ensureRootContainer, resolveFolderNode };
+}
+
+// src/sync/plan-shared.ts
 var import_obsidian7 = require("obsidian");
+function item(relPath, action, reason, extra = {}) {
+  return { relPath, action, reason, parentDir: dirnameOf(relPath), ...extra };
+}
+function conflictItem(relPath, state, reason, extra, localHash, remoteHash) {
+  const previous = state.conflicts[relPath];
+  const duplicate = !!previous && previous.remoteHash === remoteHash && previous.localHash === localHash;
+  return item(relPath, "conflict", duplicate ? "\u540C\u4E00\u51B2\u7A81\u4ECD\u672A\u5904\u7406\uFF0C\u7B49\u5F85\u624B\u52A8\u5408\u5E76" : reason, {
+    ...extra,
+    localHash,
+    remoteHash,
+    duplicateConflict: duplicate
+  });
+}
+function existsLocally(app, relPath) {
+  return app.vault.getAbstractFileByPath(relPath) instanceof import_obsidian7.TFile;
+}
 
 // src/sync/hash.ts
 function loadNodeCrypto() {
@@ -2418,80 +2610,23 @@ async function sha256Hex(data) {
 }
 
 // src/sync/executor.ts
-function two(value) {
-  return String(value).padStart(2, "0");
-}
-function conflictCopyRelPath(relPath) {
-  const now = /* @__PURE__ */ new Date();
-  const stamp = `${now.getFullYear()}${two(now.getMonth() + 1)}${two(now.getDate())}-${two(now.getHours())}${two(now.getMinutes())}${two(now.getSeconds())}-${String(now.getMilliseconds()).padStart(3, "0")}`;
-  const base = relPath.replace(/\.md$/i, "");
-  return `${CONFLICT_DIR}/${base}.${stamp}.md`;
-}
-function existsLocally(app, relPath) {
-  return app.vault.getAbstractFileByPath(relPath) instanceof import_obsidian7.TFile;
-}
 async function hashLocalFile(app, relPath) {
   return sha256Hex(await readLocalBytes(app, relPath));
 }
 async function executePlan(plan, ctx, options) {
   const reports = [];
   const { state, settings } = ctx;
-  const folderNodes = /* @__PURE__ */ new Map();
-  let rootContainerToken;
-  const ensureRootContainer = async () => {
-    if (ctx.rootNodeToken)
-      return ctx.rootNodeToken;
-    if (rootContainerToken)
-      return rootContainerToken;
-    const cached = state.folders[""];
-    if (cached?.nodeToken) {
-      rootContainerToken = cached.nodeToken;
-      return rootContainerToken;
-    }
-    const title = settings.rootPageTitle.trim() || ctx.app.vault.getName();
-    const topLevel = await listNodes(ctx.client, ctx.spaceId);
-    const found = topLevel.find((node2) => node2.title === title && node2.obj_type !== "file");
-    if (found?.node_token) {
-      state.folders[""] = { nodeToken: found.node_token };
-      rootContainerToken = found.node_token;
-      ctx.logger.info(`\u590D\u7528\u77E5\u8BC6\u5E93\u9876\u5C42\u9875\u9762\u300C${title}\u300D\u5B58\u653E vault \u6839\u76EE\u5F55\u4E0B\u7684\u7B14\u8BB0`);
-      return rootContainerToken;
-    }
-    const node = await createContainerNode(ctx.client, ctx.spaceId, void 0, title);
-    state.folders[""] = { nodeToken: node.node_token };
-    rootContainerToken = node.node_token;
-    ctx.logger.info(`\u5728\u77E5\u8BC6\u5E93\u9876\u5C42\u521B\u5EFA\u9875\u9762\u300C${title}\u300D\u5B58\u653E vault \u6839\u76EE\u5F55\u4E0B\u7684\u7B14\u8BB0`);
-    return rootContainerToken;
-  };
-  const resolveFolderNode = async (relDir, needFileParent) => {
-    if (settings.folderMode === "flat" || relDir === "") {
-      return needFileParent ? ensureRootContainer() : ctx.rootNodeToken;
-    }
-    const cached = folderNodes.get(relDir);
-    if (cached)
-      return cached;
-    const existing = state.folders[relDir];
-    if (existing?.nodeToken) {
-      folderNodes.set(relDir, existing.nodeToken);
-      return existing.nodeToken;
-    }
-    const parentDir = dirnameOf(relDir);
-    const parentNode = await resolveFolderNode(parentDir, false);
-    const node = await createContainerNode(ctx.client, ctx.spaceId, parentNode, basenameOf(relDir));
-    state.folders[relDir] = { nodeToken: node.node_token, parentNodeToken: parentNode };
-    folderNodes.set(relDir, node.node_token);
-    ctx.logger.info(`\u521B\u5EFA\u77E5\u8BC6\u5E93\u76EE\u5F55\u8282\u70B9 ${relDir} -> ${node.node_token}`);
-    return node.node_token;
-  };
+  const folders = createFolderResolver({
+    app: ctx.app,
+    client: ctx.client,
+    state,
+    settings,
+    spaceId: ctx.spaceId,
+    rootNodeToken: ctx.rootNodeToken,
+    logger: ctx.logger
+  });
+  const resolveFolderNode = (relDir) => folders.resolveFolderNode(relDir, true);
   const remoteFileName = (relPath) => settings.folderMode === "flat" ? relPath.split("/").join(settings.flatSeparator) : basenameOf(relPath);
-  const writeConflictCopy = async (relPath, bytes, localHash, remoteHash) => {
-    const copyPath = conflictCopyRelPath(relPath);
-    const adapter = ctx.app.vault.adapter;
-    await ensureFolder(adapter, dirnameOf(copyPath));
-    await adapter.writeBinary(copyPath, bytes);
-    state.conflicts[relPath] = { remoteHash, localHash, copyPath, at: Date.now() };
-    return copyPath;
-  };
   const pushes = plan.items.filter((entry) => entry.action === "push" || entry.action === "create-remote");
   const pulls = plan.items.filter((entry) => entry.action === "pull" || entry.action === "create-local");
   const links = plan.items.filter((entry) => entry.action === "link");
@@ -2517,16 +2652,16 @@ async function executePlan(plan, ctx, options) {
           if (await options.isEditorDirty(entry.relPath) || entry.localHash !== void 0 && await sha256Hex(bytes) !== entry.localHash) {
             throw new Error("\u9884\u89C8\u540E\u672C\u5730\u6B63\u6587\u5DF2\u6539\u53D8\uFF0C\u8BF7\u4FDD\u5B58\u540E\u91CD\u65B0\u9884\u89C8");
           }
-          if (entry.action === "push") {
+          if (entry.action === "push" && !entry.forceOverwrite) {
             const previous = state.records[entry.relPath];
             const token = entry.fileToken ?? previous?.fileToken;
             if (!token || await sha256Hex(await downloadFile(ctx.client, token)) !== (entry.remoteHash ?? previous?.baseHash)) {
               throw new Error("\u9884\u89C8\u540E\u98DE\u4E66\u6B63\u6587\u5DF2\u6539\u53D8\uFF0C\u5DF2\u505C\u6B62\u8986\u76D6\uFF0C\u8BF7\u91CD\u65B0\u540C\u6B65");
             }
           }
-          const parentNode = await resolveFolderNode(entry.parentDir, true);
+          const parentNode = await resolveFolderNode(entry.parentDir);
           const record = state.records[entry.relPath];
-          const previousToken = entry.action === "push" ? record?.fileToken : void 0;
+          const previousToken = entry.action === "push" ? entry.fileToken ?? record?.fileToken : void 0;
           const result = await uploadMarkdownToWiki(
             ctx.client,
             {
@@ -2598,15 +2733,13 @@ async function executePlan(plan, ctx, options) {
               const remoteHash = await sha256Hex(remoteBytes);
               const currentLocalHash = await hashLocalFile(ctx.app, entry.relPath);
               if (currentLocalHash !== remoteHash) {
-                const copyPath = await writeConflictCopy(entry.relPath, remoteBytes, currentLocalHash, remoteHash);
                 reports.push({
                   relPath: entry.relPath,
                   action: "conflict",
                   ok: true,
-                  message: "\u8BA1\u5212\u751F\u6210\u540E\u672C\u5730\u53C8\u6709\u65B0\u6539\u52A8\uFF0C\u5DF2\u6539\u4E3A\u4FDD\u7559\u53CC\u65B9\uFF0C\u672C\u5730\u4E0E\u8FDC\u7AEF\u90FD\u672A\u6539\u52A8",
-                  copyPath
+                  message: "\u8BA1\u5212\u751F\u6210\u540E\u672C\u5730\u53C8\u6709\u65B0\u6539\u52A8\uFF0C\u5DF2\u8F6C\u4E3A\u7B49\u5F85\u624B\u52A8\u5408\u5E76\uFF0C\u672C\u5730\u4E0E\u8FDC\u7AEF\u90FD\u672A\u6539\u52A8"
                 });
-                ctx.logger.warn(`\u62C9\u53D6\u524D\u53D1\u73B0\u672C\u5730\u5DF2\u6539\u52A8\uFF0C\u8F6C\u4E3A\u51B2\u7A81\uFF1A${entry.relPath}`);
+                ctx.logger.warn(`\u62C9\u53D6\u524D\u53D1\u73B0\u672C\u5730\u5DF2\u6539\u52A8\uFF0C\u8F6C\u4E3A\u624B\u52A8\u5408\u5E76\uFF1A${entry.relPath}`);
                 tick(`\u51B2\u7A81 ${entry.relPath}`);
                 return;
               }
@@ -2637,13 +2770,11 @@ async function executePlan(plan, ctx, options) {
             const currentLocalHash = await hashLocalFile(ctx.app, entry.relPath);
             const remoteHash = await sha256Hex(bytes);
             if (currentLocalHash !== remoteHash) {
-              const copyPath = await writeConflictCopy(entry.relPath, bytes, currentLocalHash, remoteHash);
               reports.push({
                 relPath: entry.relPath,
                 action: "conflict",
                 ok: true,
-                message: "\u672C\u5730\u5728\u8BA1\u5212\u751F\u6210\u540E\u51FA\u73B0\u4E86\u540C\u540D\u6587\u4EF6\u4E14\u5185\u5BB9\u4E0D\u540C\uFF0C\u5DF2\u4FDD\u7559\u53CC\u65B9",
-                copyPath
+                message: "\u672C\u5730\u5728\u8BA1\u5212\u751F\u6210\u540E\u51FA\u73B0\u4E86\u540C\u540D\u6587\u4EF6\u4E14\u5185\u5BB9\u4E0D\u540C\uFF0C\u7B49\u5F85\u624B\u52A8\u5408\u5E76\uFF0C\u4E24\u8FB9\u5747\u672A\u6539\u52A8"
               });
               tick(`\u51B2\u7A81 ${entry.relPath}`);
               return;
@@ -2713,60 +2844,17 @@ async function executePlan(plan, ctx, options) {
   }
   for (const entry of conflicts) {
     steps.push(async () => {
-      const record = state.records[entry.relPath];
-      const fileToken = entry.fileToken ?? record?.fileToken;
-      const previous = state.conflicts[entry.relPath];
-      if (entry.duplicateConflict && previous) {
-        reports.push({
-          relPath: entry.relPath,
-          action: "conflict",
-          ok: true,
-          message: "\u4ECD\u662F\u4E0A\u6B21\u672A\u5904\u7406\u7684\u51B2\u7A81\uFF0C\u672A\u91CD\u590D\u751F\u6210\u526F\u672C",
-          copyPath: previous.copyPath
-        });
-        tick(`\u51B2\u7A81 ${entry.relPath}`);
-        return;
-      }
-      if (!fileToken) {
-        reports.push({ relPath: entry.relPath, action: "conflict", ok: false, message: "\u7F3A\u5C11\u8FDC\u7AEF file_token\uFF0C\u65E0\u6CD5\u53D6\u51FA\u51B2\u7A81\u7248\u672C" });
-        tick(`\u51B2\u7A81 ${entry.relPath}`);
-        return;
-      }
-      try {
-        const bytes = await downloadFile(ctx.client, fileToken);
-        const remoteHash = await sha256Hex(bytes);
-        const present = existsLocally(ctx.app, entry.relPath);
-        const localHash = present ? await hashLocalFile(ctx.app, entry.relPath) : "";
-        if (previous && previous.remoteHash === remoteHash && previous.localHash === localHash) {
-          reports.push({
-            relPath: entry.relPath,
-            action: "conflict",
-            ok: true,
-            message: "\u4ECD\u662F\u4E0A\u6B21\u672A\u5904\u7406\u7684\u51B2\u7A81\uFF0C\u672A\u91CD\u590D\u751F\u6210\u526F\u672C",
-            copyPath: previous.copyPath
-          });
-          tick(`\u51B2\u7A81 ${entry.relPath}`);
-          return;
-        }
-        const copyPath = await writeConflictCopy(entry.relPath, bytes, localHash, remoteHash);
-        reports.push({
-          relPath: entry.relPath,
-          action: "conflict",
-          ok: true,
-          message: "\u8FDC\u7AEF\u7248\u672C\u5DF2\u53E6\u5B58\u4E3A\u526F\u672C\uFF0C\u672C\u5730\u4E0E\u8FDC\u7AEF\u90FD\u672A\u6539\u52A8",
-          copyPath
-        });
-        ctx.logger.warn(`\u51B2\u7A81\uFF1A${entry.relPath} -> ${copyPath}`);
-        tick(`\u51B2\u7A81 ${entry.relPath}`);
-      } catch (error) {
-        reports.push({ relPath: entry.relPath, action: "conflict", ok: false, message: describeError(error) });
-        tick(`\u51B2\u7A81\u5904\u7406\u5931\u8D25 ${entry.relPath}`);
-      }
+      reports.push({
+        relPath: entry.relPath,
+        action: "conflict",
+        ok: true,
+        message: "\u7B49\u5F85\u624B\u52A8\u5408\u5E76\uFF0C\u672C\u5730\u4E0E\u8FDC\u7AEF\u5747\u672A\u6539\u52A8"
+      });
+      ctx.logger.warn(`\u7B49\u5F85\u624B\u52A8\u5408\u5E76\uFF1A${entry.relPath}`);
+      tick(`\u7B49\u5F85\u624B\u52A8\u5408\u5E76 ${entry.relPath}`);
     });
   }
-  for (const step of steps) {
-    await step();
-  }
+  await mapConcurrent(steps, 4, (step) => step());
   if (options.allowPush) {
     for (const entry of remoteDeletes) {
       const record = state.records[entry.relPath];
@@ -2870,10 +2958,64 @@ async function refreshRemoteModifiedTime(ctx, entries) {
   }
 }
 
-// src/sync/planner.ts
-function item(relPath, action, reason, extra = {}) {
-  return { relPath, action, reason, parentDir: dirnameOf(relPath), ...extra };
+// src/sync/engine-base.ts
+function parseTokenFromInput(input) {
+  const value = input.trim();
+  if (!value)
+    return "";
+  if (!/^https?:\/\//i.test(value))
+    return value;
+  try {
+    const url = new URL(value);
+    const segments = url.pathname.split("/").filter(Boolean);
+    return segments.length > 0 ? segments[segments.length - 1] : value;
+  } catch {
+    return value;
+  }
 }
+var BaseSyncEngine = class {
+  constructor(deps) {
+    this.deps = deps;
+    this.syncing = false;
+  }
+  isSyncing() {
+    return this.syncing;
+  }
+  createClient() {
+    return new FeishuClient((force) => this.deps.auth.getToken(force), this.deps.logger);
+  }
+  async listSpaces() {
+    return listSpaces(this.createClient());
+  }
+  async run(options) {
+    if (this.syncing)
+      throw new Error("\u5DF2\u6709\u540C\u6B65\u4EFB\u52A1\u5728\u6267\u884C\u4E2D");
+    this.syncing = true;
+    try {
+      return await this.runInternal(options);
+    } finally {
+      this.syncing = false;
+    }
+  }
+  /** 状态丢失时按标题认回知识库顶层已有页面，避免重复建根容器、重复同步。 */
+  async recognizeRootContainer(client, settings, spaceId, rootNodeToken) {
+    if (rootNodeToken || settings.state.folders[""]?.nodeToken)
+      return;
+    const title = settings.rootPageTitle.trim() || this.deps.app.vault.getName();
+    try {
+      const topLevel = await listNodes(client, spaceId);
+      const found = topLevel.find((node) => node.title === title && node.obj_type !== "file");
+      if (found?.node_token) {
+        settings.state.folders[""] = { nodeToken: found.node_token };
+        this.deps.logger.info(`\u8BC6\u522B\u5230\u5DF2\u6709\u7684\u77E5\u8BC6\u5E93\u9876\u5C42\u9875\u9762\u300C${title}\u300D\uFF0C\u590D\u7528\u5B83\u5B58\u653E vault \u6839\u76EE\u5F55\u4E0B\u7684\u7B14\u8BB0`);
+      }
+    } catch (error) {
+      throw new Error(`\u8BFB\u53D6\u77E5\u8BC6\u5E93\u9876\u5C42\u9875\u9762\u5931\u8D25\uFF0C\u5DF2\u505C\u6B62\u540C\u6B65\u4EE5\u907F\u514D\u91CD\u590D\u521B\u5EFA\uFF1A${String(error)}`);
+    }
+  }
+};
+
+// src/sync/planner.ts
 function remoteFields(remote) {
   return {
     remoteTitle: remote.entry.title,
@@ -2881,16 +3023,6 @@ function remoteFields(remote) {
     nodeToken: remote.entry.nodeToken,
     remoteModifiedTime: remote.modifiedTime
   };
-}
-function conflictItem(relPath, state, reason, extra, localHash, remoteHash) {
-  const previous = state.conflicts[relPath];
-  const duplicate = !!previous && previous.remoteHash === remoteHash && previous.localHash === localHash;
-  return item(relPath, "conflict", duplicate ? "\u4E0E\u4E0A\u6B21\u76F8\u540C\u7684\u51B2\u7A81\uFF0C\u672A\u91CD\u590D\u751F\u6210\u526F\u672C" : reason, {
-    ...extra,
-    localHash,
-    remoteHash,
-    duplicateConflict: duplicate
-  });
 }
 async function buildPlan(input) {
   const { state, local, remote } = input;
@@ -2916,7 +3048,7 @@ async function buildPlan(input) {
           items.push(item(relPath, "link", "\u4E24\u8FB9\u5185\u5BB9\u4E00\u81F4\uFF0C\u53EA\u5EFA\u7ACB\u6620\u5C04", { ...remoteFields(remoteNote), localHash: localHash2, remoteHash: remoteHash2 }));
         } else {
           items.push(
-            conflictItem(relPath, state, "\u9996\u6B21\u5BF9\u63A5\uFF1A\u540C\u540D\u6587\u4EF6\u4E24\u8FB9\u5185\u5BB9\u4E0D\u540C\uFF0C\u5DF2\u4FDD\u7559\u53CC\u65B9", remoteFields(remoteNote), localHash2, remoteHash2)
+            conflictItem(relPath, state, "\u9996\u6B21\u5BF9\u63A5\uFF1A\u540C\u540D\u6587\u4EF6\u4E24\u8FB9\u5185\u5BB9\u4E0D\u540C\uFF0C\u7B49\u5F85\u624B\u52A8\u5408\u5E76", remoteFields(remoteNote), localHash2, remoteHash2)
           );
         }
         continue;
@@ -3027,7 +3159,7 @@ async function buildPlan(input) {
       continue;
     }
     items.push(
-      conflictItem(relPath, state, "\u4E24\u8FB9\u90FD\u6539\u8FC7\u4E14\u5185\u5BB9\u4E0D\u540C\uFF0C\u5DF2\u4FDD\u7559\u53CC\u65B9", remoteFields(remoteNote), localHash, remoteHash)
+      conflictItem(relPath, state, "\u4E24\u8FB9\u90FD\u6539\u8FC7\u4E14\u5185\u5BB9\u4E0D\u540C\uFF0C\u7B49\u5F85\u624B\u52A8\u5408\u5E76", remoteFields(remoteNote), localHash, remoteHash)
     );
   }
   for (const entry of items) {
@@ -3061,44 +3193,9 @@ async function checkRemoteChanged(input, record, remoteNote) {
 }
 
 // src/sync/engine.ts
-function parseTokenFromInput(input) {
-  const value = input.trim();
-  if (!value)
-    return "";
-  if (!/^https?:\/\//i.test(value))
-    return value;
-  try {
-    const url = new URL(value);
-    const segments = url.pathname.split("/").filter(Boolean);
-    return segments.length > 0 ? segments[segments.length - 1] : value;
-  } catch {
-    return value;
-  }
-}
-var SyncEngine = class {
+var SyncEngine = class extends BaseSyncEngine {
   constructor(deps) {
-    this.deps = deps;
-    this.syncing = false;
-  }
-  isSyncing() {
-    return this.syncing;
-  }
-  createClient() {
-    return new FeishuClient((force) => this.deps.auth.getToken(force), this.deps.logger);
-  }
-  async listSpaces() {
-    const client = this.createClient();
-    return listSpaces(client);
-  }
-  async run(options) {
-    if (this.syncing)
-      throw new Error("\u5DF2\u6709\u540C\u6B65\u4EFB\u52A1\u5728\u6267\u884C\u4E2D");
-    this.syncing = true;
-    try {
-      return await this.runInternal(options);
-    } finally {
-      this.syncing = false;
-    }
+    super(deps);
   }
   async runInternal(options) {
     const settings = this.deps.getSettings();
@@ -3120,19 +3217,7 @@ var SyncEngine = class {
       if (options.preApprovedPlan) {
         plan = filterPlan(options.preApprovedPlan, options.mode);
       } else {
-        if (!rootNodeToken && !settings.state.folders[""]?.nodeToken) {
-          const title = settings.rootPageTitle.trim() || this.deps.app.vault.getName();
-          try {
-            const topLevel = await listNodes(client, spaceId);
-            const found = topLevel.find((node) => node.title === title && node.obj_type !== "file");
-            if (found?.node_token) {
-              settings.state.folders[""] = { nodeToken: found.node_token };
-              logger.info(`\u8BC6\u522B\u5230\u5DF2\u6709\u7684\u77E5\u8BC6\u5E93\u9876\u5C42\u9875\u9762\u300C${title}\u300D\uFF0C\u590D\u7528\u5B83\u5B58\u653E vault \u6839\u76EE\u5F55\u4E0B\u7684\u7B14\u8BB0`);
-            }
-          } catch (error) {
-            throw new Error(`\u8BFB\u53D6\u77E5\u8BC6\u5E93\u9876\u5C42\u9875\u9762\u5931\u8D25\uFF0C\u5DF2\u505C\u6B62\u540C\u6B65\u4EE5\u907F\u514D\u91CD\u590D\u521B\u5EFA\uFF1A${String(error)}`);
-          }
-        }
+        await this.recognizeRootContainer(client, settings, spaceId, rootNodeToken);
         options.onProgress?.("\u626B\u63CF\u672C\u5730\u7B14\u8BB0\u2026");
         const local = scanLocalNotes(this.deps.app, filter);
         validateLocalPaths(local.keys(), settings);
@@ -3202,8 +3287,7 @@ var SyncEngine = class {
             const cached = localHashCache.get(relPath);
             if (cached)
               return cached;
-            const bytes = await readLocalBytes(this.deps.app, relPath);
-            const hash = await sha256Hex(bytes);
+            const hash = await sha256Hex(await readLocalBytes(this.deps.app, relPath));
             localHashCache.set(relPath, hash);
             return hash;
           },
@@ -3211,8 +3295,7 @@ var SyncEngine = class {
             const cached = remoteHashCache.get(fileToken);
             if (cached)
               return cached;
-            const bytes = await downloadFile(client, fileToken);
-            const hash = await sha256Hex(bytes);
+            const hash = await sha256Hex(await downloadFile(client, fileToken));
             remoteHashCache.set(fileToken, hash);
             return hash;
           }
@@ -3234,6 +3317,8 @@ var SyncEngine = class {
         if (decision === "pull-only") {
           allowPush = false;
           planForRun = filterPlan(plan, "pull");
+        } else if (typeof decision === "object") {
+          planForRun = applyPlanOverrides(plan, decision.actions);
         }
       }
       assertPlanCurrent(plan, settings);
@@ -3297,7 +3382,7 @@ function warningsText(data) {
   const warnings = data?.warnings;
   if (!Array.isArray(warnings) || warnings.length === 0)
     return "";
-  return `\uFF1B\u670D\u52A1\u7AEF warnings\uFF1A${warnings.map((item3) => String(item3)).join(" / ")}`;
+  return `\uFF1B\u670D\u52A1\u7AEF warnings\uFF1A${warnings.map((item2) => String(item2)).join(" / ")}`;
 }
 function assertOperationSucceeded(endpoint, data) {
   if (typeof data?.result === "string" && data.result.toLowerCase() === "failed") {
@@ -3546,19 +3631,6 @@ function createDocPlanCache() {
     fetchCount: 0
   };
 }
-function item2(relPath, action, reason, extra = {}) {
-  return { relPath, action, reason, parentDir: dirnameOf(relPath), ...extra };
-}
-function conflictItem2(relPath, state, reason, extra, localHash, remoteHash) {
-  const previous = state.conflicts[relPath];
-  const duplicate = !!previous && previous.remoteHash === remoteHash && previous.localHash === localHash;
-  return item2(relPath, "conflict", duplicate ? "\u4E0E\u4E0A\u6B21\u76F8\u540C\u7684\u51B2\u7A81\uFF0C\u672A\u91CD\u590D\u751F\u6210\u526F\u672C" : reason, {
-    ...extra,
-    localHash,
-    remoteHash,
-    duplicateConflict: duplicate
-  });
-}
 async function readLocalCached(input, relPath) {
   const cached = input.cache.localText.get(relPath);
   if (cached !== void 0)
@@ -3629,9 +3701,10 @@ async function buildDocPlan(input) {
   const fingerprint = publishRulesFingerprint(input.rules);
   const warnings = [];
   const relPaths = /* @__PURE__ */ new Set([...local.keys(), ...remote.notes.keys(), ...Object.keys(state.docRecords)]);
-  for (const relPath of Array.from(relPaths).sort()) {
+  const planned = await mapConcurrent(Array.from(relPaths).sort(), 6, async (relPath) => {
+    const items2 = [];
     if (input.isExcluded(relPath))
-      continue;
+      return items2;
     const localNote = local.get(relPath);
     const remoteNote = remote.notes.get(relPath);
     const record = state.docRecords[relPath];
@@ -3641,15 +3714,15 @@ async function buildDocPlan(input) {
     }
     const remoteFields2 = remoteNote ? { remoteTitle: remoteNote.title, nodeToken: remoteNote.nodeToken, documentId: remoteNote.documentId } : {};
     if (input.forcePush && localNote && localNote.size > 0) {
-      items.push(
-        item2(relPath, remoteNote ? "push" : "create-remote", "\u5F3A\u5236\u91CD\u63A8\uFF1A\u5FFD\u7565\u57FA\u7EBF", {
+      items2.push(
+        item(relPath, remoteNote ? "push" : "create-remote", "\u5F3A\u5236\u91CD\u63A8\uFF1A\u5FFD\u7565\u57FA\u7EBF", {
           ...remoteFields2,
           remoteHash: remoteNote ? await fetchedHash(input, remoteNote.documentId) : void 0,
           localSize: localNote.size,
           localMtime: localNote.mtime
         })
       );
-      continue;
+      return items2;
     }
     if (!record) {
       if (localNote && remoteNote) {
@@ -3661,38 +3734,38 @@ async function buildDocPlan(input) {
         ]);
         const extra2 = { ...remoteFields2, localHash: localHash2, remoteHash: hash2, localSize: localNote.size, localMtime: localNote.mtime };
         if (pulled2 === localText2) {
-          items.push(item2(relPath, "link", "\u4E24\u8FB9\u5185\u5BB9\u4E00\u81F4\uFF0C\u53EA\u5EFA\u7ACB\u6620\u5C04", extra2));
+          items2.push(item(relPath, "link", "\u4E24\u8FB9\u5185\u5BB9\u4E00\u81F4\uFF0C\u53EA\u5EFA\u7ACB\u6620\u5C04", extra2));
         } else {
-          items.push(conflictItem2(relPath, state, "\u9996\u6B21\u5BF9\u63A5\uFF1A\u540C\u540D\u6587\u6863\u4E24\u8FB9\u5185\u5BB9\u4E0D\u540C\uFF0C\u5DF2\u4FDD\u7559\u53CC\u65B9", extra2, localHash2, hash2));
+          items2.push(conflictItem(relPath, state, "\u9996\u6B21\u5BF9\u63A5\uFF1A\u540C\u540D\u6587\u6863\u4E24\u8FB9\u5185\u5BB9\u4E0D\u540C\uFF0C\u7B49\u5F85\u624B\u52A8\u5408\u5E76", extra2, localHash2, hash2));
         }
-        continue;
+        return items2;
       }
       if (localNote) {
-        items.push(
-          item2(
+        items2.push(
+          item(
             relPath,
             "create-remote",
             localNote.size === 0 ? "\u7A7A\u7B14\u8BB0\u5728\u6587\u6863\u6A21\u5F0F\u4E0B\u4E5F\u4F1A\u540C\u6B65\uFF08<title> \u4FDD\u8BC1 content \u975E\u7A7A\uFF09" : void 0
           )
         );
-        continue;
+        return items2;
       }
       if (remoteNote) {
-        items.push(item2(relPath, "create-local", void 0, remoteFields2));
+        items2.push(item(relPath, "create-local", void 0, remoteFields2));
       }
-      continue;
+      return items2;
     }
     if (!localNote && !remoteNote) {
-      items.push(item2(relPath, "forget", "\u4E24\u8FB9\u90FD\u5DF2\u4E0D\u5B58\u5728\uFF0C\u6E05\u7406\u6620\u5C04"));
-      continue;
+      items2.push(item(relPath, "forget", "\u4E24\u8FB9\u90FD\u5DF2\u4E0D\u5B58\u5728\uFF0C\u6E05\u7406\u6620\u5C04"));
+      return items2;
     }
     if (!localNote) {
       const remoteState2 = await remoteChangedState(input, record, remoteNote.documentId);
       const hash2 = remoteState2.hash ?? record.baseRemoteHash;
       const stamp = remoteState2.metaTime ? { remoteModifiedTime: remoteState2.metaTime } : {};
       if (remoteState2.changed) {
-        items.push(
-          conflictItem2(
+        items2.push(
+          conflictItem(
             relPath,
             state,
             "\u672C\u5730\u5DF2\u5220\u9664\u3001\u8FDC\u7AEF\u88AB\u4FEE\u6539\uFF1A\u4E3A\u907F\u514D\u4E22\u5185\u5BB9\uFF0C\u672A\u81EA\u52A8\u5904\u7406",
@@ -3702,36 +3775,36 @@ async function buildDocPlan(input) {
           )
         );
       } else if (input.propagateLocalDelete) {
-        items.push(
-          item2(relPath, "delete-remote", "\u672C\u5730\u5DF2\u5220\u9664\uFF0C\u6309\u8BBE\u7F6E\u5220\u9664\u8FDC\u7AEF\u6587\u6863\uFF08\u8FDB\u98DE\u4E66\u56DE\u6536\u7AD9\uFF0C\u53EF\u6062\u590D\uFF09", {
+        items2.push(
+          item(relPath, "delete-remote", "\u672C\u5730\u5DF2\u5220\u9664\uFF0C\u6309\u8BBE\u7F6E\u5220\u9664\u8FDC\u7AEF\u6587\u6863\uFF08\u8FDB\u98DE\u4E66\u56DE\u6536\u7AD9\uFF0C\u53EF\u6062\u590D\uFF09", {
             ...remoteFields2,
             ...stamp
           })
         );
       } else {
-        items.push(item2(relPath, "local-deleted", "\u672C\u5730\u5DF2\u5220\u9664\u3001\u8FDC\u7AEF\u672A\u53D8\uFF08\u672A\u81EA\u52A8\u5220\u9664\u8FDC\u7AEF\uFF09", { ...remoteFields2, ...stamp }));
+        items2.push(item(relPath, "local-deleted", "\u672C\u5730\u5DF2\u5220\u9664\u3001\u8FDC\u7AEF\u672A\u53D8\uFF08\u672A\u81EA\u52A8\u5220\u9664\u8FDC\u7AEF\uFF09", { ...remoteFields2, ...stamp }));
       }
-      continue;
+      return items2;
     }
     if (!remoteNote) {
       const localChanged2 = await isLocalChanged2(input, record, localNote);
       if (!localChanged2) {
         if (input.propagateRemoteDelete) {
-          items.push(
-            item2(relPath, "delete-local", "\u8FDC\u7AEF\u5DF2\u5220\u9664\u4E14\u672C\u5730\u672A\u53D8\uFF0C\u6309\u8BBE\u7F6E\u628A\u672C\u5730\u7B14\u8BB0\u79FB\u8FDB .trash", {
+          items2.push(
+            item(relPath, "delete-local", "\u8FDC\u7AEF\u5DF2\u5220\u9664\u4E14\u672C\u5730\u672A\u53D8\uFF0C\u6309\u8BBE\u7F6E\u628A\u672C\u5730\u7B14\u8BB0\u79FB\u8FDB .trash", {
               localSize: localNote.size,
               localMtime: localNote.mtime
             })
           );
         } else {
-          items.push(item2(relPath, "remote-deleted", "\u8FDC\u7AEF\u5DF2\u5220\u9664\u3001\u672C\u5730\u672A\u53D8\uFF08\u672A\u81EA\u52A8\u5220\u9664\u672C\u5730\uFF09"));
+          items2.push(item(relPath, "remote-deleted", "\u8FDC\u7AEF\u5DF2\u5220\u9664\u3001\u672C\u5730\u672A\u53D8\uFF08\u672A\u81EA\u52A8\u5220\u9664\u672C\u5730\uFF09"));
         }
       } else if (input.recreateRemoteIfDeleted) {
-        items.push(item2(relPath, "create-remote", "\u8FDC\u7AEF\u5DF2\u5220\u9664\u4F46\u672C\u5730\u6709\u4FEE\u6539\uFF0C\u6309\u8BBE\u7F6E\u91CD\u65B0\u4E0A\u4F20"));
+        items2.push(item(relPath, "create-remote", "\u8FDC\u7AEF\u5DF2\u5220\u9664\u4F46\u672C\u5730\u6709\u4FEE\u6539\uFF0C\u6309\u8BBE\u7F6E\u91CD\u65B0\u4E0A\u4F20"));
       } else {
-        items.push(item2(relPath, "remote-deleted", "\u8FDC\u7AEF\u5DF2\u5220\u9664\u3001\u672C\u5730\u6709\u4FEE\u6539\uFF1A\u4E3A\u907F\u514D\u8BEF\u6062\u590D\uFF0C\u672A\u81EA\u52A8\u91CD\u5EFA"));
+        items2.push(item(relPath, "remote-deleted", "\u8FDC\u7AEF\u5DF2\u5220\u9664\u3001\u672C\u5730\u6709\u4FEE\u6539\uFF1A\u4E3A\u907F\u514D\u8BEF\u6062\u590D\uFF0C\u672A\u81EA\u52A8\u91CD\u5EFA"));
       }
-      continue;
+      return items2;
     }
     const localChanged = await isLocalChanged2(input, record, localNote);
     const rulesChanged = record.publishRulesFingerprint !== fingerprint;
@@ -3748,27 +3821,31 @@ async function buildDocPlan(input) {
       remoteModifiedTime: remoteState.metaTime
     };
     if (!localChanged && !remoteChanged) {
-      items.push(rulesChanged ? item2(relPath, "push", "\u8F6C\u6362\u89C4\u5219\u5DF2\u66F4\u65B0\uFF1A\u5237\u65B0\u98DE\u4E66\u6392\u7248\uFF0C\u672C\u5730\u6B63\u6587\u4E0D\u53D8", { ...extra, rulesRefresh: true }) : item2(relPath, "skip", void 0, extra));
-      continue;
+      items2.push(rulesChanged ? item(relPath, "push", "\u8F6C\u6362\u89C4\u5219\u5DF2\u66F4\u65B0\uFF1A\u5237\u65B0\u98DE\u4E66\u6392\u7248\uFF0C\u672C\u5730\u6B63\u6587\u4E0D\u53D8", { ...extra, rulesRefresh: true }) : item(relPath, "skip", void 0, extra));
+      return items2;
     }
     if (localChanged && !remoteChanged) {
-      items.push(item2(relPath, "push", void 0, extra));
-      continue;
+      items2.push(item(relPath, "push", void 0, extra));
+      return items2;
     }
     if (!localChanged && remoteChanged) {
-      items.push(item2(relPath, "pull", void 0, extra));
-      continue;
+      items2.push(item(relPath, "pull", void 0, extra));
+      return items2;
     }
     const [pulled, localText] = await Promise.all([
       pulledContent(input, relPath, remoteNote, localNote),
       readLocalCached(input, relPath)
     ]);
     if (pulled === localText) {
-      items.push(item2(relPath, "link", "\u4E24\u8FB9\u5185\u5BB9\u4E00\u81F4\uFF0C\u53EA\u66F4\u65B0\u57FA\u7EBF", extra));
-      continue;
+      items2.push(item(relPath, "link", "\u4E24\u8FB9\u5185\u5BB9\u4E00\u81F4\uFF0C\u53EA\u66F4\u65B0\u57FA\u7EBF", extra));
+      return items2;
     }
-    items.push(conflictItem2(relPath, state, "\u4E24\u8FB9\u90FD\u6539\u8FC7\u4E14\u5185\u5BB9\u4E0D\u540C\uFF0C\u5DF2\u4FDD\u7559\u53CC\u65B9", extra, localHash, hash ?? localHash));
-  }
+    items2.push(conflictItem(relPath, state, "\u4E24\u8FB9\u90FD\u6539\u8FC7\u4E14\u5185\u5BB9\u4E0D\u540C\uFF0C\u7B49\u5F85\u624B\u52A8\u5408\u5E76", extra, localHash, hash ?? localHash));
+    return items2;
+  });
+  for (const group of planned)
+    items.push(...group);
+  warnings.sort((a, b) => a.relPath.localeCompare(b.relPath));
   for (const entry of items) {
     const note = local.get(entry.relPath);
     if (!note || entry.action === "skip")
@@ -3790,15 +3867,6 @@ async function buildDocPlan(input) {
 
 // src/sync/docExecutor.ts
 var import_obsidian8 = require("obsidian");
-function two2(value) {
-  return String(value).padStart(2, "0");
-}
-function conflictCopyRelPath2(relPath) {
-  const now = /* @__PURE__ */ new Date();
-  const stamp = `${now.getFullYear()}${two2(now.getMonth() + 1)}${two2(now.getDate())}-${two2(now.getHours())}${two2(now.getMinutes())}${two2(now.getSeconds())}-${String(now.getMilliseconds()).padStart(3, "0")}`;
-  const base = relPath.replace(/\.md$/i, "");
-  return `${CONFLICT_DIR}/${base}.${stamp}.md`;
-}
 function encodeText(text) {
   return new TextEncoder().encode(text).buffer;
 }
@@ -3808,59 +3876,19 @@ async function readLocalText(app, relPath) {
     throw new Error(`\u627E\u4E0D\u5230\u672C\u5730\u6587\u4EF6\uFF1A${relPath}`);
   return app.vault.read(file);
 }
-function existsLocally2(app, relPath) {
-  return app.vault.getAbstractFileByPath(relPath) instanceof import_obsidian8.TFile;
-}
 async function executeDocPlan(plan, ctx, options) {
   const reports = [];
   const { state, settings } = ctx;
-  const folderNodes = /* @__PURE__ */ new Map();
-  let rootContainerToken;
-  const ensureRootContainer = async () => {
-    if (ctx.rootNodeToken)
-      return ctx.rootNodeToken;
-    if (rootContainerToken)
-      return rootContainerToken;
-    const cached = state.folders[""];
-    if (cached?.nodeToken) {
-      rootContainerToken = cached.nodeToken;
-      return rootContainerToken;
-    }
-    const title = settings.rootPageTitle.trim() || ctx.app.vault.getName();
-    const topLevel = await listNodes(ctx.client, ctx.spaceId);
-    const found = topLevel.find((node2) => node2.title === title && node2.obj_type !== "file");
-    if (found?.node_token) {
-      state.folders[""] = { nodeToken: found.node_token };
-      rootContainerToken = found.node_token;
-      ctx.logger.info(`\u590D\u7528\u77E5\u8BC6\u5E93\u9876\u5C42\u9875\u9762\u300C${title}\u300D\u5B58\u653E vault \u6839\u76EE\u5F55\u4E0B\u7684\u7B14\u8BB0`);
-      return rootContainerToken;
-    }
-    const node = await createContainerNode(ctx.client, ctx.spaceId, void 0, title);
-    state.folders[""] = { nodeToken: node.node_token };
-    rootContainerToken = node.node_token;
-    ctx.logger.info(`\u5728\u77E5\u8BC6\u5E93\u9876\u5C42\u521B\u5EFA\u9875\u9762\u300C${title}\u300D\u5B58\u653E vault \u6839\u76EE\u5F55\u4E0B\u7684\u7B14\u8BB0`);
-    return rootContainerToken;
-  };
-  const resolveFolderNode = async (relDir, needNoteParent) => {
-    if (settings.folderMode === "flat" || relDir === "") {
-      return needNoteParent ? ensureRootContainer() : ctx.rootNodeToken;
-    }
-    const cached = folderNodes.get(relDir);
-    if (cached)
-      return cached;
-    const existing = state.folders[relDir];
-    if (existing?.nodeToken) {
-      folderNodes.set(relDir, existing.nodeToken);
-      return existing.nodeToken;
-    }
-    const parentDir = dirnameOf(relDir);
-    const parentNode = await resolveFolderNode(parentDir, false);
-    const node = await createContainerNode(ctx.client, ctx.spaceId, parentNode, basenameOf(relDir));
-    state.folders[relDir] = { nodeToken: node.node_token, parentNodeToken: parentNode };
-    folderNodes.set(relDir, node.node_token);
-    ctx.logger.info(`\u521B\u5EFA\u77E5\u8BC6\u5E93\u76EE\u5F55\u8282\u70B9 ${relDir} -> ${node.node_token}`);
-    return node.node_token;
-  };
+  const folders = createFolderResolver({
+    app: ctx.app,
+    client: ctx.client,
+    state,
+    settings,
+    spaceId: ctx.spaceId,
+    rootNodeToken: ctx.rootNodeToken,
+    logger: ctx.logger
+  });
+  const resolveFolderNode = (relDir) => folders.resolveFolderNode(relDir, true);
   const fetchFresh = async (documentId) => {
     const fetched = await fetchDocumentMarkdown(ctx.client, documentId);
     ctx.cache.fetched.set(documentId, fetched);
@@ -3872,13 +3900,6 @@ async function executeDocPlan(plan, ctx, options) {
     if (cached !== void 0)
       return cached;
     return fetchFresh(documentId);
-  };
-  const writeConflictCopy = async (relPath, remoteText, localHash, remoteHash) => {
-    const copyPath = conflictCopyRelPath2(relPath);
-    await ensureFolder(ctx.app.vault.adapter, dirnameOf(copyPath));
-    await ctx.app.vault.adapter.write(copyPath, remoteText);
-    state.conflicts[relPath] = { remoteHash, localHash, copyPath, at: Date.now() };
-    return copyPath;
   };
   const pulls = plan.items.filter((entry) => entry.action === "pull" || entry.action === "create-local");
   const pushes = plan.items.filter((entry) => entry.action === "push" || entry.action === "create-remote");
@@ -3910,7 +3931,7 @@ async function executeDocPlan(plan, ctx, options) {
             throw new Error("\u9884\u89C8\u540E\u672C\u5730\u6B63\u6587\u5DF2\u6539\u53D8\uFF0C\u8BF7\u91CD\u65B0\u9884\u89C8");
           }
           const existingDocumentId = entry.action === "push" ? entry.documentId ?? record?.documentId : void 0;
-          if (existingDocumentId) {
+          if (existingDocumentId && !entry.forceOverwrite) {
             const remoteNow = await fetchFresh(existingDocumentId);
             if (await ctx.hashFetched(remoteNow) !== (entry.remoteHash ?? record?.baseRemoteHash)) {
               throw new Error("\u9884\u89C8\u540E\u98DE\u4E66\u6B63\u6587\u5DF2\u6539\u53D8\uFF0C\u5DF2\u505C\u6B62\u8986\u76D6\uFF0C\u8BF7\u91CD\u65B0\u540C\u6B65\u5904\u7406\u8FDC\u7AEF\u6539\u52A8");
@@ -3927,7 +3948,7 @@ async function executeDocPlan(plan, ctx, options) {
             warnings: []
           };
           const sent = applyRules("toFeishu", localText, ruleContext, ctx.rules);
-          const parentNode = await resolveFolderNode(entry.parentDir, true);
+          const parentNode = await resolveFolderNode(entry.parentDir);
           let documentId;
           let newBlocks = [];
           let revisionId;
@@ -4007,7 +4028,7 @@ async function executeDocPlan(plan, ctx, options) {
           return;
         }
         try {
-          const present = existsLocally2(ctx.app, entry.relPath);
+          const present = existsLocally(ctx.app, entry.relPath);
           if (entry.action === "pull" && !present) {
             reports.push({
               relPath: entry.relPath,
@@ -4048,20 +4069,13 @@ async function executeDocPlan(plan, ctx, options) {
             if (movedSincePlan) {
               const currentText = await readLocalText(ctx.app, entry.relPath);
               if (currentText !== pulled) {
-                const copyPath = await writeConflictCopy(
-                  entry.relPath,
-                  fetched,
-                  await ctx.hashText(currentText),
-                  remoteHash
-                );
                 reports.push({
                   relPath: entry.relPath,
                   action: "conflict",
                   ok: true,
-                  message: "\u8BA1\u5212\u751F\u6210\u540E\u672C\u5730\u53C8\u6709\u65B0\u6539\u52A8\uFF0C\u5DF2\u6539\u4E3A\u4FDD\u7559\u53CC\u65B9\uFF0C\u672C\u5730\u4E0E\u8FDC\u7AEF\u90FD\u672A\u6539\u52A8",
-                  copyPath
+                  message: "\u8BA1\u5212\u751F\u6210\u540E\u672C\u5730\u53C8\u6709\u65B0\u6539\u52A8\uFF0C\u5DF2\u8F6C\u4E3A\u7B49\u5F85\u624B\u52A8\u5408\u5E76\uFF0C\u672C\u5730\u4E0E\u8FDC\u7AEF\u90FD\u672A\u6539\u52A8"
                 });
-                ctx.logger.warn(`\u62C9\u53D6\u524D\u53D1\u73B0\u672C\u5730\u5DF2\u6539\u52A8\uFF0C\u8F6C\u4E3A\u51B2\u7A81\uFF1A${entry.relPath}`);
+                ctx.logger.warn(`\u62C9\u53D6\u524D\u53D1\u73B0\u672C\u5730\u5DF2\u6539\u52A8\uFF0C\u8F6C\u4E3A\u624B\u52A8\u5408\u5E76\uFF1A${entry.relPath}`);
                 tick(`\u51B2\u7A81 ${entry.relPath}`);
                 return;
               }
@@ -4089,7 +4103,7 @@ async function executeDocPlan(plan, ctx, options) {
             tick(`\u8DF3\u8FC7\u7F16\u8F91\u4E2D\u7684 ${entry.relPath}`);
             return;
           }
-          const presentNow = existsLocally2(ctx.app, entry.relPath);
+          const presentNow = existsLocally(ctx.app, entry.relPath);
           if (presentNow !== present || presentNow && (await options.isEditorDirty(entry.relPath) || entry.localHash !== void 0 && await ctx.hashText(await readLocalText(ctx.app, entry.relPath)) !== entry.localHash)) {
             throw new Error("\u4E0B\u8F7D\u671F\u95F4\u672C\u5730\u7B14\u8BB0\u5DF2\u6539\u53D8\uFF0C\u672A\u8986\u76D6\uFF0C\u8BF7\u91CD\u65B0\u540C\u6B65");
           }
@@ -4134,18 +4148,11 @@ async function executeDocPlan(plan, ctx, options) {
           if (entry.action === "create-local" && present) {
             const currentText = await readLocalText(ctx.app, entry.relPath);
             if (currentText !== pulled) {
-              const copyPath = await writeConflictCopy(
-                entry.relPath,
-                fetched,
-                await ctx.hashText(currentText),
-                remoteHash
-              );
               reports.push({
                 relPath: entry.relPath,
                 action: "conflict",
                 ok: true,
-                message: "\u672C\u5730\u5728\u8BA1\u5212\u751F\u6210\u540E\u51FA\u73B0\u4E86\u540C\u540D\u6587\u4EF6\u4E14\u5185\u5BB9\u4E0D\u540C\uFF0C\u5DF2\u4FDD\u7559\u53CC\u65B9",
-                copyPath
+                message: "\u672C\u5730\u5728\u8BA1\u5212\u751F\u6210\u540E\u51FA\u73B0\u4E86\u540C\u540D\u6587\u4EF6\u4E14\u5185\u5BB9\u4E0D\u540C\uFF0C\u7B49\u5F85\u624B\u52A8\u5408\u5E76\uFF0C\u4E24\u8FB9\u5747\u672A\u6539\u52A8"
               });
               tick(`\u51B2\u7A81 ${entry.relPath}`);
               return;
@@ -4219,62 +4226,19 @@ async function executeDocPlan(plan, ctx, options) {
   for (const entry of conflicts) {
     steps.push(async () => {
       const record = state.docRecords[entry.relPath];
-      const documentId = entry.documentId ?? record?.documentId;
-      const previous = state.conflicts[entry.relPath];
-      if (entry.duplicateConflict && previous) {
-        reports.push({
-          relPath: entry.relPath,
-          action: "conflict",
-          ok: true,
-          message: "\u4ECD\u662F\u4E0A\u6B21\u672A\u5904\u7406\u7684\u51B2\u7A81\uFF0C\u672A\u91CD\u590D\u751F\u6210\u526F\u672C",
-          copyPath: previous.copyPath
-        });
-        tick(`\u51B2\u7A81 ${entry.relPath}`);
-        return;
-      }
-      if (!documentId) {
-        reports.push({ relPath: entry.relPath, action: "conflict", ok: false, message: "\u7F3A\u5C11\u8FDC\u7AEF document_id\uFF0C\u65E0\u6CD5\u53D6\u51FA\u51B2\u7A81\u7248\u672C" });
-        tick(`\u51B2\u7A81 ${entry.relPath}`);
-        return;
-      }
-      try {
-        const fetched = await fetchedFor(documentId);
-        const remoteHash = await ctx.hashFetched(fetched);
-        const present = existsLocally2(ctx.app, entry.relPath);
-        const localText = present ? await readLocalText(ctx.app, entry.relPath) : "";
-        const localHash = present ? await ctx.hashText(localText) : "";
-        if (previous && previous.remoteHash === remoteHash && previous.localHash === localHash) {
-          reports.push({
-            relPath: entry.relPath,
-            action: "conflict",
-            ok: true,
-            message: "\u4ECD\u662F\u4E0A\u6B21\u672A\u5904\u7406\u7684\u51B2\u7A81\uFF0C\u672A\u91CD\u590D\u751F\u6210\u526F\u672C",
-            copyPath: previous.copyPath
-          });
-          tick(`\u51B2\u7A81 ${entry.relPath}`);
-          return;
-        }
-        const copyPath = await writeConflictCopy(entry.relPath, fetched, localHash, remoteHash);
-        if (record)
-          record.conflict = true;
-        reports.push({
-          relPath: entry.relPath,
-          action: "conflict",
-          ok: true,
-          message: "\u8FDC\u7AEF\u7248\u672C\u5DF2\u53E6\u5B58\u4E3A\u526F\u672C\uFF0C\u672C\u5730\u4E0E\u8FDC\u7AEF\u90FD\u672A\u6539\u52A8",
-          copyPath
-        });
-        ctx.logger.warn(`\u51B2\u7A81\uFF1A${entry.relPath} -> ${copyPath}`);
-        tick(`\u51B2\u7A81 ${entry.relPath}`);
-      } catch (error) {
-        reports.push({ relPath: entry.relPath, action: "conflict", ok: false, message: describeError(error) });
-        tick(`\u51B2\u7A81\u5904\u7406\u5931\u8D25 ${entry.relPath}`);
-      }
+      if (record)
+        record.conflict = true;
+      reports.push({
+        relPath: entry.relPath,
+        action: "conflict",
+        ok: true,
+        message: "\u7B49\u5F85\u624B\u52A8\u5408\u5E76\uFF0C\u672C\u5730\u4E0E\u8FDC\u7AEF\u5747\u672A\u6539\u52A8"
+      });
+      ctx.logger.warn(`\u7B49\u5F85\u624B\u52A8\u5408\u5E76\uFF1A${entry.relPath}`);
+      tick(`\u7B49\u5F85\u624B\u52A8\u5408\u5E76 ${entry.relPath}`);
     });
   }
-  for (const step of steps) {
-    await step();
-  }
+  await mapConcurrent(steps, 3, (step) => step());
   if (options.allowPush) {
     for (const entry of remoteDeletes) {
       const record = state.docRecords[entry.relPath];
@@ -4286,14 +4250,14 @@ async function executeDocPlan(plan, ctx, options) {
         continue;
       }
       try {
-        if (existsLocally2(ctx.app, entry.relPath) || await options.isEditorDirty(entry.relPath)) {
+        if (existsLocally(ctx.app, entry.relPath) || await options.isEditorDirty(entry.relPath)) {
           throw new Error("\u672C\u5730\u7B14\u8BB0\u5DF2\u6062\u590D\u6216\u6B63\u5728\u7F16\u8F91\uFF0C\u672A\u5220\u9664\u8FDC\u7AEF\uFF0C\u8BF7\u91CD\u65B0\u9884\u89C8");
         }
         const remoteHashNow = await ctx.hashFetched(await fetchFresh(documentId));
         if (!record || remoteHashNow !== record.baseRemoteHash) {
           throw new Error("\u98DE\u4E66\u5185\u5BB9\u5728\u9884\u89C8\u540E\u5DF2\u6539\u53D8\uFF0C\u672A\u5220\u9664\uFF0C\u8BF7\u91CD\u65B0\u540C\u6B65");
         }
-        if (existsLocally2(ctx.app, entry.relPath) || await options.isEditorDirty(entry.relPath)) {
+        if (existsLocally(ctx.app, entry.relPath) || await options.isEditorDirty(entry.relPath)) {
           throw new Error("\u68C0\u67E5\u671F\u95F4\u672C\u5730\u7B14\u8BB0\u5DF2\u6062\u590D\uFF0C\u672A\u5220\u9664\u8FDC\u7AEF");
         }
         await deleteDriveFile(ctx.client, documentId, "docx");
@@ -4317,7 +4281,7 @@ async function executeDocPlan(plan, ctx, options) {
   if (options.allowPull) {
     for (const entry of localDeletes) {
       try {
-        const file = existsLocally2(ctx.app, entry.relPath) ? ctx.app.vault.getAbstractFileByPath(entry.relPath) : null;
+        const file = existsLocally(ctx.app, entry.relPath) ? ctx.app.vault.getAbstractFileByPath(entry.relPath) : null;
         if (file) {
           await assertRemoteAbsent(ctx.client, ctx.spaceId, ctx.rootNodeToken, state.docRecords[entry.relPath]?.documentId);
           if (await options.isEditorDirty(entry.relPath) || !entry.localHash || await ctx.hashText(await readLocalText(ctx.app, entry.relPath)) !== entry.localHash) {
@@ -4476,7 +4440,7 @@ function withSuffix(name, index) {
 async function resolveAttachmentPath(ctx, folder, name, bytes) {
   const join = (fileName) => folder ? `${folder}/${fileName}` : fileName;
   const primary = join(name);
-  if (!existsLocally2(ctx.app, primary))
+  if (!existsLocally(ctx.app, primary))
     return primary;
   try {
     if (bytesEqual(await ctx.readBinary(primary), bytes))
@@ -4486,14 +4450,14 @@ async function resolveAttachmentPath(ctx, folder, name, bytes) {
   }
   for (let index = 1; index < 100; index += 1) {
     const candidate = join(withSuffix(name, index));
-    if (!existsLocally2(ctx.app, candidate))
+    if (!existsLocally(ctx.app, candidate))
       return candidate;
   }
   return void 0;
 }
 async function knownImagePath(ctx, hash) {
   for (const record of [...Object.values(ctx.state.images), ...Object.values(ctx.state.imageUploads)]) {
-    if (record.hash === hash && record.path && existsLocally2(ctx.app, record.path) && await ctx.hashBytes(await ctx.readBinary(record.path)) === hash)
+    if (record.hash === hash && record.path && existsLocally(ctx.app, record.path) && await ctx.hashBytes(await ctx.readBinary(record.path)) === hash)
       return record.path;
   }
   return void 0;
@@ -4520,7 +4484,7 @@ async function downloadRemoteImage(ctx, options) {
       options.warnings.push(`\u9644\u4EF6 ${name} \u540C\u540D\u6587\u4EF6\u8FC7\u591A\uFF0C\u672A\u843D\u76D8\uFF08\u5F15\u7528\u4FDD\u6301\u539F\u6837\uFF09`);
       return void 0;
     }
-    if (!existsLocally2(ctx.app, path))
+    if (!existsLocally(ctx.app, path))
       await writeLocalBytes(ctx.app, path, downloaded.bytes);
     ctx.state.images[options.token] = { path, token: options.token, hash, at: Date.now() };
     ctx.logger.info(`\u5DF2\u4E0B\u8F7D\u8FDC\u7AEF\u56FE\u7247 ${options.token} \u2192 ${path}`);
@@ -4563,7 +4527,7 @@ async function prepareRemoteImages(ctx, fetched, options) {
     let localPath = pathByToken.get(token);
     if (!localPath) {
       const known = ctx.state.images[token];
-      if (known?.hash && existsLocally2(ctx.app, known.path) && await ctx.hashBytes(await ctx.readBinary(known.path)) === known.hash) {
+      if (known?.hash && existsLocally(ctx.app, known.path) && await ctx.hashBytes(await ctx.readBinary(known.path)) === known.hash) {
         localPath = known.path;
       } else {
         localPath = await downloadRemoteImage(ctx, { token, alt: ref.alt, url: ref.url, warnings: options.warnings });
@@ -4578,29 +4542,9 @@ async function prepareRemoteImages(ctx, fetched, options) {
 }
 
 // src/sync/docEngine.ts
-var DocSyncEngine = class {
+var DocSyncEngine = class extends BaseSyncEngine {
   constructor(deps) {
-    this.deps = deps;
-    this.syncing = false;
-  }
-  isSyncing() {
-    return this.syncing;
-  }
-  createClient() {
-    return new FeishuClient((force) => this.deps.auth.getToken(force), this.deps.logger);
-  }
-  async listSpaces() {
-    return listSpaces(this.createClient());
-  }
-  async run(options) {
-    if (this.syncing)
-      throw new Error("\u5DF2\u6709\u540C\u6B65\u4EFB\u52A1\u5728\u6267\u884C\u4E2D");
-    this.syncing = true;
-    try {
-      return await this.runInternal(options);
-    } finally {
-      this.syncing = false;
-    }
+    super(deps);
   }
   async runInternal(options) {
     const settings = this.deps.getSettings();
@@ -4626,19 +4570,7 @@ var DocSyncEngine = class {
         const plan2 = filterPlan(options.preApprovedPlan, options.mode);
         return await this.execute(plan2, options, { settings, client, spaceId, rootNodeToken, filter, rules });
       }
-      if (!rootNodeToken && !settings.state.folders[""]?.nodeToken) {
-        const title = settings.rootPageTitle.trim() || this.deps.app.vault.getName();
-        try {
-          const topLevel = await listNodes(client, spaceId);
-          const found = topLevel.find((node) => node.title === title && node.obj_type !== "file");
-          if (found?.node_token) {
-            settings.state.folders[""] = { nodeToken: found.node_token };
-            logger.info(`\u8BC6\u522B\u5230\u5DF2\u6709\u7684\u77E5\u8BC6\u5E93\u9876\u5C42\u9875\u9762\u300C${title}\u300D\uFF0C\u590D\u7528\u5B83\u5B58\u653E vault \u6839\u76EE\u5F55\u4E0B\u7684\u7B14\u8BB0`);
-          }
-        } catch (error) {
-          throw new Error(`\u8BFB\u53D6\u77E5\u8BC6\u5E93\u9876\u5C42\u9875\u9762\u5931\u8D25\uFF0C\u5DF2\u505C\u6B62\u540C\u6B65\u4EE5\u907F\u514D\u91CD\u590D\u521B\u5EFA\uFF1A${String(error)}`);
-        }
-      }
+      await this.recognizeRootContainer(client, settings, spaceId, rootNodeToken);
       options.onProgress?.("\u626B\u63CF\u672C\u5730\u7B14\u8BB0\u2026");
       const local = scanLocalNotes(this.deps.app, filter);
       validateLocalPaths(local.keys(), settings);
@@ -4697,7 +4629,7 @@ var DocSyncEngine = class {
         readLocal: (relPath) => readLocalText(this.deps.app, relPath),
         hashText: (text) => this.hashText(text),
         hashFetched: (text) => this.hashFetched(text),
-        fetchMarkdown: (documentId) => this.fetchMarkdown(client, documentId)
+        fetchMarkdown: (documentId) => fetchDocumentMarkdown(client, documentId)
       });
       logger.debug(
         `\u6587\u6863\u6A21\u5F0F\uFF1A\u672C\u8F6E fetch \u6587\u6863 ${cache.fetchCount} \u6B21\u3001\u6279\u91CF\u5143\u6570\u636E ${remoteModifiedTimes.size > 0 ? "\u547D\u4E2D" : "\u672A\u547D\u4E2D"}\uFF08${settings.docVerifyRemoteByContent ? "\u5B89\u5168\u9600\u6253\u5F00\uFF1A\u6BCF\u8F6E\u5168\u6587\u6821\u9A8C" : "\u65F6\u95F4\u6233\u5FEB\u8DEF\u5F84"}\uFF09`
@@ -4719,7 +4651,7 @@ var DocSyncEngine = class {
   async hashText(text) {
     return sha256Hex(new TextEncoder().encode(text).buffer);
   }
-  /** 远端基线用"取回形态 + 图片 URL 归一化"：图片 URL 里可能带会过期的签名，不归一化会天天判成远端变了。 */
+  /** 远端基线用"取回形态 + 图片 URL 归一化"：URL 里带会过期的签名，不归一化会天天判成远端变了。 */
   async hashFetched(text) {
     return this.hashText(normalizeRemoteImageUrls(text));
   }
@@ -4736,9 +4668,6 @@ var DocSyncEngine = class {
       return { path: target.path, size: target.stat?.size ?? 0 };
     };
   }
-  async fetchMarkdown(client, documentId) {
-    return fetchDocumentMarkdown(client, documentId);
-  }
   async execute(plan, options, context) {
     let allowPush = options.mode !== "pull";
     const allowPull = options.mode !== "push";
@@ -4750,6 +4679,8 @@ var DocSyncEngine = class {
       if (decision === "pull-only") {
         allowPush = false;
         planForRun = filterPlan(plan, "pull");
+      } else if (typeof decision === "object") {
+        planForRun = applyPlanOverrides(plan, decision.actions);
       }
     }
     assertPlanCurrent(plan, context.settings);
@@ -4796,7 +4727,7 @@ var DocSyncEngine = class {
       await this.deps.saveSettings();
     }
   }
-  /** 批量取「最后修改时间」（Unix 秒字符串）：文档 id → 时间戳。取不到就返回空，调用方退回逐篇取回。 */
+  /** 批量取「最后修改时间」（Unix 秒字符串）；取不到就返回空，调用方退回逐篇取回校验。 */
   async batchDocumentModifyTimes(client, state) {
     const tokens = Array.from(new Set(Object.values(state.docRecords).map((record) => record.documentId))).filter(Boolean);
     if (tokens.length === 0)
@@ -4841,6 +4772,19 @@ function touchedRelPaths(report) {
       touched.add(entry.relPath);
   }
   return touched;
+}
+
+// src/sync/legacy-conflicts.ts
+async function removeLegacyConflictCopies(app, logger) {
+  const adapter = app.vault.adapter;
+  try {
+    if (await adapter.exists(LEGACY_CONFLICT_DIR)) {
+      await adapter.rmdir(LEGACY_CONFLICT_DIR, true);
+      logger.info("\u5DF2\u6E05\u7406\u65E7\u7248\u51B2\u7A81\u526F\u672C\u76EE\u5F55");
+    }
+  } catch (error) {
+    logger.warn(`\u65E7\u7248\u51B2\u7A81\u526F\u672C\u6E05\u7406\u5931\u8D25\uFF1A${String(error)}`);
+  }
 }
 
 // src/ui/auth-modal.ts
@@ -4921,70 +4865,294 @@ function renderFormatWarnings(container, plan) {
 }
 
 // src/ui/plan-modal.ts
-var GROUPS = [
-  { key: "push", title: "\u4F1A\u4E0A\u4F20\u5230\u98DE\u4E66", actions: ["push", "create-remote"] },
-  { key: "pull", title: "\u4F1A\u62C9\u53D6\u5230\u672C\u5730", actions: ["pull", "create-local"] },
-  { key: "delete-remote", title: "\u4F1A\u5220\u9664\u8FDC\u7AEF\uFF08\u8FDB\u98DE\u4E66\u56DE\u6536\u7AD9\uFF0C\u53EF\u6062\u590D\uFF09", actions: ["delete-remote"] },
-  { key: "delete-local", title: "\u4F1A\u5220\u9664\u672C\u5730\u6587\u4EF6\uFF08\u79FB\u5165 .trash\uFF09", actions: ["delete-local"] },
-  { key: "conflict", title: "\u51B2\u7A81\uFF08\u4FDD\u7559\u53CC\u65B9\uFF0C\u4E0D\u81EA\u52A8\u8986\u76D6\uFF09", actions: ["conflict"] },
-  { key: "link", title: "\u53EA\u5EFA\u7ACB\u6620\u5C04", actions: ["link"] },
-  { key: "observe", title: "\u4EC5\u63D0\u793A\uFF0C\u4E0D\u4F1A\u6539\u52A8\u4EFB\u4F55\u4E00\u8FB9", actions: ["local-deleted", "remote-deleted", "empty-local", "dirty-editor", "forget"] }
+var SECTIONS = [
+  { key: "upload", title: "\u4E0A\u4F20\u5230\u98DE\u4E66", actions: ["push", "create-remote"], selectable: true, always: true },
+  { key: "download", title: "\u4ECE\u98DE\u4E66\u4E0B\u8F7D", actions: ["pull", "create-local"], selectable: true, always: true },
+  { key: "conflict", title: "\u5B58\u5728\u51B2\u7A81", actions: ["conflict"], selectable: true, always: true },
+  { key: "other", title: "\u5220\u9664\u8FDC\u7AEF", actions: ["delete-remote"], selectable: false },
+  { key: "other", title: "\u5220\u9664\u672C\u5730", actions: ["delete-local"], selectable: false },
+  { key: "other", title: "\u5EFA\u7ACB\u6620\u5C04", actions: ["link"], selectable: false },
+  { key: "other", title: "\u4EC5\u63D0\u793A", actions: ["local-deleted", "remote-deleted", "empty-local", "dirty-editor", "forget"], selectable: false }
 ];
+var SUMMARY_FAMILIES = [
+  { label: "\u4E0A\u4F20", actions: ["push", "create-remote"], cls: "is-push" },
+  { label: "\u4E0B\u8F7D", actions: ["pull", "create-local"], cls: "is-pull" },
+  { label: "\u51B2\u7A81", actions: ["conflict"], cls: "is-conflict" },
+  { label: "\u5220\u8FDC\u7AEF", actions: ["delete-remote"], cls: "is-delete" },
+  { label: "\u5220\u672C\u5730", actions: ["delete-local"], cls: "is-delete" },
+  { label: "\u5EFA\u6620\u5C04", actions: ["link"], cls: "is-other" }
+];
+var PLAN_LABELS = {
+  skip: "\u5DF2\u540C\u6B65",
+  push: "\u4E0A\u4F20",
+  "create-remote": "\u65B0\u5EFA\u4E0A\u4F20",
+  pull: "\u4E0B\u8F7D",
+  "create-local": "\u65B0\u5EFA\u4E0B\u8F7D",
+  link: "\u5EFA\u7ACB\u6620\u5C04",
+  conflict: "\u51B2\u7A81",
+  "delete-remote": "\u5220\u9664\u8FDC\u7AEF",
+  "delete-local": "\u5220\u9664\u672C\u5730",
+  "local-deleted": "\u672C\u5730\u5DF2\u5220\u9664",
+  "remote-deleted": "\u8FDC\u7AEF\u5DF2\u5220\u9664",
+  "empty-local": "\u7A7A\u6587\u4EF6",
+  "dirty-editor": "\u7F16\u8F91\u4E2D",
+  forget: "\u6E05\u7406\u6620\u5C04"
+};
+var CONFLICT_LABELS = {
+  push: "\u4E0A\u4F20\u8986\u76D6",
+  pull: "\u4E0B\u8F7D\u8986\u76D6",
+  skip: "\u8DF3\u8FC7"
+};
+var RENDER_CAP = 500;
 var PlanModal = class extends import_obsidian10.Modal {
   constructor(app, plan, resolve) {
     super(app);
     this.plan = plan;
     this.resolve = resolve;
     this.decided = false;
+    /** 仅为「偏离计划」的项记录动作：普通文件取消勾选 = skip，冲突选择上传/下载。 */
+    this.actions = {};
+    /** 冲突勾选集合：只有冲突需要选中后再统一指定处理方式。 */
+    this.conflictSelected = /* @__PURE__ */ new Set();
+    this.conflictEntries = [];
+    this.rowRefreshers = /* @__PURE__ */ new Map();
+    this.groupRefreshers = [];
+    this.bulkButtons = /* @__PURE__ */ new Map();
+    this.conflictCountEl = null;
+    this.executeButton = null;
   }
   onOpen() {
+    this.modalEl.addClass("feishu-sync-modal");
     const { contentEl } = this;
     contentEl.empty();
-    contentEl.createEl("h2", { text: "\u98DE\u4E66\u540C\u6B65\u8BA1\u5212" });
-    const summary = contentEl.createEl("div", { cls: "feishu-sync-summary" });
-    const counts = Object.entries(this.plan.counts).filter(([action]) => action !== "skip").map(([action, count]) => `${ACTION_LABELS[action] ?? action} ${count}`).join(" \xB7 ");
-    summary.createEl("div", {
-      text: `\u672C\u5730 ${this.plan.localNoteCount} \u7BC7 \xB7 \u8FDC\u7AEF ${this.plan.remoteNoteCount} \u7BC7${counts ? ` \xB7 ${counts}` : " \xB7 \u65E0\u5F85\u5904\u7406\u6539\u52A8"}`
+    this.conflictEntries.length = 0;
+    this.rowRefreshers.clear();
+    this.groupRefreshers.length = 0;
+    this.bulkButtons.clear();
+    const heading = contentEl.createEl("div", { cls: "feishu-sync-heading" });
+    const headingIcon = heading.createEl("div", { cls: "feishu-sync-heading-icon" });
+    (0, import_obsidian10.setIcon)(headingIcon, "refresh-cw");
+    const headingText = heading.createEl("div", { cls: "feishu-sync-heading-text" });
+    headingText.createEl("h2", { cls: "feishu-sync-title", text: "\u540C\u6B65\u8BA1\u5212" });
+    headingText.createEl("div", {
+      cls: "feishu-sync-subtitle",
+      text: `\u672C\u5730 ${this.plan.localNoteCount} \u7BC7 \xB7 \u8FDC\u7AEF ${this.plan.remoteNoteCount} \u7BC7`
     });
+    const chips = contentEl.createEl("div", { cls: "feishu-sync-chips" });
+    for (const family of SUMMARY_FAMILIES) {
+      const count = family.actions.reduce((sum, action) => sum + (this.plan.counts[action] ?? 0), 0);
+      if (count > 0)
+        chips.createEl("span", { cls: `feishu-sync-chip ${family.cls}`, text: `${family.label} ${count}` });
+    }
     const skipped = this.plan.counts.skip ?? 0;
-    if (skipped > 0) {
-      summary.createEl("div", { text: `\u5DF2\u540C\u6B65\u4E14\u65E0\u53D8\u5316\uFF1A${skipped} \u7BC7`, cls: "feishu-sync-reason" });
-    }
+    if (skipped > 0)
+      chips.createEl("span", { cls: "feishu-sync-chip is-muted", text: `\u65E0\u53D8\u5316 ${skipped}` });
+    if (chips.childElementCount === 0)
+      chips.createEl("span", { cls: "feishu-sync-chip is-muted", text: "\u6CA1\u6709\u5F85\u5904\u7406\u6539\u52A8" });
+    if ((this.plan.counts.conflict ?? 0) > 0)
+      this.renderConflictToolbar(contentEl);
     renderFormatWarnings(contentEl, this.plan);
-    for (const group of GROUPS) {
-      const items = this.plan.items.filter((entry) => group.actions.includes(entry.action));
-      if (items.length === 0)
+    const groups = contentEl.createEl("div", { cls: "feishu-sync-groups" });
+    for (const section of SECTIONS) {
+      const items = this.plan.items.filter((entry) => section.actions.includes(entry.action));
+      if (items.length === 0 && !section.always)
         continue;
-      const section = contentEl.createEl("div", { cls: "feishu-sync-section" });
-      section.createEl("h4", { text: `${group.title}\uFF08${items.length}\uFF09` });
-      const list = section.createEl("div", { cls: "feishu-sync-list" });
-      for (const entry of items.slice(0, 200)) {
-        renderItem(list, entry);
-      }
-      if (items.length > 200) {
-        list.createEl("div", { text: `\u2026\u8FD8\u6709 ${items.length - 200} \u9879`, cls: "feishu-sync-reason" });
-      }
+      this.renderSection(groups, section, items);
     }
-    new import_obsidian10.Setting(contentEl).addButton(
+    const footer = new import_obsidian10.Setting(contentEl);
+    footer.settingEl.addClass("feishu-sync-footer");
+    footer.addButton(
       (button) => button.setButtonText("\u53D6\u6D88").onClick(() => {
         this.decide("cancel");
         this.close();
       })
-    ).addButton(
-      (button) => button.setButtonText("\u4EC5\u62C9\u53D6\uFF08\u4E0D\u63A8\u9001\uFF09").onClick(() => {
-        this.decide("pull-only");
+    ).addButton((button) => {
+      this.executeButton = button.setButtonText("\u6267\u884C\u540C\u6B65").setCta().onClick(() => {
+        const decision = Object.keys(this.actions).length > 0 ? { kind: "overrides", actions: { ...this.actions } } : "all";
+        this.decide(decision);
         this.close();
-      })
-    ).addButton(
-      (button) => button.setButtonText("\u6267\u884C\u5168\u90E8").setCta().onClick(() => {
-        this.decide("all");
-        this.close();
-      })
-    );
+      });
+    });
+    this.refreshAll();
   }
   onClose() {
     this.contentEl.empty();
     this.decide("cancel");
+  }
+  /** 冲突处理：勾选冲突后可统一设为手动合并 / 上传 / 下载。 */
+  renderConflictToolbar(container) {
+    const toolbar = container.createEl("div", { cls: "feishu-sync-toolbar" });
+    const selectionLine = toolbar.createEl("div", { cls: "feishu-sync-toolbar-line" });
+    this.conflictCountEl = selectionLine.createEl("span", { cls: "feishu-sync-selected-count" });
+    const selectAll = selectionLine.createEl("button", { cls: "feishu-sync-text-button", text: "\u5168\u9009" });
+    selectAll.addEventListener("click", () => {
+      for (const entry of this.conflictEntries)
+        this.conflictSelected.add(entry.relPath);
+      this.refreshAll();
+    });
+    const clear = selectionLine.createEl("button", { cls: "feishu-sync-text-button", text: "\u6E05\u7A7A" });
+    clear.addEventListener("click", () => {
+      this.conflictSelected.clear();
+      this.refreshAll();
+    });
+    const actionLine = toolbar.createEl("div", { cls: "feishu-sync-toolbar-line feishu-sync-bulk-line" });
+    actionLine.createEl("span", { cls: "feishu-sync-toolbar-label", text: "\u51B2\u7A81\u5904\u7406\u65B9\u5F0F" });
+    const bulkDefinitions = [
+      { value: "", label: "\u624B\u52A8\u5408\u5E76", hint: "\u672C\u5730\u4E0E\u8FDC\u7AEF\u90FD\u4E0D\u6539\u52A8\uFF0C\u7A0D\u540E\u624B\u52A8\u6574\u7406" },
+      { value: "push", label: "\u4E0A\u4F20", hint: "\u7528\u672C\u5730\u7248\u672C\u8986\u76D6\u98DE\u4E66\u8FDC\u7AEF" },
+      { value: "pull", label: "\u4E0B\u8F7D", hint: "\u7528\u98DE\u4E66\u8FDC\u7AEF\u8986\u76D6\u672C\u5730\u7248\u672C" }
+    ];
+    for (const definition of bulkDefinitions) {
+      const button = actionLine.createEl("button", { cls: "feishu-sync-bulk-button", text: definition.label });
+      button.title = definition.hint;
+      button.addEventListener("click", () => this.applyConflictAction(definition.value));
+      this.bulkButtons.set(definition.value, button);
+    }
+  }
+  renderSection(container, section, items) {
+    const element = container.createEl("div", { cls: "feishu-sync-section" });
+    const header = element.createEl("div", { cls: "feishu-sync-group-header" });
+    if (section.selectable) {
+      const checkbox = header.createEl("input", {
+        cls: "feishu-sync-checkbox",
+        attr: { type: "checkbox", "aria-label": `\u9009\u62E9${section.title}\u5168\u90E8\u6587\u4EF6` }
+      });
+      checkbox.addEventListener("change", () => {
+        if (section.key === "conflict") {
+          for (const entry of items) {
+            if (checkbox.checked)
+              this.conflictSelected.add(entry.relPath);
+            else
+              this.conflictSelected.delete(entry.relPath);
+          }
+        } else {
+          for (const entry of items) {
+            if (checkbox.checked)
+              delete this.actions[entry.relPath];
+            else
+              this.actions[entry.relPath] = "skip";
+          }
+        }
+        this.refreshAll();
+      });
+      this.groupRefreshers.push(() => {
+        const checkedCount = items.filter(
+          (entry) => section.key === "conflict" ? this.conflictSelected.has(entry.relPath) : this.actions[entry.relPath] !== "skip"
+        ).length;
+        checkbox.checked = items.length > 0 && checkedCount === items.length;
+        checkbox.indeterminate = checkedCount > 0 && checkedCount < items.length;
+      });
+    }
+    const name = header.createEl("div", { cls: "feishu-sync-group-name" });
+    name.createEl("span", { cls: "feishu-sync-group-title", text: section.title });
+    name.createEl("span", { cls: "feishu-sync-group-count", text: String(items.length) });
+    const body = element.createEl("div", { cls: "feishu-sync-list" });
+    for (const entry of items.slice(0, RENDER_CAP))
+      this.renderItem(body, section.key, entry);
+    if (items.length > RENDER_CAP) {
+      body.createEl("div", { text: `\u4EC5\u663E\u793A\u524D ${RENDER_CAP} \u9879\uFF0C\u8FD8\u6709 ${items.length - RENDER_CAP} \u9879`, cls: "feishu-sync-more" });
+    }
+  }
+  renderItem(container, sectionKey, entry) {
+    const selectable = sectionKey === "upload" || sectionKey === "download" || sectionKey === "conflict";
+    const row = container.createEl(selectable ? "label" : "div", { cls: "feishu-sync-row" });
+    if (!selectable)
+      row.addClass("is-plain");
+    let checkbox = null;
+    if (selectable) {
+      checkbox = row.createEl("input", {
+        cls: "feishu-sync-checkbox",
+        attr: { type: "checkbox", "aria-label": sectionKey === "conflict" ? `\u9009\u62E9\u51B2\u7A81 ${entry.relPath}` : `\u5305\u542B ${entry.relPath}` }
+      });
+      if (sectionKey === "conflict") {
+        this.conflictEntries.push(entry);
+        checkbox.addEventListener("change", () => {
+          if (checkbox.checked)
+            this.conflictSelected.add(entry.relPath);
+          else
+            this.conflictSelected.delete(entry.relPath);
+          this.refreshAll();
+        });
+      } else {
+        checkbox.addEventListener("change", () => {
+          if (checkbox.checked)
+            delete this.actions[entry.relPath];
+          else
+            this.actions[entry.relPath] = "skip";
+          this.refreshAll();
+        });
+      }
+    }
+    row.createEl("span", {
+      cls: `feishu-sync-badge is-${badgeClass(entry.action)}`,
+      text: PLAN_LABELS[entry.action] ?? entry.action
+    });
+    const path = row.createEl("span", {
+      cls: "feishu-sync-path",
+      title: entry.reason ? `${entry.relPath}
+${entry.reason}` : entry.relPath
+    });
+    const slash = entry.relPath.lastIndexOf("/");
+    if (slash >= 0)
+      path.createEl("span", { cls: "feishu-sync-dir", text: entry.relPath.slice(0, slash + 1) });
+    path.createEl("span", { cls: "feishu-sync-filename", text: entry.relPath.slice(slash + 1) });
+    const override = row.createEl("span", { cls: "feishu-sync-override" });
+    if (selectable) {
+      const refresh = () => {
+        if (sectionKey === "conflict") {
+          const value = this.actions[entry.relPath] ?? "";
+          checkbox.checked = this.conflictSelected.has(entry.relPath);
+          row.toggleClass("is-selected", checkbox.checked);
+          override.setText(value ? CONFLICT_LABELS[value] : "");
+          override.className = `feishu-sync-override${value ? ` is-${value}` : ""}`;
+        } else {
+          checkbox.checked = this.actions[entry.relPath] !== "skip";
+          row.toggleClass("is-skipped", !checkbox.checked);
+          override.setText("");
+          override.className = "feishu-sync-override";
+        }
+      };
+      this.rowRefreshers.set(entry.relPath, refresh);
+      refresh();
+    }
+  }
+  applyConflictAction(value) {
+    if (this.conflictSelected.size === 0)
+      return;
+    for (const entry of this.conflictEntries) {
+      if (!this.conflictSelected.has(entry.relPath))
+        continue;
+      if (value)
+        this.actions[entry.relPath] = value;
+      else
+        delete this.actions[entry.relPath];
+    }
+    this.refreshAll();
+  }
+  refreshAll() {
+    const conflictTotal = this.conflictEntries.length;
+    const conflictSelectedCount = this.conflictEntries.filter((entry) => this.conflictSelected.has(entry.relPath)).length;
+    const adjustedCount = Object.keys(this.actions).length;
+    this.conflictCountEl?.setText(
+      conflictTotal === 0 ? "\u6CA1\u6709\u51B2\u7A81" : conflictSelectedCount > 0 ? `\u5DF2\u9009 ${conflictSelectedCount} \u4E2A\u51B2\u7A81` : `\u5171 ${conflictTotal} \u4E2A\u51B2\u7A81\uFF0C\u672A\u9009\u62E9`
+    );
+    this.executeButton?.setButtonText(adjustedCount > 0 ? `\u6267\u884C\u540C\u6B65 \xB7 ${adjustedCount} \u9879\u5DF2\u8C03\u6574` : "\u6267\u884C\u540C\u6B65");
+    for (const [choice, button] of this.bulkButtons) {
+      button.disabled = conflictSelectedCount === 0;
+      button.title = conflictSelectedCount === 0 ? "\u8BF7\u5148\u52FE\u9009\u51B2\u7A81\u6587\u4EF6" : "";
+      const active = conflictSelectedCount > 0 && this.selectedConflictsEvery(
+        (entry) => (this.actions[entry.relPath] ?? "") === choice
+      );
+      button.toggleClass("is-active", active);
+    }
+    for (const refresh of this.rowRefreshers.values())
+      refresh();
+    for (const refresh of this.groupRefreshers)
+      refresh();
+  }
+  selectedConflictsEvery(predicate) {
+    const selected = this.conflictEntries.filter((entry) => this.conflictSelected.has(entry.relPath));
+    return selected.length > 0 && selected.every(predicate);
   }
   decide(decision) {
     if (this.decided)
@@ -4993,15 +5161,6 @@ var PlanModal = class extends import_obsidian10.Modal {
     this.resolve(decision);
   }
 };
-function renderItem(container, entry) {
-  const row = container.createEl("div", { cls: "feishu-sync-plan-item" });
-  const badge = row.createEl("span", { cls: `feishu-sync-badge is-${badgeClass(entry.action)}`, text: ACTION_LABELS[entry.action] ?? entry.action });
-  badge.setAttr("title", entry.action);
-  row.createEl("span", { cls: "feishu-sync-path", text: entry.relPath });
-  if (entry.reason) {
-    row.createEl("span", { cls: "feishu-sync-reason", text: entry.reason });
-  }
-}
 function badgeClass(action) {
   if (action === "push" || action === "create-remote")
     return "push";
@@ -5024,6 +5183,7 @@ var ReportModal = class extends import_obsidian11.Modal {
     this.executed = executed;
   }
   onOpen() {
+    this.modalEl.addClass("feishu-sync-modal");
     const { contentEl } = this;
     contentEl.empty();
     contentEl.createEl("h2", { text: this.executed ? "\u98DE\u4E66\u540C\u6B65\u7ED3\u679C" : "\u98DE\u4E66\u540C\u6B65\u8BA1\u5212\uFF08\u672A\u6267\u884C\uFF09" });
@@ -5037,7 +5197,7 @@ var ReportModal = class extends import_obsidian11.Modal {
       summary.createEl("div", { cls: "feishu-sync-reason", text: `\u672C\u6B21\u8BA1\u5212\uFF1A${planCounts}` });
     }
     renderFormatWarnings(contentEl, this.plan);
-    renderSection(contentEl, "\u51B2\u7A81\u526F\u672C\uFF08\u672C\u5730\u4E0E\u8FDC\u7AEF\u5747\u672A\u6539\u52A8\uFF0C\u526F\u672C\u5728 .obsidian/feishu-sync/conflicts/\uFF09", conflicts, true);
+    renderSection(contentEl, "\u5F85\u624B\u52A8\u5408\u5E76\uFF08\u672C\u5730\u4E0E\u8FDC\u7AEF\u5747\u672A\u6539\u52A8\uFF09", conflicts, true);
     renderSection(contentEl, "\u5DF2\u6267\u884C", changed, false);
     renderSection(contentEl, "\u9700\u8981\u6CE8\u610F\uFF08\u672A\u81EA\u52A8\u5904\u7406\uFF09", this.report.filter((entry) => !isChange(entry.action) && entry.action !== "conflict"), false);
     renderSection(contentEl, "\u5931\u8D25", failed, false);
@@ -5063,11 +5223,14 @@ function renderSection(container, title, entries, isConflict) {
       text: entry.ok ? ACTION_LABELS[entry.action] ?? entry.action : "\u5931\u8D25"
     });
     badge.setAttr("title", entry.action);
-    row.createEl("span", { cls: "feishu-sync-path", text: entry.relPath });
+    row.createEl("span", {
+      cls: "feishu-sync-path",
+      text: entry.relPath,
+      title: entry.message ? `${entry.relPath}
+${entry.message}` : entry.relPath
+    });
     if (entry.copyPath)
       row.createEl("span", { cls: "feishu-sync-reason", text: `\u526F\u672C\uFF1A${entry.copyPath}` });
-    if (entry.message)
-      row.createEl("span", { cls: "feishu-sync-reason", text: entry.message });
   }
   if (entries.length > 300) {
     list.createEl("div", { text: `\u2026\u8FD8\u6709 ${entries.length - 300} \u9879`, cls: "feishu-sync-reason" });
@@ -5099,6 +5262,7 @@ var FeishuWikiSyncPlugin = class extends import_obsidian12.Plugin {
       () => this.app,
       () => this.settings.debugLog
     );
+    await removeLegacyConflictCopies(this.app, this.logger);
     this.auth = new AuthManager(
       () => ({
         mode: this.settings.authMode,

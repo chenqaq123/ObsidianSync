@@ -4,18 +4,11 @@ import type { DocNewBlock } from "./docImages";
 import { readNewBlocks, readRevisionId } from "./docImages";
 import { encodeFeishuMath } from "../convert/markdown";
 
-/**
- * docs_ai 接口：新版文档（docx）与 Markdown 的互转。请求形状照抄官方 CLI
- * （github.com/larksuite/cli，shortcuts/doc/*.go）：
- *   - 创建 POST /open-apis/docs_ai/v1/documents                  （docs_create_v2.go buildCreateBody）
- *   - 更新 PUT  /open-apis/docs_ai/v1/documents/{document_id}    （docs_update_v2.go buildUpdateBodyBase）
- *   - 取回 POST /open-apis/docs_ai/v1/documents/{token}/fetch    （docs_fetch_v2.go buildFetchBody）
- *   - 异步 GET  /open-apis/docs_ai/v1/async_tasks/{task_id}      （docs_create_async.go）
- */
+/** docs_ai 接口（docx ↔ Markdown 互转），请求形状照抄官方 CLI（larksuite/cli shortcuts/doc）。 */
 
 /** extra_param 是 JSON 字符串而不是对象；open_create_async 让服务端返回 task_id 走异步轮询。 */
 const CREATE_EXTRA_PARAM = '{"open_create_async":true}';
-/** 与官方 CLI 的 fetch 默认值一致（docs_fetch_v2.go 的 docsFetchCommentsExtraParam）。 */
+/** 与官方 CLI 的 fetch 默认值一致。 */
 const FETCH_EXTRA_PARAM = '{"enable_user_cite_reference_map":true,"include_comments":true,"return_html5_block_data":true}';
 
 const ASYNC_MAX_WAIT_MS = 10 * 60 * 1000;
@@ -23,7 +16,7 @@ const ASYNC_DEFAULT_POLL_MS = 3000;
 const ASYNC_MIN_POLL_MS = 100;
 const ASYNC_MAX_POLL_MS = 10_000;
 
-export interface CreatedDocument {
+interface CreatedDocument {
   documentId: string;
   url?: string;
   /** 本地图片占位块（block_token 是 @lcli_img_ 标记），图片上传/绑定要用 */
@@ -31,25 +24,22 @@ export interface CreatedDocument {
   revisionId?: number;
 }
 
-export interface UpdatedDocument {
+interface UpdatedDocument {
   newBlocks: DocNewBlock[];
   revisionId?: number;
 }
 
-export interface CreateDocumentOptions {
+interface CreateDocumentOptions {
   title: string;
   markdown: string;
   parentToken?: string;
   onProgress?: (message: string) => void;
 }
 
-export interface UpdateDocumentOptions {
+interface UpdateDocumentOptions {
   title: string;
   markdown: string;
-  /**
-   * 是否把 <title> 放到 content 最前面。默认开：CLI 的 +create 会加标题标签而 +update 没有 --title，
-   * 这里让两条路径的 content 完全一致，「相同内容再更新一次」才真的是相同内容。
-   */
+  /** 默认把 <title> 放到 content 最前，create 与 update 的内容口径一致。 */
   includeTitle?: boolean;
 }
 
@@ -95,10 +85,7 @@ function escapeTitleText(title: string): string {
     .replace(/\r/g, "&#xD;");
 }
 
-/**
- * markdown 格式下标题也要写在 content 最前面（DocxXML 的 <title>），
- * 与 CLI 的 buildCreateContentWithBody 一致。
- */
+/** markdown 格式下标题要写在 content 最前（DocxXML 的 <title>）。 */
 export function buildMarkdownContent(title: string, markdown: string): string {
   const tag = `<title>${escapeTitleText(title.trim())}</title>`;
   return markdown === "" ? tag : `${tag}\n${encodeFeishuMath(markdown)}`;
@@ -110,7 +97,7 @@ function warningsText(data: Record<string, unknown> | undefined): string {
   return `；服务端 warnings：${warnings.map((item) => String(item)).join(" / ")}`;
 }
 
-/** docs_ai 会用 code=0 + result="failed" 表示业务失败（CLI 的 docsAPIOperationFailed）。 */
+/** docs_ai 用 code=0 + result="failed" 表示业务失败。 */
 function assertOperationSucceeded(endpoint: string, data: Record<string, unknown> | undefined): void {
   if (typeof data?.result === "string" && data.result.toLowerCase() === "failed") {
     throw new FeishuError(`docs_ai ${endpoint} 返回 result=failed${warningsText(data)}`, { endpoint });
@@ -184,10 +171,7 @@ async function waitForAsyncTask(
   }
 }
 
-/**
- * 用 Markdown 新建一篇 docx 文档。服务端可能返回 task_id 走异步，这里轮询到完成为止。
- * 注意：本函数不会上传本地图片，markdown 里的图片引用会原样发给服务端。
- */
+/** 用 Markdown 新建 docx 文档，异步任务轮询到完成；图片由调用方单独上传，引用原样发出。 */
 export async function createDocumentFromMarkdown(
   client: FeishuClient,
   options: CreateDocumentOptions,

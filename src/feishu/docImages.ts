@@ -2,17 +2,13 @@ import type { FeishuClient } from "./client";
 import { FeishuError, pathSegment } from "./client";
 
 /**
- * 文档里的图片素材协议（照抄官方 CLI：shortcuts/doc/local_doc_resources.go、
- * doc_media_upload.go、doc_media_download.go、doc_media_insert.go）：
- *   1. content 里把本地图片写成占位块 <img path="@lcli_img_<32hex>" caption="…"/>
- *   2. docs_ai 建/更新文档后，从返回的 document.new_blocks 里按 block_token(=标记) 找到 block_id
- *   3. multipart 上传素材 upload_all（parent_type=docx_image、parent_node=block_id、extra.drive_route_token=文档 id）
- *   4. PATCH docx/v1/documents/{id}/blocks/batch_update 用 replace_image.token 绑定
- *   5. 绑定失败时用 docs_ai 的 block_delete 清掉占位块，别把标记留在文档里
+ * 图片素材协议（照抄官方 CLI）：content 里写 <img path="@lcli_img_<32hex>"/> 占位 →
+ * 从 new_blocks 按 block_token 找 block_id → upload_all(docx_image) 上传 → batch_update 绑定 →
+ * 失败用 block_delete 清占位，不把标记留在文档里。
  */
 
-export const IMAGE_BLOCK_TYPE = 27;
-export const MAX_SINGLE_PART_UPLOAD_BYTES = 20 * 1024 * 1024;
+const IMAGE_BLOCK_TYPE = 27;
+const MAX_SINGLE_PART_UPLOAD_BYTES = 20 * 1024 * 1024;
 
 export interface DocNewBlock {
   blockId: string;
@@ -104,7 +100,7 @@ export function newImageMarker(): string {
   return `@lcli_img_${randomHex(16)}`;
 }
 
-export function newClientToken(): string {
+function newClientToken(): string {
   const hex = randomHex(16);
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-4${hex.slice(13, 16)}-a${hex.slice(17, 20)}-${hex.slice(20, 32)}`;
 }
@@ -161,7 +157,7 @@ export async function getDocBlockToken(client: FeishuClient, documentId: string,
   return readString(image, "token") ?? readString(block, "token");
 }
 
-/** 占位块清不掉时至少别把标记留在文档里：用 docs_ai 的 block_delete 删除它们。 */
+/** 用 docs_ai 的 block_delete 清掉没上传成功的占位块。 */
 export async function deleteDocBlocks(
   client: FeishuClient,
   documentId: string,

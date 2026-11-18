@@ -1,67 +1,33 @@
-import { assertPlanCurrent, deferDeletes, filterPlan, isEditorDirty, planFingerprint, prepareTarget, validateSettings, validateLocalPaths } from "./guards";
-import type { App } from "obsidian";
-import type { AuthManager } from "../feishu/auth";
 import { FeishuClient } from "../feishu/client";
 import { fetchDocumentMarkdown } from "../feishu/docs";
 import { batchQueryMetas } from "../feishu/files";
-import type { WikiSpace } from "../feishu/wiki";
-import { listNodes, listSpaces, walkWikiTree } from "../feishu/wiki";
-import type { Logger } from "../log";
+import { walkWikiTree } from "../feishu/wiki";
 import type { ResolvedImage, RulesFile } from "../convert/rules";
 import { loadRules, normalizeRemoteImageUrls, publishRulesFingerprint, pullRulesFingerprint } from "../convert/rules";
 import type { DocPlanCache, DocRemoteIndex } from "./docPlanner";
 import { buildDocPlan, buildDocRemoteIndex, createDocPlanCache } from "./docPlanner";
 import type { DocExecutionContext } from "./docExecutor";
 import { executeDocPlan, readLocalText } from "./docExecutor";
-import type { PlanDecision, RunOptions, RunResult } from "./engine";
-import { parseTokenFromInput } from "./engine";
+import type { EngineDeps, PlanDecision, RunOptions, RunResult } from "./engine-base";
+import { BaseSyncEngine, parseTokenFromInput } from "./engine-base";
+import { applyPlanOverrides, assertPlanCurrent, deferDeletes, filterPlan, isEditorDirty, planFingerprint, prepareTarget, validateSettings, validateLocalPaths } from "./guards";
 import { sha256Hex } from "./hash";
 import type { ReportEntry } from "./executor";
 import { PathFilter, readLocalBytes, scanLocalNotes } from "./scanner";
 import type { LocalNote, PluginSettings, SyncPlan } from "./types";
 import { basenameOf, dirnameOf } from "./types";
 
-export interface DocEngineDeps {
-  app: App;
-  getSettings: () => PluginSettings;
-  saveSettings: () => Promise<void>;
-  auth: AuthManager;
-  logger: Logger;
-}
-
-export class DocSyncEngine {
-  private syncing = false;
-
-  constructor(private readonly deps: DocEngineDeps) {}
-
-  isSyncing(): boolean {
-    return this.syncing;
+export class DocSyncEngine extends BaseSyncEngine {
+  constructor(deps: EngineDeps) {
+    super(deps);
   }
 
-  createClient(): FeishuClient {
-    return new FeishuClient((force) => this.deps.auth.getToken(force), this.deps.logger);
-  }
-
-  async listSpaces(): Promise<WikiSpace[]> {
-    return listSpaces(this.createClient());
-  }
-
-  async run(options: RunOptions): Promise<RunResult> {
-    if (this.syncing) throw new Error("已有同步任务在执行中");
-    this.syncing = true;
-    try {
-      return await this.runInternal(options);
-    } finally {
-      this.syncing = false;
-    }
-  }
-
-  private async runInternal(options: RunOptions): Promise<RunResult> {
+  protected async runInternal(options: RunOptions): Promise<RunResult> {
     const settings = this.deps.getSettings();
     const logger = this.deps.logger;
     validateSettings(settings);
     const spaceId = parseTokenFromInput(settings.spaceId);
-    // 留空表示以知识空间顶层为同步根：vault 的一级目录会成为知识库的一级页面
+    // 留空表示以知识空间顶层为同步根
     const rootNodeToken = parseTokenFromInput(settings.rootNodeToken) || undefined;
     if (!spaceId) throw new Error("请先在插件设置里填写知识库 space_id");
 
@@ -84,20 +50,7 @@ export class DocSyncEngine {
         return await this.execute(plan, options, { settings, client, spaceId, rootNodeToken, filter, rules });
       }
 
-      // 状态丢失（清空状态、换机器、新装插件指向同一个知识库）时，先按标题认出已有的根目录页面
-      if (!rootNodeToken && !settings.state.folders[""]?.nodeToken) {
-        const title = settings.rootPageTitle.trim() || this.deps.app.vault.getName();
-        try {
-          const topLevel = await listNodes(client, spaceId);
-          const found = topLevel.find((node) => node.title === title && node.obj_type !== "file");
-          if (found?.node_token) {
-            settings.state.folders[""] = { nodeToken: found.node_token };
-            logger.info(`识别到已有的知识库顶层页面「${title}」，复用它存放 vault 根目录下的笔记`);
-          }
-        } catch (error) {
-          throw new Error(`读取知识库顶层页面失败，已停止同步以避免重复创建：${String(error)}`);
-        }
-      }
+      await this.recognizeRootContainer(client, settings, spaceId, rootNodeToken);
 
       options.onProgress?.("扫描本地笔记…");
       const local: Map<string, LocalNote> = scanLocalNotes(this.deps.app, filter);
@@ -161,13 +114,12 @@ export class DocSyncEngine {
         readLocal: (relPath) => readLocalText(this.deps.app, relPath),
         hashText: (text) => this.hashText(text),
         hashFetched: (text) => this.hashFetched(text),
-        fetchMarkdown: (documentId) => this.fetchMarkdown(client, documentId),
+        fetchMarkdown: (documentId) => fetchDocumentMarkdown(client, documentId),
       });
       logger.debug(
         `文档模式：本轮 fetch 文档 ${cache.fetchCount} 次、批量元数据 ${remoteModifiedTimes.size > 0 ? "命中" : "未命中"}（${settings.docVerifyRemoteByContent ? "安全阀打开：每轮全文校验" : "时间戳快路径"}）`,
       );
-      // Baselines, including timestamps, are updated only after the approved action succeeds.
-      // 与 md 模式一致：先按本次模式过滤计划，预览/报告里只出现真的会执行的动作
+      // 基线（含时间戳）只在批准的动作成功后才更新；与 md 模式一致：先按模式过滤计划
       const plan = deferDeletes(filterPlan(planned, options.mode), options.allowDeletes);
 
       plan.settingsFingerprint = planFingerprint(settings);
@@ -189,7 +141,7 @@ export class DocSyncEngine {
     return sha256Hex(new TextEncoder().encode(text).buffer as ArrayBuffer);
   }
 
-  /** 远端基线用"取回形态 + 图片 URL 归一化"：图片 URL 里可能带会过期的签名，不归一化会天天判成远端变了。 */
+  /** 远端基线用"取回形态 + 图片 URL 归一化"：URL 里带会过期的签名，不归一化会天天判成远端变了。 */
   private async hashFetched(text: string): Promise<string> {
     return this.hashText(normalizeRemoteImageUrls(text));
   }
@@ -206,10 +158,6 @@ export class DocSyncEngine {
       if (!target) return undefined;
       return { path: target.path, size: target.stat?.size ?? 0 };
     };
-  }
-
-  private async fetchMarkdown(client: FeishuClient, documentId: string): Promise<string> {
-    return fetchDocumentMarkdown(client, documentId);
   }
 
   private async execute(
@@ -235,13 +183,15 @@ export class DocSyncEngine {
       if (decision === "pull-only") {
         allowPush = false;
         planForRun = filterPlan(plan, "pull");
+      } else if (typeof decision === "object") {
+        planForRun = applyPlanOverrides(plan, decision.actions);
       }
     }
 
     assertPlanCurrent(plan, context.settings);
     const cache = context.cache ?? createDocPlanCache();
     const local: Map<string, LocalNote> = scanLocalNotes(this.deps.app, context.filter);
-    // 建文档时要避开与容器（目录页面）撞名：远端已认出的容器 + 状态里的目录 + 本地目录名
+    // 建文档时要避开与容器（目录页面）撞名
     const containerTitles = new Set<string>(context.index?.containerTitles ?? []);
     for (const relDir of Object.keys(context.settings.state.folders)) {
       if (relDir) containerTitles.add(basenameOf(relDir));
@@ -280,12 +230,12 @@ export class DocSyncEngine {
       if (touched.size > 0) await this.refreshDocumentModifyTimes(context.client, context.settings.state, touched);
       return { plan: planForRun, report, executed: true };
     } finally {
-      // 中途失败也要落盘已完成的部分，否则下次会按旧基线重新判断
+      // 中途失败也要落盘已完成的部分
       await this.deps.saveSettings();
     }
   }
 
-  /** 批量取「最后修改时间」（Unix 秒字符串）：文档 id → 时间戳。取不到就返回空，调用方退回逐篇取回。 */
+  /** 批量取「最后修改时间」（Unix 秒字符串）；取不到就返回空，调用方退回逐篇取回校验。 */
   private async batchDocumentModifyTimes(
     client: FeishuClient,
     state: { docRecords: Record<string, { documentId: string }> },
@@ -324,8 +274,8 @@ export class DocSyncEngine {
       this.deps.logger.warn(`刷新远端文档修改时间失败（下一轮会退回逐篇取回）：${String(error)}`);
     }
   }
-
 }
+
 /** 本轮真的动过（写远端或写本地）的笔记：这些文档的修改时间需要刷新 */
 function touchedRelPaths(report: ReportEntry[]): Set<string> {
   const touched = new Set<string>();

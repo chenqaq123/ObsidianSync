@@ -36,6 +36,8 @@ export interface PlanItem {
   documentId?: string;
   /** Rule-only refresh: recheck the remote content before overwriting a previewed plan. */
   rulesRefresh?: boolean;
+  /** 用户在预览里明确选择推送覆盖：执行器跳过远端复核（预览时刚验证过）。 */
+  forceOverwrite?: boolean;
 }
 
 export interface SyncPlan {
@@ -78,7 +80,7 @@ export interface FileRecord {
   lastSyncedAt: number;
 }
 
-export interface ConflictRecord {
+interface ConflictRecord {
   remoteHash: string;
   localHash: string;
   copyPath: string;
@@ -86,7 +88,7 @@ export interface ConflictRecord {
 }
 
 /** 远端图片 token → 本地附件文件（避免每次拉取都新增副本） */
-export interface ImageDownloadRecord {
+interface ImageDownloadRecord {
   path: string;
   token: string;
   /** 附件内容的哈希，用来按内容复用已存在的本地文件 */
@@ -95,7 +97,7 @@ export interface ImageDownloadRecord {
 }
 
 /** 已上传图片的复用缓存：同一文档 + 同一内容哈希，不重复上传 */
-export interface ImageUploadRecord {
+interface ImageUploadRecord {
   fileToken: string;
   documentId: string;
   hash: string;
@@ -105,7 +107,7 @@ export interface ImageUploadRecord {
 }
 
 /** 文档模式：一篇笔记对应一篇飞书新版文档（docx）。 */
-export interface DocRecord {
+interface DocRecord {
   documentId: string;
   nodeToken?: string;
   parentNodeToken?: string;
@@ -123,12 +125,12 @@ export interface DocRecord {
   conflict?: boolean;
 }
 
-export interface FolderRecord {
+interface FolderRecord {
   nodeToken: string;
   parentNodeToken?: string;
 }
 
-export interface SyncTarget {
+interface SyncTarget {
   spaceId: string;
   rootNodeToken: string;
   /** 上次同步用的模式，用于发现模式切换后重按「首次对接」判定 */
@@ -157,6 +159,29 @@ export function emptyState(): SyncState {
 
 /** 笔记同步形态：md 为原生 Markdown 文件镜像，doc 为飞书新版文档 */
 export type SyncModeSetting = "md" | "doc";
+
+/**
+ * 授权范围按同步模式给出最小集合：素材上传/下载接口接受 drive:drive 覆盖（官方与细粒度权限二选一），
+ * docx:document 只有文档模式的 docs_ai 与图片块需要。
+ */
+export const OAUTH_SCOPE_PRESETS: Record<SyncModeSetting, string> = {
+  md: "wiki:wiki drive:drive offline_access",
+  doc: "wiki:wiki drive:drive docx:document offline_access",
+};
+
+/** 0.1.2 及之前的默认六项授权范围：老用户保存的这份仍视为「未改过」，切换模式时自动迁移到新预设。 */
+export const LEGACY_OAUTH_SCOPE =
+  "drive:drive wiki:wiki docs:document.media:download docs:document.media:upload docx:document offline_access";
+
+export function defaultScopeForMode(mode: SyncModeSetting): string {
+  return OAUTH_SCOPE_PRESETS[mode];
+}
+
+/** 授权范围仍是某个内置预设（含旧版六项）时，切换同步模式才自动跟随换范围；自定义过的永不动。 */
+export function isManagedScope(value: string): boolean {
+  const trimmed = value.trim();
+  return trimmed === LEGACY_OAUTH_SCOPE || Object.values(OAUTH_SCOPE_PRESETS).includes(trimmed);
+}
 
 export interface PluginSettings {
   authMode: AuthMode;
@@ -189,13 +214,14 @@ export interface PluginSettings {
   state: SyncState;
 }
 
-export const CONFLICT_DIR = ".obsidian/feishu-sync/conflicts";
+/** 旧版冲突副本目录，仅用于启动时迁移清理；新版不再生成副本。 */
+export const LEGACY_CONFLICT_DIR = ".obsidian/feishu-sync/conflicts";
 
 export const DEFAULT_SETTINGS: PluginSettings = {
   authMode: "user",
   appId: "",
   appSecret: "",
-  oauthScope: "drive:drive wiki:wiki docs:document.media:download docs:document.media:upload docx:document offline_access",
+  oauthScope: OAUTH_SCOPE_PRESETS.md,
   redirectUri: "http://localhost:7634/callback",
   spaceId: "",
   rootNodeToken: "",

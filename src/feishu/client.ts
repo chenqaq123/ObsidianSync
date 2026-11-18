@@ -3,8 +3,8 @@ import type { Logger } from "../log";
 
 export const API_BASE = "https://open.feishu.cn";
 
-export type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
-export type Query = Record<string, string | number | boolean | undefined>;
+type HttpMethod = "GET" | "POST" | "PUT" | "PATCH" | "DELETE";
+type Query = Record<string, string | number | boolean | undefined>;
 
 const AUTH_CODES = new Set([99991661, 99991663, 99991664, 99991668, 99991677, 20005]);
 const RETRY_CODES = new Set([99991400, 1061045, 233523001]);
@@ -15,7 +15,7 @@ const SLOW_REQUEST_TIMEOUT_MS = 5 * 60_000;
 const SLOW_PATH_PREFIX = "/open-apis/docs_ai/";
 
 /** 超时是"结果不确定"的错误，multipart 上传不能重试（否则远端会多出重复文件）。 */
-export class RequestTimeoutError extends Error {}
+class RequestTimeoutError extends Error {}
 
 let budgetOverrideForTest: number | undefined;
 
@@ -49,7 +49,7 @@ export async function requestWithBudget(
   }
 }
 
-export interface FeishuEnvelope<T> {
+interface FeishuEnvelope<T> {
   code: number;
   msg?: string;
   data?: T;
@@ -89,12 +89,12 @@ export class FeishuAuthRequiredError extends Error {
   }
 }
 
-export interface MultipartFile {
+interface MultipartFile {
   name: string;
   data: ArrayBuffer;
 }
 
-export interface MultipartSpec {
+interface MultipartSpec {
   fields: Record<string, string>;
   file: MultipartFile;
 }
@@ -107,7 +107,7 @@ interface RawResponse {
   payload?: FeishuEnvelope<unknown> & Record<string, unknown>;
 }
 
-export interface BinaryResponse {
+interface BinaryResponse {
   data: ArrayBuffer;
   headers: Record<string, string>;
   contentType?: string;
@@ -153,7 +153,7 @@ function sanitizeMultipartFieldValue(value: string): string {
   return value.replace(/\r/g, "").replace(/\n/g, " ");
 }
 
-export function buildMultipart(spec: MultipartSpec): { body: ArrayBuffer; contentType: string } {
+function buildMultipart(spec: MultipartSpec): { body: ArrayBuffer; contentType: string } {
   const boundary = `----obsidianfeishu${Math.random().toString(16).slice(2)}${Date.now().toString(16)}`;
   const encoder = new TextEncoder();
   const chunks: Uint8Array[] = [];

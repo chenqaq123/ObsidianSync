@@ -1,5 +1,6 @@
 import type { FeishuClient } from "./client";
 import { pathSegment } from "./client";
+import { mapConcurrent } from "../sync/concurrency";
 
 export interface WikiSpace {
   space_id: string;
@@ -9,7 +10,7 @@ export interface WikiSpace {
   visibility?: string;
 }
 
-export interface WikiNode {
+interface WikiNode {
   node_token: string;
   obj_token: string;
   obj_type: string;
@@ -91,22 +92,41 @@ export async function walkWikiTree(
 ): Promise<WikiTreeEntry[]> {
   const entries: WikiTreeEntry[] = [];
   // rootNodeToken 为空表示以知识空间顶层为根
-  const queue: { nodeToken: string | undefined; relDir: string; depth: number }[] = [{ nodeToken: rootNodeToken, relDir: "", depth: 0 }];
+  const pending: { nodeToken: string | undefined; relDir: string; depth: number }[] = [{ nodeToken: rootNodeToken, relDir: "", depth: 0 }];
   const visited = new Set<string>(rootNodeToken ? [rootNodeToken] : []);
   const onProgress = options.onProgress;
 
-  while (queue.length > 0) {
-    const current = queue.shift() as { nodeToken: string | undefined; relDir: string; depth: number };
-    if (current.depth > MAX_DEPTH) throw new Error(`知识库目录超过 ${MAX_DEPTH} 层，请选择更小的同步根节点；未执行同步`);
-    const nodes = await listNodes(client, spaceId, current.nodeToken);
-    for (const node of nodes) {
-      const title = (node.title ?? "").trim();
-      // 快捷方式指向别处已有的节点，跟着递归会把同一篇笔记重复算进不同路径
-      if (node.node_type === "shortcut") continue;
-      if (visited.has(node.node_token)) continue;
-      visited.add(node.node_token);
-      if (node.obj_type === "file") {
-        if (!/\.md$/i.test(title)) continue;
+  // 目录之间没有依赖，按层并发读取；节点仍按父级返回顺序登记，计划保持稳定。
+  while (pending.length > 0) {
+    const level = pending.splice(0);
+    for (const current of level) {
+      if (current.depth > MAX_DEPTH) throw new Error(`知识库目录超过 ${MAX_DEPTH} 层，请选择更小的同步根节点；未执行同步`);
+    }
+    const pages = await mapConcurrent(level, 6, (current) => listNodes(client, spaceId, current.nodeToken));
+    for (let index = 0; index < level.length; index += 1) {
+      const current = level[index];
+      for (const node of pages[index]) {
+        const title = (node.title ?? "").trim();
+        // 快捷方式指向别处已有的节点，跟着递归会把同一篇笔记重复算进不同路径
+        if (node.node_type === "shortcut") continue;
+        if (visited.has(node.node_token)) continue;
+        visited.add(node.node_token);
+        if (node.obj_type === "file") {
+          if (!/\.md$/i.test(title)) continue;
+          entries.push({
+            nodeToken: node.node_token,
+            objToken: node.obj_token,
+            objType: node.obj_type,
+            parentNodeToken: node.parent_node_token,
+            title,
+            relDir: current.relDir,
+            depth: current.depth + 1,
+          });
+          continue;
+        }
+        // 存放 vault 根目录笔记的顶层页面，其子节点的路径前缀仍视为「根」
+        const childDir =
+          node.node_token === options.rootContainerNode ? "" : current.relDir ? `${current.relDir}/${title}` : title;
         entries.push({
           nodeToken: node.node_token,
           objToken: node.obj_token,
@@ -116,24 +136,11 @@ export async function walkWikiTree(
           relDir: current.relDir,
           depth: current.depth + 1,
         });
-        continue;
+        if (node.has_child === false) continue;
+        pending.push({ nodeToken: node.node_token, relDir: childDir, depth: current.depth + 1 });
       }
-      // 存放 vault 根目录笔记的顶层页面，其子节点的路径前缀仍视为「根」
-      const childDir =
-        node.node_token === options.rootContainerNode ? "" : current.relDir ? `${current.relDir}/${title}` : title;
-      entries.push({
-        nodeToken: node.node_token,
-        objToken: node.obj_token,
-        objType: node.obj_type,
-        parentNodeToken: node.parent_node_token,
-        title,
-        relDir: current.relDir,
-        depth: current.depth + 1,
-      });
-      if (node.has_child === false) continue;
-      queue.push({ nodeToken: node.node_token, relDir: childDir, depth: current.depth + 1 });
+      onProgress?.(entries.length, current.relDir);
     }
-    onProgress?.(entries.length, current.relDir);
   }
   return entries;
 }

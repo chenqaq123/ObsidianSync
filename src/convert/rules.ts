@@ -1,5 +1,5 @@
 import type { DataAdapter } from "obsidian";
-import { normalizePath } from "obsidian";
+import { normalizePath, parseYaml } from "obsidian";
 import { newImageMarker } from "../feishu/docImages";
 import type { Logger } from "../log";
 import { ensureFolder } from "../log";
@@ -13,7 +13,7 @@ import { codeLineMask, decodeXmlText, escapedAt, mapMath, mapNativeMath, mathSpa
 export type RuleDirection = "toFeishu" | "toObsidian";
 
 export const RULES_PATH = ".obsidian/feishu-sync/rules.json";
-export const RULES_VERSION = 3;
+const RULES_VERSION = 4;
 /** Increment when built-in publishing behavior changes, independently of the editable file version. */
 const PUBLISH_RULES_REVISION = 3;
 
@@ -60,14 +60,14 @@ export interface RemoteImageRef {
   index: number;
 }
 
-export interface BuiltInRule {
+interface BuiltInRule {
   id: string;
   description: string;
   defaultEnabled: boolean;
   apply: (input: string, ctx: RuleContext) => string;
 }
 
-export interface RuleEntry {
+interface RuleEntry {
   id: string;
   enabled: boolean;
   description: string;
@@ -93,6 +93,37 @@ function mapOutsideFences(text: string, transform: (line: string) => string): st
   const code = codeLineMask(lines, false);
   return lines.map((line, index) => code[index] ? line : transform(line)).join("\n");
 }
+
+function formatFrontmatterValue(value: unknown): string {
+  if (value === null || value === undefined) return "";
+  if (Array.isArray(value)) return `[${value.map((item) => String(item)).join(", ")}]`;
+  if (typeof value === "object") return JSON.stringify(value);
+  return String(value);
+}
+
+/** 上行：笔记属性（YAML frontmatter）转引用块，避免属性被当正文发到飞书；下行不还原。 */
+const frontmatterQuote: BuiltInRule = {
+  id: "frontmatter-quote",
+  description:
+    "上行：把笔记属性（YAML frontmatter）转成引用块展示，避免属性文本被当成正文发到飞书。" +
+    "本地 frontmatter 不动，下次同步仍按属性解析；从飞书拉回的引用块会保留为正文（下行不还原）。",
+  defaultEnabled: true,
+  apply: (input) => {
+    const match = /^---\r?\n(?:([\s\S]*?)\r?\n)?---(?:\r?\n|$)/.exec(input);
+    if (!match) return input;
+    let parsed: unknown;
+    const body = match[1] ?? "";
+    try {
+      parsed = body.trim() ? parseYaml(body) : {};
+    } catch {
+      return input; // YAML 解析失败按原样发，不猜
+    }
+    if (!parsed || typeof parsed !== "object" || Array.isArray(parsed)) return input;
+    const lines = Object.entries(parsed as Record<string, unknown>).map(([key, value]) => `> ${key}: ${formatFrontmatterValue(value)}`);
+    const rest = input.slice(match[0].length).replace(/^\r?\n/, "");
+    return lines.length === 0 ? rest : `${lines.join("\n")}\n\n${rest}`;
+  },
+};
 
 const imageRefNormalize: BuiltInRule = {
   id: "image-ref-normalize",
@@ -316,14 +347,6 @@ const dropTitleHeading: BuiltInRule = {
   },
 };
 
-const restoreImageRef: BuiltInRule = {
-  id: "restore-image-ref",
-  description:
-    "下行：把飞书侧的图片还原成标准 Markdown 图片引用。等图片上传链路（medias/upload_all + reference_map）做好后再启用，现在打开也是空操作。",
-  defaultEnabled: false,
-  apply: (input) => input,
-};
-
 function escapeXmlAttr(value: string): string {
   return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&#34;");
 }
@@ -371,17 +394,13 @@ const imageUpload: BuiltInRule = {
   id: "image-upload",
   description:
     "上行：把 vault 内的本地图片（![[x.png]] 或 ![alt](attachments/x.png)）换成官方的占位标记，建/更新文档后上传素材并绑定成真正的图片块。" +
-    "需要 docs:document.media:upload 权限；http(s) 外链与 vault 里找不到的文件保持原样（会在报告里列出）。",
+    "需要 docs:document.media:upload（或 drive:drive）权限；http(s) 外链与 vault 里找不到的文件保持原样（会在报告里列出）。",
   defaultEnabled: true,
   apply: (input, ctx) => mapOutsideFences(input, (line) => rewriteLocalImageLine(line, ctx)),
 };
 
-/**
- * 从飞书图片 URL 里抽素材 token。
- * 实测（真机，2026-09）markdown 取回时图片是 `![](https://feishu.cn/file/<token>)`，
- * 而该 token 可直接用于 `GET /open-apis/drive/v1/medias/{token}/download`。
- */
-export function extractMediaToken(rawUrl: string): string | undefined {
+/** 从飞书图片 URL 抽素材 token（取回形态是 https://feishu.cn/file/<token>，可直接用于 medias/download）。 */
+function extractMediaToken(rawUrl: string): string | undefined {
   let url = rawUrl.trim();
   try {
     url = decodeURIComponent(url);
@@ -460,7 +479,7 @@ const imageDownload: BuiltInRule = {
   id: "image-download",
   description:
     "下行：把取回内容里的飞书图片下载到本地附件目录，并把引用改写成 ![[附件目录/文件名]]。" +
-    "需要 docs:document.media:download 权限；下载失败时保留原始引用并在报告里说明，不会让整次拉取失败。",
+    "需要 docs:document.media:download（或 drive:drive）权限；下载失败时保留原始引用并在报告里说明，不会让整次拉取失败。",
   defaultEnabled: true,
   apply: (input, ctx) => {
     const downloads = ctx.imageDownloads;
@@ -475,8 +494,9 @@ const imageDownload: BuiltInRule = {
   },
 };
 
-export const BUILT_IN_RULES: Record<RuleDirection, BuiltInRule[]> = {
+const BUILT_IN_RULES: Record<RuleDirection, BuiltInRule[]> = {
   toFeishu: [
+    frontmatterQuote,
     sourceDiagnostics,
     imageRefNormalize,
     tabIndentToSpaces,
@@ -489,8 +509,11 @@ export const BUILT_IN_RULES: Record<RuleDirection, BuiltInRule[]> = {
     footnoteDowngrade,
     imageUpload,
   ],
-  toObsidian: [unescapeImageMarkup, dropTitleHeading, restoreNativeMath, mathEscapeHash, mathTrimInlineSpaces, imageDownload, restoreImageRef],
+  toObsidian: [unescapeImageMarkup, dropTitleHeading, restoreNativeMath, mathEscapeHash, mathTrimInlineSpaces, imageDownload],
 };
+
+/** 已删除的历史规则 id：老 rules.json 里出现时直接忽略，不告警。 */
+const REMOVED_RULE_IDS = new Set(["restore-image-ref"]);
 
 function entryOf(rule: BuiltInRule): RuleEntry {
   return { id: rule.id, enabled: rule.defaultEnabled, description: rule.description };
@@ -513,6 +536,7 @@ function mergeDirection(direction: RuleDirection, raw: unknown, warnings: string
     for (const item of raw) {
       const id = typeof (item as { id?: unknown })?.id === "string" ? (item as { id: string }).id : "";
       if (!id) continue;
+      if (REMOVED_RULE_IDS.has(id)) continue;
       const builtIn = byId.get(id);
       if (!builtIn) {
         warnings.push(`规则文件里 ${direction} 的 "${id}" 不是内置规则，已忽略`);
@@ -532,7 +556,7 @@ function mergeDirection(direction: RuleDirection, raw: unknown, warnings: string
   return merged;
 }
 
-export function mergeRulesFile(raw: unknown, warnings: string[] = []): RulesFile {
+function mergeRulesFile(raw: unknown, warnings: string[] = []): RulesFile {
   const source = (raw ?? {}) as { toFeishu?: unknown; toObsidian?: unknown; version?: unknown };
   return {
     version: typeof source.version === "number" ? source.version : RULES_VERSION,
@@ -541,7 +565,7 @@ export function mergeRulesFile(raw: unknown, warnings: string[] = []): RulesFile
   };
 }
 
-export function parseRulesFile(text: string, warnings: string[] = []): RulesFile {
+function parseRulesFile(text: string, warnings: string[] = []): RulesFile {
   return mergeRulesFile(JSON.parse(text) as unknown, warnings);
 }
 
@@ -590,7 +614,7 @@ export function applyRules(direction: RuleDirection, input: string, ctx: RuleCon
  * 飞书会固化这些上行排版规则的输出。拉取时用 sameAfterCosmeticRules 识别纯排版差异，
  * 保留本地段落布局；Obsidian 必需的公式边界修复由 normalizeObsidianMath 单独处理。
  */
-export const COSMETIC_PUBLISH_RULE_IDS = [
+const COSMETIC_PUBLISH_RULE_IDS = [
   "math-escape-hash",
   "math-trim-inline-spaces",
   "inline-formula-to-block",

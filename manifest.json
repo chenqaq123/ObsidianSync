@@ -1,7 +1,7 @@
 {
   "id": "feishu-wiki-sync",
   "name": "Feishu Wiki Sync",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "minAppVersion": "1.13.7",
   "description": "Sync Markdown notes with a Feishu Wiki space as editable cloud documents or original Markdown files.",
   "author": "cgx",

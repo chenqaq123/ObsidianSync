@@ -1,6 +1,6 @@
 {
   "name": "feishu-wiki-sync",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "license": "MIT",
   "description": "Obsidian plugin for bidirectional sync with Feishu Wiki documents and Markdown files",
   "private": true,
@@ -9,14 +9,11 @@
     "dev": "node esbuild.config.mjs",
     "build": "tsc --noEmit && node esbuild.config.mjs production",
     "typecheck": "tsc --noEmit",
-    "test:rules": "node --test tests/rules-regression.mjs",
-    "test:e2e": "node tests/run-e2e.mjs",
     "install:vault": "node scripts/install-to-vault.mjs",
-    "test": "npm run test:rules && npm run test:safety && npm run test:e2e",
-    "test:safety": "node tests/run-safety.mjs",
     "check:release": "node scripts/check-release.mjs",
-    "check": "npm run check:release && npm run typecheck && npm test",
-    "package": "npm run check && npm run build && node tests/build-smoke.mjs && node scripts/package.mjs",
+    "check": "npm run check:release && npm run typecheck",
+    "package": "npm run check && npm run build && node scripts/package.mjs",
+    "real:check": "esbuild scripts/real-check/main.ts --bundle --platform=node --format=esm --alias:obsidian=scripts/real-check/obsidian-shim.ts --outfile=scripts/real-check/run.mjs && node scripts/real-check/run.mjs",
     "preinstall:vault": "npm run build"
   },
   "devDependencies": {

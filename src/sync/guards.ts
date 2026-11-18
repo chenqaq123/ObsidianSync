@@ -1,9 +1,9 @@
 import { createHash } from "crypto";
 import type { App } from "obsidian";
 import { TFile } from "obsidian";
-import type { PluginSettings, SyncPlan, SyncModeSetting } from "./types";
+import type { PlanItem, PluginSettings, SyncPlan, SyncModeSetting } from "./types";
 import { emptyState, summarize } from "./types";
-import type { SyncMode } from "./engine";
+import type { ItemChoice, SyncMode } from "./engine-base";
 import { assertSafeVaultPath } from "./scanner";
 import { walkWikiTree } from "../feishu/wiki";
 import type { FeishuClient } from "../feishu/client";
@@ -67,6 +67,31 @@ export function filterPlan(plan: SyncPlan, mode: SyncMode): SyncPlan {
   const items = plan.items.filter(entry => mode === "pull"
     ? !["push", "create-remote", "delete-remote"].includes(entry.action)
     : !["pull", "create-local", "delete-local"].includes(entry.action));
+  return { ...plan, items, counts: summarize(items) };
+}
+
+/**
+ * 把预览弹窗里的逐文件选择应用到计划。push 转换带 forceOverwrite：用户明确选了覆盖，
+ * 执行器跳过远端复核（预览时刚验证过内容）。
+ */
+export function applyPlanOverrides(plan: SyncPlan, actions: Record<string, ItemChoice>): SyncPlan {
+  if (Object.keys(actions).length === 0) return plan;
+  const items: PlanItem[] = [];
+  for (const entry of plan.items) {
+    const choice = actions[entry.relPath];
+    if (!choice) {
+      items.push(entry);
+      continue;
+    }
+    if (choice === "skip") continue;
+    if (choice === "pull") {
+      // 没有远端可拉（create-remote 等），按跳过处理
+      if (entry.fileToken) items.push({ ...entry, action: "pull" });
+      continue;
+    }
+    // push：本地必须存在（create-local / create-remote 行没有绑本地哈希，防御性跳过）
+    if (entry.localHash !== undefined) items.push({ ...entry, action: "push", forceOverwrite: true });
+  }
   return { ...plan, items, counts: summarize(items) };
 }
 

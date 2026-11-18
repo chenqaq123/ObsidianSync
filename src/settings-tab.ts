@@ -3,9 +3,9 @@ import { FileSystemAdapter, FuzzySuggestModal, Notice, PluginSettingTab, Setting
 import type { AuthManager } from "./feishu/auth";
 import type { WikiSpace } from "./feishu/wiki";
 import type { Logger } from "./log";
-import { CONFLICT_DIR, emptyState } from "./sync/types";
+import { defaultScopeForMode, emptyState, isManagedScope } from "./sync/types";
 import type { PluginSettings } from "./sync/types";
-import type { RunOptions, RunResult } from "./sync/engine";
+import type { RunOptions, RunResult } from "./sync/engine-base";
 import { defaultRulesFile, loadRules, RULES_PATH, writeRulesFile } from "./convert/rules";
 
 /** 两种模式的引擎（md 文件镜像 / 飞书文档）共用的入口。 */
@@ -96,13 +96,21 @@ export class FeishuWikiSyncSettingTab extends PluginSettingTab {
             const next = value === "doc" ? "doc" : "md";
             if (next === settings.syncMode) return;
             settings.syncMode = next;
+            // 授权范围按模式取最小集合；只跟随内置预设，用户自定义过的范围不动
+            let scopeFollowed = false;
+            if (isManagedScope(settings.oauthScope) && settings.oauthScope !== defaultScopeForMode(next)) {
+              settings.oauthScope = defaultScopeForMode(next);
+              scopeFollowed = true;
+            }
             await this.host.saveSettings();
             this.host.refreshAutoSync();
-            new Notice(
-              next === "doc"
-                ? "已切到文档模式：下一次同步按「首次对接」判定，不会直接覆盖本地"
-                : "已切到文件镜像模式：下一次同步按「首次对接」判定，不会直接覆盖本地",
-            );
+            const base = next === "doc"
+              ? "已切到文档模式：下一次同步按「首次对接」判定，不会直接覆盖本地"
+              : "已切到文件镜像模式：下一次同步按「首次对接」判定，不会直接覆盖本地";
+            const hints: string[] = [];
+            if (scopeFollowed) hints.push(`授权范围已自动换成「${settings.oauthScope}」`);
+            if (next === "doc") hints.push("文档模式需要 docx:document 权限，若后台未开通请先开通并重新授权");
+            new Notice(hints.length > 0 ? `${base}；${hints.join("；")}` : base, 10000);
             this.display();
           }),
       );
@@ -170,7 +178,10 @@ export class FeishuWikiSyncSettingTab extends PluginSettingTab {
     new Setting(containerEl).setName("飞书应用与授权").setHeading();
     containerEl.createEl("p", {
       cls: "setting-item-description",
-      text: "需要一个飞书企业自建应用。默认授权范围：drive:drive、wiki:wiki、docx:document、docs:document.media:download、docs:document.media:upload；详见 README 的配置步骤。用「用户授权」时还要在开放平台登记下方重定向地址，并包含 offline_access 以自动续期。",
+      text:
+        "需要一个飞书企业自建应用。默认授权范围按同步模式取最小集合：文件镜像 = wiki:wiki、drive:drive、offline_access；" +
+        "文档模式 = 另加 docx:document。图片素材接口接受 drive:drive 覆盖，无需单独申请 docs:document.media:*。" +
+        "详见 README 的配置步骤。用「用户授权」时还要在开放平台登记下方重定向地址；offline_access 用于授权自动续期。",
     });
 
     new Setting(containerEl)
@@ -224,7 +235,7 @@ export class FeishuWikiSyncSettingTab extends PluginSettingTab {
 
       new Setting(containerEl)
         .setName("授权范围")
-        .setDesc("空格分隔，必须都是应用已开通的权限；offline_access 用于自动续期")
+        .setDesc("空格分隔，必须都是应用已开通的权限；offline_access 用于自动续期。切换同步模式时，未修改过的默认范围会自动换成对应模式的最小集合。")
         .addText((text) =>
           text.setValue(settings.oauthScope).onChange(async (value) => {
             settings.oauthScope = value.trim();
@@ -233,11 +244,17 @@ export class FeishuWikiSyncSettingTab extends PluginSettingTab {
         );
 
       const tokens = settings.userTokens;
+      // 授权时飞书返回的 scope 之前只存不查；这里和当前模式需要的最小集合比对，缺了就提醒重新授权
+      const grantedScopes = new Set((tokens?.scope ?? "").split(/[\s,]+/).filter(Boolean));
+      const missingScopes = tokens?.refreshToken
+        ? defaultScopeForMode(settings.syncMode).split(" ").filter((scope) => scope !== "offline_access" && !grantedScopes.has(scope))
+        : [];
       new Setting(containerEl)
         .setName("授权状态")
         .setDesc(
           tokens?.refreshToken
-            ? `已授权，refresh token 有效至 ${new Date(tokens.refreshExpiresAt).toLocaleString()}`
+            ? `已授权，refresh token 有效至 ${new Date(tokens.refreshExpiresAt).toLocaleString()}` +
+              (missingScopes.length > 0 ? `；当前授权缺少 ${missingScopes.join("、")}，请重新授权` : "")
             : "尚未授权",
         )
         .addButton((button) =>
@@ -517,7 +534,7 @@ export class FeishuWikiSyncSettingTab extends PluginSettingTab {
     });
     containerEl.createEl("p", {
       cls: "setting-item-description",
-      text: `冲突副本目录：${CONFLICT_DIR}/（本地与远端都不改动，副本仅作参考）`,
+      text: "冲突处理：等待手动合并时本地与远端都不改动，也不生成副本；整理后选择推送或拉取。",
     });
 
     new Setting(containerEl)
@@ -541,6 +558,6 @@ export class FeishuWikiSyncSettingTab extends PluginSettingTab {
     list.createEl("li", { text: "飞书不接受 0 字节 Markdown，空文件在文件镜像模式下会被跳过并提示；文档模式下空笔记也会同步（正文为空，飞书侧只有标题）。" });
     list.createEl("li", { text: "文档模式会上传本地图片（写进文档的图片块）并下载飞书里的图片到附件目录；规则文件里 image-upload / image-download 可关。文件镜像模式不做图片处理，图片只是笔记里的文本。" });
     list.createEl("li", { text: "删除默认不会传播，只在结果里提示；要传播就在上面打开对应的删除开关（远端删除进飞书回收站，本地删除进 .trash）。" });
-    list.createEl("li", { text: "两边同时修改同一篇时按冲突处理：远端版本另存为副本，本地与远端都不动。" });
+    list.createEl("li", { text: "两边同时修改同一篇时等待手动合并：本地与远端都不动，不生成副本；整理后选择推送或拉取。" });
   }
 }

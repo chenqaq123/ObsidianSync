@@ -12,7 +12,7 @@ export interface UserTokens {
   scope?: string;
 }
 
-export interface AuthSettings {
+interface AuthSettings {
   mode: AuthMode;
   appId: string;
   appSecret: string;
@@ -27,7 +27,7 @@ const REFRESH_MARGIN_MS = 120_000;
 function oauthErrorHint(code: number | undefined, message: string): string {
   const hints: Record<number, string> = {
     20010: "当前飞书账号不在这个应用的可用范围内：请到开发者后台的「应用发布 → 版本管理与发布」把可用范围设为全员或包含你自己，并发布版本",
-    20027: "请求了应用尚未开通的权限：请到开发者后台「权限管理」开通 drive:drive、wiki:wiki、docs:document.media:download、offline_access，并确认插件里的授权范围与之一致",
+    20027: "请求了应用尚未开通的权限：请到开发者后台「权限管理」开通 drive:drive、wiki:wiki、offline_access（文档模式另需 docx:document），并确认插件里的授权范围与之一致",
     20029: "重定向 URL 不匹配：请确认开发者后台「安全设置 → 重定向 URL」里登记的地址与插件设置里的完全一致",
   };
   const hinted = code === undefined ? undefined : hints[code];

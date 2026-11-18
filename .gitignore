@@ -3,3 +3,6 @@ node_modules/
 *.log
 dist/
 *.tsbuildinfo
+.zcode/
+agent.md
+scripts/real-check/run.mjs

@@ -2,14 +2,14 @@ import type { FeishuClient } from "./client";
 import { FeishuError, pathSegment } from "./client";
 import { moveDocToWiki } from "./wiki";
 
-export interface RemoteMeta {
+interface RemoteMeta {
   token: string;
   title?: string;
   url?: string;
   modifiedTime?: string;
 }
 
-export interface UploadResult {
+interface UploadResult {
   fileToken: string;
   version?: string;
 }
@@ -50,7 +50,7 @@ export async function batchQueryMetas(client: FeishuClient, tokens: string[], do
   return result;
 }
 
-export async function uploadMarkdown(
+async function uploadMarkdown(
   client: FeishuClient,
   options: {
     fileName: string;
@@ -79,24 +79,18 @@ export async function uploadMarkdown(
 export async function downloadFile(client: FeishuClient, fileToken: string, version?: string): Promise<ArrayBuffer> {
   const bytes = await client.binary(`/open-apis/drive/v1/medias/${pathSegment(fileToken)}/preview_download`, version ? { version } : undefined);
   if (bytes.byteLength === 0) {
-    // 飞书不接受 0 字节 Markdown，正常远端文件不可能是空的；空响应多半是网关/网络问题，绝不能拿去覆盖本地
+    // 0 字节响应多半是网关问题，绝不能拿去覆盖本地
     throw new Error(`远端 ${fileToken} 返回了空内容，已放弃本次覆盖`);
   }
   return bytes;
 }
 
-/**
- * 删除云空间文件/文档。走 drive 接口而不是 wiki 的删节点接口：drive 只需 drive:drive 权限，
- * 云空间文件删掉后对应的 wiki 节点会一并消失；删除进飞书回收站，可以恢复。
- */
+/** 删除走 drive 接口：云空间文件删掉后 wiki 节点一并消失；进飞书回收站可恢复。 */
 export async function deleteDriveFile(client: FeishuClient, token: string, type: "file" | "docx"): Promise<void> {
   await client.json<unknown>("DELETE", `/open-apis/drive/v1/files/${pathSegment(token)}`, { query: { type } });
 }
 
-/**
- * 上传到知识库节点。官方文档只写了 parent_type=explorer，但官方 CLI 用 parent_type=wiki 直传，
- * 这里以 wiki 为主、以"上传到云空间再 move_docs_to_wiki"为降级路径。
- */
+/** 上传到知识库：wiki 直传为主，"云空间上传 + move_docs_to_wiki"兜底（与官方 CLI 一致）。 */
 export async function uploadMarkdownToWiki(
   client: FeishuClient,
   options: { spaceId: string; parentNode: string | undefined; fileName: string; data: ArrayBuffer; fileToken?: string },

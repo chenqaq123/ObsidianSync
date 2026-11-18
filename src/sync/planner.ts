@@ -1,7 +1,8 @@
+import { conflictItem, item } from "./plan-shared";
 import type { FileRecord, LocalNote, PlanItem, RemoteNote, SyncPlan, SyncState } from "./types";
-import { dirnameOf, summarize } from "./types";
+import { summarize } from "./types";
 
-export interface PlannerInput {
+interface PlannerInput {
   state: SyncState;
   local: Map<string, LocalNote>;
   remote: Map<string, RemoteNote>;
@@ -13,10 +14,6 @@ export interface PlannerInput {
   propagateRemoteDelete: boolean;
 }
 
-function item(relPath: string, action: PlanItem["action"], reason?: string, extra: Partial<PlanItem> = {}): PlanItem {
-  return { relPath, action, reason, parentDir: dirnameOf(relPath), ...extra };
-}
-
 function remoteFields(remote: RemoteNote): Partial<PlanItem> {
   return {
     remoteTitle: remote.entry.title,
@@ -26,28 +23,9 @@ function remoteFields(remote: RemoteNote): Partial<PlanItem> {
   };
 }
 
-function conflictItem(
-  relPath: string,
-  state: SyncState,
-  reason: string,
-  extra: Partial<PlanItem>,
-  localHash: string,
-  remoteHash: string,
-): PlanItem {
-  const previous = state.conflicts[relPath];
-  const duplicate = !!previous && previous.remoteHash === remoteHash && previous.localHash === localHash;
-  return item(relPath, "conflict", duplicate ? "与上次相同的冲突，未重复生成副本" : reason, {
-    ...extra,
-    localHash,
-    remoteHash,
-    duplicateConflict: duplicate,
-  });
-}
-
 export async function buildPlan(input: PlannerInput): Promise<SyncPlan> {
   const { state, local, remote } = input;
   const items: PlanItem[] = [];
-
   const relPaths = new Set<string>([...local.keys(), ...remote.keys(), ...Object.keys(state.records)]);
 
   for (const relPath of Array.from(relPaths).sort()) {
@@ -71,7 +49,7 @@ export async function buildPlan(input: PlannerInput): Promise<SyncPlan> {
           items.push(item(relPath, "link", "两边内容一致，只建立映射", { ...remoteFields(remoteNote), localHash, remoteHash }));
         } else {
           items.push(
-            conflictItem(relPath, state, "首次对接：同名文件两边内容不同，已保留双方", remoteFields(remoteNote), localHash, remoteHash),
+            conflictItem(relPath, state, "首次对接：同名文件两边内容不同，等待手动合并", remoteFields(remoteNote), localHash, remoteHash),
           );
         }
         continue;
@@ -188,7 +166,7 @@ export async function buildPlan(input: PlannerInput): Promise<SyncPlan> {
       continue;
     }
     items.push(
-      conflictItem(relPath, state, "两边都改过且内容不同，已保留双方", remoteFields(remoteNote), localHash, remoteHash),
+      conflictItem(relPath, state, "两边都改过且内容不同，等待手动合并", remoteFields(remoteNote), localHash, remoteHash),
     );
   }
 
@@ -222,6 +200,7 @@ async function checkRemoteChanged(
   record: FileRecord,
   remoteNote: RemoteNote,
 ): Promise<{ changed: boolean; hash?: string }> {
+  // 修改时间戳一致就免下载；否则下载算哈希对比基线
   if (record.remoteModifiedTime && remoteNote.modifiedTime && record.remoteModifiedTime === remoteNote.modifiedTime) {
     return { changed: false };
   }

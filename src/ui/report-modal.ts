@@ -16,6 +16,7 @@ export class ReportModal extends Modal {
   }
 
   onOpen(): void {
+    this.modalEl.addClass("feishu-sync-modal");
     const { contentEl } = this;
     contentEl.empty();
     contentEl.createEl("h2", { text: this.executed ? "飞书同步结果" : "飞书同步计划（未执行）" });
@@ -35,7 +36,7 @@ export class ReportModal extends Modal {
     }
 
     renderFormatWarnings(contentEl, this.plan);
-    renderSection(contentEl, "冲突副本（本地与远端均未改动，副本在 .obsidian/feishu-sync/conflicts/）", conflicts, true);
+    renderSection(contentEl, "待手动合并（本地与远端均未改动）", conflicts, true);
     renderSection(contentEl, "已执行", changed, false);
     renderSection(contentEl, "需要注意（未自动处理）", this.report.filter((entry) => !isChange(entry.action) && entry.action !== "conflict"), false);
     renderSection(contentEl, "失败", failed, false);
@@ -64,9 +65,13 @@ function renderSection(container: HTMLElement, title: string, entries: ReportEnt
       text: entry.ok ? (ACTION_LABELS[entry.action] ?? entry.action) : "失败",
     });
     badge.setAttr("title", entry.action);
-    row.createEl("span", { cls: "feishu-sync-path", text: entry.relPath });
+    // message 多为整组重复的说明文字（如规则刷新），不逐行展示，悬停可看
+    row.createEl("span", {
+      cls: "feishu-sync-path",
+      text: entry.relPath,
+      title: entry.message ? `${entry.relPath}\n${entry.message}` : entry.relPath,
+    });
     if (entry.copyPath) row.createEl("span", { cls: "feishu-sync-reason", text: `副本：${entry.copyPath}` });
-    if (entry.message) row.createEl("span", { cls: "feishu-sync-reason", text: entry.message });
   }
   if (entries.length > 300) {
     list.createEl("div", { text: `…还有 ${entries.length - 300} 项`, cls: "feishu-sync-reason" });

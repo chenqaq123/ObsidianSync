@@ -4,9 +4,10 @@ import { AuthManager, openExternal } from "./feishu/auth";
 import { describeError, Logger } from "./log";
 import type { SettingsHost, SyncEngineHandle } from "./settings-tab";
 import { FeishuWikiSyncSettingTab } from "./settings-tab";
-import type { PlanDecision, SyncMode } from "./sync/engine";
+import type { PlanDecision, SyncMode } from "./sync/engine-base";
 import { SyncEngine } from "./sync/engine";
 import { DocSyncEngine } from "./sync/docEngine";
+import { removeLegacyConflictCopies } from "./sync/legacy-conflicts";
 import type { PluginSettings, SyncAction, SyncState } from "./sync/types";
 import { DEFAULT_SETTINGS } from "./sync/types";
 import { AuthCodeModal } from "./ui/auth-modal";
@@ -43,6 +44,7 @@ export default class FeishuWikiSyncPlugin extends Plugin implements SettingsHost
       () => this.app,
       () => this.settings.debugLog,
     );
+    await removeLegacyConflictCopies(this.app, this.logger);
     this.auth = new AuthManager(
       () => ({
         mode: this.settings.authMode,
